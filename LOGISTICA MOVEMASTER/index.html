@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movemaster | Controle Logístico e Comercial</title>
+    <link rel="stylesheet" href="styles.css">
+    
+</head>
+<body>
+
+    <!-- TELA DE LOGIN -->
+    <div id="telaLogin" class="login-overlay">
+        <div class="login-card">
+            <div class="login-logo">
+                <img src="movemaster1.png" alt="Movemaster" class="login-logo-img">
+                <div class="login-logo-text">
+                    <span class="logo-brand">MOVE<span>MASTER</span></span>
+                    <span class="logo-tagline">Controle Logístico</span>
+                </div>
+            </div>
+            <p class="login-title">Acesso ao Sistema</p>
+            <form id="formLogin" class="login-form">
+                <div class="login-group">
+                    <label for="loginEmail">E-mail</label>
+                    <input type="email" id="loginEmail" placeholder="seu@email.com" required>
+                </div>
+                <div class="login-group">
+                    <label for="loginSenha">Senha</label>
+                    <input type="password" id="loginSenha" placeholder="••••••••" required>
+                </div>
+                <div id="loginErro" class="login-erro"></div>
+                <button type="submit" class="btn btn-primary login-btn" id="btnLogin">Entrar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- SISTEMA PRINCIPAL -->
+    <div id="appPrincipal" class="container" style="display:none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <img src="movemaster1.png" alt="Movemaster" class="logo-img">
+                    <span class="logo-text">
+                        <span class="logo-brand">MOVE<span>MASTER</span></span>
+                        <span class="logo-tagline">Controle Logístico</span>
+                    </span>
+                </h1>
+                <div class="header-right">
+                    <span id="usuarioLogado" class="usuario-logado"></span>
+                    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+                </div>
+                <nav class="nav-tabs">
+                    <button class="nav-btn active" data-tab="comercial">Lançamento Comercial</button>
+                    <button class="nav-btn" data-tab="painel">Painel de Ocupação</button>
+                    <button class="nav-btn" data-tab="logistica">Gestão Logística</button>
+                    <button class="nav-btn" data-tab="faturamento">Faturamento</button>
+                    <button class="nav-btn" data-tab="cadastros">Cadastros</button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- TAB 1: Lançamento Comercial -->
+            <section id="comercial" class="tab-content active">
+                <div class="card">
+                    <h2>Novo Pedido de Transporte</h2>
+                    <form id="formComercial" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cliente">Cliente *</label>
+                                <select id="cliente" required>
+                                    <option value="">Selecione um cliente</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="dataSolicitacao">Data de Solicitação *</label>
+                                <input type="date" id="dataSolicitacao" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="modelo">Modelo do Veículo *</label>
+                                <input type="text" id="modelo" placeholder="Ex: Honda Civic" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="placa">Placa do Veículo *</label>
+                                <input type="text" id="placa" placeholder="Ex: ABC1234" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ufOrigem">UF Origem *</label>
+                                <select id="ufOrigem" required>
+                                    <option value="">Selecione o estado</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="cidadeOrigem">Cidade Origem *</label>
+                                <select id="cidadeOrigem" required>
+                                    <option value="">Selecione a cidade</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ufDestino">UF Destino *</label>
+                                <select id="ufDestino" required>
+                                    <option value="">Selecione o estado</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="cidadeDestino">Cidade Destino *</label>
+                                <select id="cidadeDestino" required>
+                                    <option value="">Selecione a cidade</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label for="enderecoColeta">Endereço de Coleta *</label>
+                                <input type="text" id="enderecoColeta" placeholder="Ex: Rua das Flores, 123" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label for="enderecoEntrega">Endereço de Entrega *</label>
+                                <input type="text" id="enderecoEntrega" placeholder="Ex: Avenida Paulista, 456" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="valorFrete">Valor do Frete (R$) *</label>
+                                <input type="number" id="valorFrete" placeholder="0.00" step="0.01" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="responsavelComercial">Responsável Comercial *</label>
+                                <input type="text" id="responsavelComercial" placeholder="Seu nome" required>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Pedido</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemComercial" class="message"></div>
+                </div>
+            </section>
+
+            <!-- TAB 2: Painel de Ocupação -->
+            <section id="painel" class="tab-content">
+                <div class="card">
+                    <h2>Painel de Ocupação de Cargas</h2>
+                    <div class="filter-section">
+                        <button class="btn btn-secondary" id="btnCarregarPainel">Atualizar Painel</button>
+                    </div>
+                    <div id="painelOcupacao" class="painel-container">
+                        <!-- Será preenchido dinamicamente -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: Gestão Logística -->
+            <section id="logistica" class="tab-content">
+                <div class="card">
+                    <h2>Pedidos Pendentes</h2>
+                    <div class="filter-section">
+                        <button class="btn btn-secondary" id="btnCarregarPedidos">Carregar Pedidos</button>
+                    </div>
+                    <div id="tabelaPedidos" class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Cliente</th>
+                                    <th>Modelo</th>
+                                    <th>Placa</th>
+                                    <th>Origem</th>
+                                    <th>Destino</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaPedidos">
+                                <tr>
+                                    <td colspan="9" class="text-center">Clique em "Carregar Pedidos" para visualizar</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Modal para editar pedido -->
+                <div id="modalEdicao" class="modal">
+                    <div class="modal-content">
+                        <span class="close">&times;</span>
+                        <h2>Alocar Pedido à Rota</h2>
+                        <form id="formLogistica" class="form">
+                            <input type="hidden" id="pedidoID">
+                            
+                            <div class="form-row">
+                                <div class="form-group full-width">
+                                    <label for="trechoRota">Trecho (Origem - Destino) *</label>
+                                    <input type="text" id="trechoRota" placeholder="Ex: São Paulo - Rio de Janeiro" readonly>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="veiculo1">Veículo 1 *</label>
+                                    <select id="veiculo1" required>
+                                        <option value="">Selecione um veículo</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="motorista1">Motorista 1 *</label>
+                                    <select id="motorista1" required>
+                                        <option value="">Selecione um motorista</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="percentMotorista1">% Motorista 1 *</label>
+                                    <input type="number" id="percentMotorista1" placeholder="100" min="0" max="100" step="0.01" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="veiculo2">Veículo 2 (Opcional)</label>
+                                    <select id="veiculo2">
+                                        <option value="">Nenhum</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="motorista2">Motorista 2 (Opcional)</label>
+                                    <select id="motorista2">
+                                        <option value="">Nenhum</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="percentMotorista2">% Motorista 2</label>
+                                    <input type="number" id="percentMotorista2" placeholder="0" min="0" max="100" step="0.01">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="dataPrevColeta">Data Previsão Coleta *</label>
+                                    <input type="date" id="dataPrevColeta" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="dataPrevEntrega">Data Previsão Entrega *</label>
+                                    <input type="date" id="dataPrevEntrega" required>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Alocar à Rota</button>
+                                <button type="button" class="btn btn-secondary" id="btnFecharModal">Cancelar</button>
+                            </div>
+                        </form>
+                        <div id="mensagemLogistica" class="message"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: Faturamento -->
+            <section id="faturamento" class="tab-content">
+                <div class="card">
+                    <h2>Faturamento por Motorista</h2>
+                    <div class="filter-section">
+                        <button class="btn btn-secondary" id="btnCarregarFaturamento">Carregar Faturamento</button>
+                        <select id="motoristaSelecionado" class="select-filtro">
+                            <option value="">Todos os motoristas</option>
+                        </select>
+                    </div>
+                    <div id="tabelaFaturamento" class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Pedido ID</th>
+                                    <th>Cliente</th>
+                                    <th>Origem - Destino</th>
+                                    <th>Valor Frete (R$)</th>
+                                    <th>% Recebido</th>
+                                    <th>Valor Recebido (R$)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaFaturamento">
+                                <tr>
+                                    <td colspan="7" class="text-center">Clique em "Carregar Faturamento" para visualizar</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="resumoFaturamento" class="resumo-faturamento">
+                        <!-- Será preenchido dinamicamente -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: Cadastros -->
+            <section id="cadastros" class="tab-content">
+                <div class="card">
+                    <h2>Cadastro de Clientes</h2>
+                    <form id="formCadastroCliente" class="form">
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label for="nomeCliente">Nome da Empresa *</label>
+                                <input type="text" id="nomeCliente" placeholder="Ex: Transportadora ABC Ltda" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cnpjCliente">CNPJ (Pessoa Jurídica)</label>
+                                <input type="text" id="cnpjCliente" placeholder="00.000.000/0000-00" maxlength="18">
+                            </div>
+                            <div class="form-group">
+                                <label for="cpfCliente">CPF (Pessoa Física)</label>
+                                <input type="text" id="cpfCliente" placeholder="000.000.000-00" maxlength="14">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="telefoneCliente">Telefone</label>
+                                <input type="tel" id="telefoneCliente" placeholder="(11) 99999-9999" maxlength="15">
+                            </div>
+                            <div class="form-group">
+                                <label for="emailCliente">E-mail</label>
+                                <input type="email" id="emailCliente" placeholder="contato@empresa.com">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Cliente</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemCadastroCliente" class="message"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Cadastro de Motorista</h2>
+                    <form id="formCadastroMotorista" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="nomeMotorista">Nome Completo *</label>
+                                <input type="text" id="nomeMotorista" placeholder="Ex: João Silva" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cpfMotorista">CPF *</label>
+                                <input type="text" id="cpfMotorista" placeholder="000.000.000-00" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="telefoneMotorista">Telefone *</label>
+                                <input type="tel" id="telefoneMotorista" placeholder="(11) 99999-9999" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cnh">CNH *</label>
+                                <input type="text" id="cnh" placeholder="0000000000" required>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Motorista</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemCadastroMotorista" class="message"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Cadastro de Veículo</h2>
+                    <form id="formCadastroVeiculo" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="placaCegonha">Placa *</label>
+                                <input type="text" id="placaCegonha" placeholder="ABC1234" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="marcaCegonha">Marca *</label>
+                                <input type="text" id="marcaCegonha" placeholder="Ex: Volvo" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="modeloCegonha">Modelo *</label>
+                                <input type="text" id="modeloCegonha" placeholder="Ex: FH 540" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="anoCegonha">Ano *</label>
+                                <input type="number" id="anoCegonha" placeholder="2024" min="1990" max="2099" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="tipoCegonha">Tipo de Veículo *</label>
+                                <select id="tipoCegonha" required>
+                                    <option value="">Selecione o tipo</option>
+                                    <option value="Cegonha">Cegonha (4 vagas)</option>
+                                    <option value="Guincho">Guincho (2 vagas)</option>
+                                    <option value="Prancha">Prancha (2 vagas)</option>
+                                    <option value="Caminhão">Caminhão (1 vaga)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="capacidadeCegonha">Capacidade de Vagas *</label>
+                                <input type="number" id="capacidadeCegonha" placeholder="Ex: 4" min="1" required>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Veículo</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemCadastroVeiculo" class="message"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2026 <strong>MOVEMASTER</strong> — Controle Logístico e Comercial · MVP v3.0 + Supabase</p>
+        </footer>
+    </div><!-- /appPrincipal -->
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script src="supabase-config.js"></script>
+
+    <script src="script.js"></script>
+
+
+</body>
+</html>
