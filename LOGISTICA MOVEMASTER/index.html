@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movemaster | Controle Logístico e Comercial</title>
+    <link rel="stylesheet" href="styles.css">
+    
+</head>
+<body>
+
+    <!-- TELA DE LOGIN -->
+    <div id="telaLogin" class="login-overlay">
+        <div class="login-card">
+            <div class="login-logo">
+                <img src="movemaster1.png" alt="Movemaster" class="login-logo-img">
+                <div class="login-logo-text">
+                    <span class="logo-brand">MOVE<span>MASTER</span></span>
+                    <span class="logo-tagline">Controle Logístico</span>
+                </div>
+            </div>
+            <p class="login-title">Acesso ao Sistema</p>
+            <form id="formLogin" class="login-form">
+                <div class="login-group">
+                    <label for="loginEmail">E-mail</label>
+                    <input type="email" id="loginEmail" placeholder="seu@email.com" required>
+                </div>
+                <div class="login-group">
+                    <label for="loginSenha">Senha</label>
+                    <input type="password" id="loginSenha" placeholder="••••••••" required>
+                </div>
+                <div id="loginErro" class="login-erro"></div>
+                <button type="submit" class="btn btn-primary login-btn" id="btnLogin">Entrar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- TELA SEM PERMISSÃO -->
+    <div id="telaSemPermissao" class="login-overlay" style="display:none;">
+        <div class="login-card sem-permissao-card">
+            <div class="sem-permissao-icon">🔒</div>
+            <h2 class="sem-permissao-titulo">Acesso Restrito</h2>
+            <p class="sem-permissao-texto">Você não tem permissão para acessar esta área.</p>
+            <p id="semPermissaoPerfil" class="sem-permissao-perfil"></p>
+            <button class="btn btn-secondary" onclick="fazerLogout()">Sair</button>
+        </div>
+    </div>
+
+    <!-- TELA ADMIN: GERENCIAR USUÁRIOS -->
+    <div id="telaAdmin" class="container" style="display:none;">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <img src="movemaster1.png" alt="Movemaster" class="logo-img">
+                    <span class="logo-text">
+                        <span class="logo-brand">MOVE<span>MASTER</span></span>
+                        <span class="logo-tagline">Controle Logístico</span>
+                    </span>
+                </h1>
+                <div class="header-right">
+                    <span id="usuarioLogadoAdmin" class="usuario-logado"></span>
+                    <span class="badge-perfil badge-admin">Administrador</span>
+                    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+                </div>
+                <nav class="nav-tabs">
+                    <button class="nav-btn active" data-tab-admin="gerenciarUsuarios">Usuários</button>
+                    <button class="nav-btn" data-tab-admin="acessoSistema">Acessar Sistema</button>
+                </nav>
+            </div>
+        </header>
+        <main class="main-content">
+            <section id="gerenciarUsuarios" class="tab-content active">
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>Gerenciar Usuários</h2>
+                        <button class="btn btn-primary" onclick="abrirModalNovoUsuario()">+ Novo Usuário</button>
+                    </div>
+                    <div id="mensagemAdmin" class="message"></div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>E-mail</th>
+                                    <th>Perfil</th>
+                                    <th>Status</th>
+                                    <th>Criado em</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaUsuarios">
+                                <tr><td colspan="6" class="text-center">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            <section id="acessoSistema" class="tab-content">
+                <div class="card">
+                    <h2>Acessar Sistema Completo</h2>
+                    <p class="text-muted">Como administrador, você pode navegar pelo sistema no perfil de qualquer usuário.</p>
+                    <div class="perfis-grid">
+                        <div class="perfil-acesso-card" onclick="entrarComoAdmin('comercial')">
+                            <span class="perfil-icon">💼</span>
+                            <span class="perfil-nome">Comercial</span>
+                        </div>
+                        <div class="perfil-acesso-card" onclick="entrarComoAdmin('logistica')">
+                            <span class="perfil-icon">🚛</span>
+                            <span class="perfil-nome">Logística</span>
+                        </div>
+                        <div class="perfil-acesso-card" onclick="entrarComoAdmin('motorista')">
+                            <span class="perfil-icon">🧑‍✈️</span>
+                            <span class="perfil-nome">Motorista</span>
+                        </div>
+                        <div class="perfil-acesso-card" onclick="entrarComoAdmin('financeiro')">
+                            <span class="perfil-icon">💰</span>
+                            <span class="perfil-nome">Financeiro</span>
+                        </div>
+                        <div class="perfil-acesso-card" onclick="entrarComoAdmin('fiscal')">
+                            <span class="perfil-icon">📄</span>
+                            <span class="perfil-nome">Fiscal (CTE)</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Modal novo usuário -->
+        <div id="modalNovoUsuario" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="fecharModal('modalNovoUsuario')">&times;</span>
+                <h2>Criar Novo Usuário</h2>
+                <form id="formNovoUsuario" class="form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="novoNome">Nome completo *</label>
+                            <input type="text" id="novoNome" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="novoPerfil">Perfil *</label>
+                            <select id="novoPerfil" required>
+                                <option value="">Selecione...</option>
+                                <option value="comercial">Comercial</option>
+                                <option value="logistica">Logística</option>
+                                <option value="motorista">Motorista</option>
+                                <option value="financeiro">Financeiro</option>
+                                <option value="fiscal">Fiscal (CTE)</option>
+                                <option value="admin">Administrador</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="novoEmail">E-mail *</label>
+                            <input type="email" id="novoEmail" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="novaSenha">Senha provisória *</label>
+                            <input type="password" id="novaSenha" required minlength="6" placeholder="Mínimo 6 caracteres">
+                        </div>
+                    </div>
+                    <div id="mensagemNovoUsuario" class="message"></div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Criar Usuário</button>
+                        <button type="button" class="btn btn-secondary" onclick="fecharModal('modalNovoUsuario')">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- SISTEMA PRINCIPAL -->
+    <div id="appPrincipal" class="container" style="display:none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <img src="movemaster1.png" alt="Movemaster" class="logo-img">
+                    <span class="logo-text">
+                        <span class="logo-brand">MOVE<span>MASTER</span></span>
+                        <span class="logo-tagline">Controle Logístico</span>
+                    </span>
+                </h1>
+                <div class="header-right">
+                    <span id="usuarioLogado" class="usuario-logado"></span>
+                    <span id="badgePerfil" class="badge-perfil"></span>
+                    <button id="btnVoltarAdmin" class="btn-voltar-admin" style="display:none" onclick="voltarParaAdmin()">← Admin</button>
+                    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+                </div>
+                <nav class="nav-tabs">
+                    <button class="nav-btn active" data-tab="comercial">Lançamento Comercial</button>
+                    <button class="nav-btn" data-tab="painel">Painel de Ocupação</button>
+                    <button class="nav-btn" data-tab="logistica">Gestão Logística</button>
+                    <button class="nav-btn" data-tab="faturamento">Faturamento</button>
+                    <button class="nav-btn" data-tab="cadastros">Cadastros</button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- TAB 1: Lançamento Comercial -->
+            <section id="comercial" class="tab-content active">
+
+                <!-- DASHBOARD RESUMO -->
+                <div class="comercial-dashboard" id="dashboardComercial">
+                    <div class="dash-card" id="dashHoje">
+                        <span class="dash-icon">📋</span>
+                        <div class="dash-info">
+                            <span class="dash-valor" id="dashValorHoje">—</span>
+                            <span class="dash-label">Pedidos Hoje</span>
+                        </div>
+                    </div>
+                    <div class="dash-card" id="dashSemana">
+                        <span class="dash-icon">📅</span>
+                        <div class="dash-info">
+                            <span class="dash-valor" id="dashValorSemana">—</span>
+                            <span class="dash-label">Esta Semana</span>
+                        </div>
+                    </div>
+                    <div class="dash-card" id="dashAberto">
+                        <span class="dash-icon">⏳</span>
+                        <div class="dash-info">
+                            <span class="dash-valor" id="dashValorAberto">—</span>
+                            <span class="dash-label">Aguard. Confirmação</span>
+                        </div>
+                    </div>
+                    <div class="dash-card" id="dashReceita">
+                        <span class="dash-icon">💰</span>
+                        <div class="dash-info">
+                            <span class="dash-valor" id="dashValorReceita">—</span>
+                            <span class="dash-label">Receita do Mês</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Novo Pedido de Transporte</h2>
+                    <form id="formComercial" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cliente">Cliente *</label>
+                                <div class="cliente-busca-wrap">
+                                    <input type="text" id="clienteBusca" placeholder="🔍 Buscar por nome, CPF ou CNPJ..." 
+                                        autocomplete="off" oninput="filtrarClientes(this.value)" onblur="fecharListaClientes()" onfocus="filtrarClientes(this.value)">
+                                    <div id="listaClientesBusca" class="lista-clientes-dropdown"></div>
+                                    <input type="hidden" id="clienteId">
+                                    <input type="hidden" id="cliente">
+                                    <div id="clienteSelecionadoInfo" class="cliente-selecionado-info" style="display:none">
+                                        <button type="button" class="btn-hist-cliente" id="btnHistCliente" onclick="abrirHistoricoCliente()">📊 Histórico</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="dataSolicitacao">Data de Solicitação *</label>
+                                <input type="date" id="dataSolicitacao" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="modelo">Modelo do Veículo *</label>
+                                <input type="text" id="modelo" placeholder="Ex: Honda Civic" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="placa">Placa do Veículo *</label>
+                                <input type="text" id="placa" placeholder="Ex: ABC1234" required>
+                            </div>
+                        </div>
+
+                        <!-- Veículos adicionais do mesmo cliente (mesma origem/destino) -->
+                        <div id="veiculosExtras"></div>
+                        <div class="form-row">
+                            <button type="button" class="btn-add-veiculo" onclick="adicionarVeiculoExtra()">
+                                ➕ Adicionar outro veículo (mesma origem e destino)
+                            </button>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ufOrigem">UF Origem *</label>
+                                <select id="ufOrigem" required>
+                                    <option value="">Selecione o estado</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="cidadeOrigem">Cidade Origem *</label>
+                                <select id="cidadeOrigem" required>
+                                    <option value="">Selecione a cidade</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="ufDestino">UF Destino *</label>
+                                <select id="ufDestino" required>
+                                    <option value="">Selecione o estado</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="cidadeDestino">Cidade Destino *</label>
+                                <select id="cidadeDestino" required>
+                                    <option value="">Selecione a cidade</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group" style="max-width:160px">
+                                <label for="cepColeta">CEP Coleta</label>
+                                <input type="text" id="cepColeta" placeholder="00000-000" maxlength="9"
+                                    oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Coleta')">
+                            </div>
+                            <div class="form-group">
+                                <label for="enderecoColeta">Endereço de Coleta *</label>
+                                <input type="text" id="enderecoColeta" placeholder="Ex: Rua das Flores, 123" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group" style="max-width:160px">
+                                <label for="cepEntrega">CEP Entrega</label>
+                                <input type="text" id="cepEntrega" placeholder="00000-000" maxlength="9"
+                                    oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Entrega')">
+                            </div>
+                            <div class="form-group">
+                                <label for="enderecoEntrega">Endereço de Entrega *</label>
+                                <input type="text" id="enderecoEntrega" placeholder="Ex: Avenida Paulista, 456" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="valorFrete">Valor do Frete (R$) *</label>
+                                <div class="input-moeda-wrap">
+                                    <span class="input-moeda-prefixo">R$</span>
+                                    <input type="text" id="valorFrete" placeholder="0,00" 
+                                        oninput="mascaraMoeda(this)" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="responsavelComercial">Responsável Comercial *</label>
+                                <input type="text" id="responsavelComercial" placeholder="Seu nome" required>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Pedido</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemComercial" class="message"></div>
+                </div>
+
+                <!-- LISTAGEM DE PEDIDOS DO COMERCIAL -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>Pedidos Lançados</h2>
+                        <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap">
+                            <!-- Filtro Status -->
+                            <div class="custom-select-wrap">
+                                <div class="custom-select-trigger" onclick="toggleCustomSelect('filtroStatus')">
+                                    <span id="filtroStatusLabel">Todos os status</span>
+                                    <span class="custom-select-arrow">▾</span>
+                                </div>
+                                <div class="custom-select-dropdown" id="filtroStatusDropdown" style="display:none">
+                                    <div class="custom-select-option selecionado" onclick="selecionarFiltro('status','','Todos os status')">Todos os status</div>
+                                    <div class="custom-select-option" onclick="selecionarFiltro('status','Pendente','Pendente')">Pendente</div>
+                                    <div class="custom-select-option" onclick="selecionarFiltro('status','Intenção Agendada','Intenção Agendada')">Intenção Agendada</div>
+                                    <div class="custom-select-option" onclick="selecionarFiltro('status','Aguardando Confirmação','Aguardando Confirmação')">Aguardando Confirmação</div>
+                                    <div class="custom-select-option" onclick="selecionarFiltro('status','Em Coleta','Em Coleta')">Em Coleta</div>
+                                    <div class="custom-select-option" onclick="selecionarFiltro('status','Em Transporte','Em Transporte')">Em Transporte</div>
+                                    <div class="custom-select-option" onclick="selecionarFiltro('status','Entregue','Entregue')">Entregue</div>
+                                </div>
+                                <input type="hidden" id="filtroPedidosComercial">
+                            </div>
+                            <!-- Filtro Rota -->
+                            <div class="custom-select-wrap" style="min-width:200px">
+                                <div class="custom-select-trigger" onclick="toggleCustomSelect('filtroRota')">
+                                    <span id="filtroRotaLabel">Todas as rotas</span>
+                                    <span class="custom-select-arrow">▾</span>
+                                </div>
+                                <div class="custom-select-dropdown" id="filtroRotaDropdown" style="display:none;max-height:240px;overflow-y:auto">
+                                    <div class="custom-select-option selecionado" onclick="selecionarFiltro('rota','','Todas as rotas')">Todas as rotas</div>
+                                </div>
+                                <input type="hidden" id="filtroPedidosRota">
+                            </div>
+                            <input type="text" id="filtroPedidosTexto" placeholder="🔍 Buscar..." 
+                                class="filtro-input" oninput="renderizarPedidosComercial()">
+                            <button class="btn btn-secondary btn-sm" onclick="toggleResumoRotas()">🗺️ Rotas</button>
+                            <button class="btn btn-secondary btn-sm" onclick="exportarPedidosPDF()">📄 PDF</button>
+                            <button class="btn btn-secondary btn-sm" onclick="exportarPedidosExcel()">📊 Excel</button>
+                        </div>
+                    </div>
+                    <!-- Painel resumo rotas -->
+                    <div id="painelResumoRotas" style="display:none;margin-bottom:1rem">
+                        <div class="rotas-resumo-header">
+                            <span>Visão por Rota</span>
+                            <button class="btn-fechar-rotas" onclick="toggleResumoRotas()">×</button>
+                        </div>
+                        <div id="gridResumoRotas" class="rotas-grid"></div>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="table" id="tabelaPedidosComercial">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Cliente</th>
+                                    <th>Veículo</th>
+                                    <th>Rota</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                    <th>Data</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaPedidosComercial">
+                                <tr><td colspan="8" class="text-center text-muted">Clique em Atualizar para carregar</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Modal: Checklist de Confirmação de Coleta -->
+                <div id="modalChecklist" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalChecklist')">&times;</span>
+                        <h2>✅ Checklist de Confirmação</h2>
+                        <p class="text-muted" style="margin-bottom:1.2rem">Pedido <strong id="checklistPedidoInfo"></strong></p>
+                        <div class="checklist-items">
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check1">
+                                <span>Veículo disponível para coleta?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check2">
+                                <span>Cliente confirmou a disponibilidade?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check3">
+                                <span>Endereço de coleta está correto?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check4">
+                                <span>Documentos do veículo em ordem?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check5">
+                                <span>Valor do frete confirmado com o cliente?</span>
+                            </label>
+                        </div>
+                        <div class="form-group" style="margin-top:1rem">
+                            <label>Observação</label>
+                            <textarea id="checklistObs" rows="2" placeholder="Alguma observação adicional..."></textarea>
+                        </div>
+                        <div id="mensagemChecklist" class="message"></div>
+                        <div class="form-actions">
+                            <button class="btn btn-primary" id="btnConfirmarChecklist">Confirmar Coleta</button>
+                            <button class="btn btn-secondary" onclick="fecharModal('modalChecklist')">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal: Fotos da Placa -->
+                <div id="modalFotoPlaca" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalFotoPlaca')">&times;</span>
+                        <h2>📸 Fotos da Placa</h2>
+                        <p class="text-muted" id="modalFotoInfo" style="margin-bottom:1rem"></p>
+                        <div id="modalFotoConteudo" class="galeria-fotos-modal"></div>
+                    </div>
+                </div>
+
+                <!-- Modal: Mover pedido de cegonha -->
+                <div id="modalMoverPedido" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalMoverPedido')">&times;</span>
+                        <h2>🔄 Mover / Desalocar Pedido</h2>
+                        <div id="moverPedidoInfo" class="status-resumo-info" style="margin-bottom:1rem"></div>
+                        <div class="form-group">
+                            <label>Ação</label>
+                            <div class="mover-opcoes">
+                                <div class="mover-opcao" onclick="selecionarAcaoMover('remover')">
+                                    <span class="mover-icon">🗑️</span>
+                                    <div>
+                                        <strong>Remover da Cegonha</strong>
+                                        <p>Volta para "Pendente" e libera a vaga</p>
+                                    </div>
+                                </div>
+                                <div class="mover-opcao" onclick="selecionarAcaoMover('cancelar')">
+                                    <span class="mover-icon">❌</span>
+                                    <div>
+                                        <strong>Cancelar Pedido</strong>
+                                        <p>Cancela definitivamente o pedido</p>
+                                    </div>
+                                </div>
+                                <div class="mover-opcao" onclick="selecionarAcaoMover('mover')">
+                                    <span class="mover-icon">🚛</span>
+                                    <div>
+                                        <strong>Mover para outra Cegonha</strong>
+                                        <p>Transfere para um veículo diferente</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="grupoSelecionarCegonha" style="display:none" class="form-group">
+                            <label>Selecione a cegonha de destino</label>
+                            <select id="cegonhaDestino">
+                                <option value="">Selecione...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Motivo</label>
+                            <textarea id="moverMotivo" rows="2" placeholder="Descreva o motivo..."></textarea>
+                        </div>
+                        <input type="hidden" id="moverPedidoId">
+                        <input type="hidden" id="moverAcao">
+                        <div id="mensagemMover" class="message"></div>
+                        <div class="form-actions">
+                            <button class="btn btn-primary" onclick="confirmarMoverPedido()">Confirmar</button>
+                            <button class="btn btn-secondary" onclick="fecharModal('modalMoverPedido')">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal: Histórico do Cliente -->
+                <div id="modalHistoricoCliente" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalHistoricoCliente')">&times;</span>
+                        <h2>📊 Histórico do Cliente</h2>
+                        <div id="historicoClienteInfo" class="status-resumo-info" style="margin-bottom:1rem"></div>
+                        <div id="historicoClienteStats" class="historico-cliente-stats"></div>
+                        <div class="table-container" style="margin-top:1rem">
+                            <table class="table">
+                                <thead>
+                                    <tr><th>ID</th><th>Rota</th><th>Valor</th><th>Status</th><th>Data</th></tr>
+                                </thead>
+                                <tbody id="corpoHistoricoCliente"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: Painel de Ocupação -->
+            <section id="painel" class="tab-content">
+                <div class="card painel-card-full">
+                    <div class="painel-header-bar">
+                        <h2>Painel de Ocupação de Cargas</h2>
+                        <button class="btn btn-secondary" id="btnCarregarPainel">↻ Atualizar</button>
+                    </div>
+                    <!-- Kanban: 3 colunas de status -->
+                    <div class="kanban-board">
+                        <div class="kanban-col">
+                            <div class="kanban-col-header pendente">
+                                <span class="kanban-dot"></span> Pendentes
+                                <span class="kanban-count" id="countPendente">0</span>
+                            </div>
+                            <div class="kanban-col-body" id="kanbanPendente"></div>
+                        </div>
+                        <div class="kanban-col">
+                            <div class="kanban-col-header em-rota">
+                                <span class="kanban-dot"></span> Em Rota
+                                <span class="kanban-count" id="countEmRota">0</span>
+                            </div>
+                            <div class="kanban-col-body" id="kanbanEmRota"></div>
+                        </div>
+                        <div class="kanban-col">
+                            <div class="kanban-col-header entregue">
+                                <span class="kanban-dot"></span> Entregues
+                                <span class="kanban-count" id="countEntregue">0</span>
+                            </div>
+                            <div class="kanban-col-body" id="kanbanEntregue"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: Gestão Logística -->
+            <section id="logistica" class="tab-content">
+
+                <!-- Notificações de coleta -->
+                <div id="notificacoesColeta"></div>
+                <div id="mensagemLogistica" class="message"></div>
+
+                <!-- ABAS INTERNAS DA LOGÍSTICA -->
+                <div class="logistica-tabs">
+                    <button class="log-tab-btn active" onclick="trocarTabLogistica('alocacao', this)">🚛 Alocação de Carga</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('cegonhas', this)">📦 Painel das Cegonhas</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('fotos', this)">📸 Fotos das Placas</button>
+                    <button class="btn btn-secondary btn-sm" style="margin-left:auto" id="btnCarregarPedidos">↻ Atualizar</button>
+                </div>
+
+                <!-- ABA: ALOCAÇÃO (DRAG & DROP) -->
+                <div id="logTab-alocacao" class="log-tab-content active">
+                    <div class="logistica-layout">
+                        <div class="logistica-col pedidos-col">
+                            <div class="logistica-col-header">
+                                <h3>📋 Pedidos para Alocar</h3>
+                                <select id="filtroPedidosLogistica" class="filtro-select" onchange="renderizarPedidosDrag()" style="font-size:0.78rem">
+                                    <option value="">Todos</option>
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="Intenção Agendada">Intenção Agendada</option>
+                                    <option value="Aguardando Confirmação">Aguard. Confirmação</option>
+                                    <option value="Em Coleta">Em Coleta</option>
+                                    <option value="Em Transporte">Em Transporte</option>
+                                </select>
+                            </div>
+                            <div id="listaPedidosDrag" class="pedidos-drag-list">
+                                <p class="text-center text-muted">Clique em Atualizar para carregar</p>
+                            </div>
+                        </div>
+                        <div class="logistica-col veiculos-col">
+                            <div class="logistica-col-header">
+                                <h3>🚛 Cegonhas</h3>
+                                <span class="text-muted text-sm">Arraste para alocar</span>
+                            </div>
+                            <div id="listaVeiculosDrop" class="veiculos-drop-list">
+                                <p class="text-center text-muted">Carregando...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ABA: PAINEL DAS CEGONHAS -->
+                <div id="logTab-cegonhas" class="log-tab-content" style="display:none">
+                    <div id="painelCegonhas" class="painel-cegonhas-grid">
+                        <p class="text-center text-muted">Clique em Atualizar para carregar</p>
+                    </div>
+                </div>
+
+                <!-- ABA: FOTOS DAS PLACAS -->
+                <div id="logTab-fotos" class="log-tab-content" style="display:none">
+                    <div id="galeria-fotos-logistica" class="galeria-fotos">
+                        <p class="text-center text-muted">Clique em Atualizar para carregar</p>
+                    </div>
+                </div>
+
+                <!-- Modal de detalhes da alocação -->
+                <div id="modalAlocacao" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalAlocacao')">&times;</span>
+                        <h2>Confirmar Alocação</h2>
+                        <div id="alocacaoResumo" class="alocacao-resumo"></div>
+                        <form id="formAlocacao" class="form">
+                            <input type="hidden" id="alocPedidoId">
+                            <input type="hidden" id="alocVeiculoId">
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="alocMotorista1">Motorista Principal *</label>
+                                    <select id="alocMotorista1" required>
+                                        <option value="">Selecione um motorista</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="alocPercent1">% Frete Motorista 1 *</label>
+                                    <input type="number" id="alocPercent1" value="100" min="0" max="100" step="0.01" required>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="alocMotorista2">Motorista 2 (opcional)</label>
+                                    <select id="alocMotorista2">
+                                        <option value="">Nenhum</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="alocPercent2">% Frete Motorista 2</label>
+                                    <input type="number" id="alocPercent2" value="0" min="0" max="100" step="0.01">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="alocDataColeta">Data Prev. Coleta *</label>
+                                    <input type="datetime-local" id="alocDataColeta" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="alocDataEntrega">Data Prev. Entrega *</label>
+                                    <input type="datetime-local" id="alocDataEntrega" required>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">✓ Confirmar Alocação</button>
+                                <button type="button" class="btn btn-secondary" onclick="fecharModal('modalAlocacao')">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Modal edição existente (manter compatibilidade) -->
+                <div id="modalEdicao" class="modal">
+                    <div class="modal-content">
+                        <span class="close">&times;</span>
+                        <h2>Editar Alocação</h2>
+                        <form id="formLogistica" class="form">
+                            <input type="hidden" id="pedidoID">
+                            <div class="form-row">
+                                <div class="form-group full-width">
+                                    <label>Trecho</label>
+                                    <input type="text" id="trechoRota" readonly>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="veiculo1">Veículo *</label>
+                                    <select id="veiculo1" required></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="motorista1">Motorista 1 *</label>
+                                    <select id="motorista1" required></select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="percentMotorista1">% Mot. 1 *</label>
+                                    <input type="number" id="percentMotorista1" min="0" max="100" step="0.01" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="veiculo2">Veículo 2</label>
+                                    <select id="veiculo2"></select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="motorista2">Motorista 2</label>
+                                    <select id="motorista2"></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="percentMotorista2">% Mot. 2</label>
+                                    <input type="number" id="percentMotorista2" min="0" max="100" step="0.01">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="dataPrevColeta">Data Coleta *</label>
+                                    <input type="datetime-local" id="dataPrevColeta" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="dataPrevEntrega">Data Entrega *</label>
+                                    <input type="datetime-local" id="dataPrevEntrega" required>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Salvar</button>
+                                <button type="button" class="btn btn-secondary" id="btnFecharModal">Cancelar</button>
+                            </div>
+                        </form>
+                        <div id="mensagemLogisticaModal" class="message"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: Faturamento -->
+            <section id="faturamento" class="tab-content">
+                <div class="card">
+                    <h2>Faturamento por Motorista</h2>
+                    <div class="filter-section">
+                        <button class="btn btn-secondary" id="btnCarregarFaturamento">Carregar Faturamento</button>
+                        <select id="motoristaSelecionado" class="select-filtro">
+                            <option value="">Todos os motoristas</option>
+                        </select>
+                    </div>
+                    <div id="tabelaFaturamento" class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Pedido ID</th>
+                                    <th>Cliente</th>
+                                    <th>Origem - Destino</th>
+                                    <th>Valor Frete (R$)</th>
+                                    <th>% Recebido</th>
+                                    <th>Valor Recebido (R$)</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaFaturamento">
+                                <tr>
+                                    <td colspan="7" class="text-center">Clique em "Carregar Faturamento" para visualizar</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="resumoFaturamento" class="resumo-faturamento">
+                        <!-- Será preenchido dinamicamente -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: Cadastros -->
+            <section id="cadastros" class="tab-content">
+                <div class="card">
+                    <h2>Cadastro de Clientes</h2>
+                    <form id="formCadastroCliente" class="form">
+
+                        <!-- Tipo e Nome -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="tipoCliente">Tipo de Cliente *</label>
+                                <select id="tipoCliente" required onchange="ajustarFormCliente(this.value)">
+                                    <option value="">Selecione...</option>
+                                    <option value="empresa">Empresa</option>
+                                    <option value="concessionaria">Concessionária</option>
+                                    <option value="locadora">Locadora</option>
+                                    <option value="garagista">Garagista</option>
+                                    <option value="particular">Particular</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="nomeCliente" id="labelNomeCliente">Nome *</label>
+                                <input type="text" id="nomeCliente" placeholder="Nome completo ou razão social" required>
+                            </div>
+                        </div>
+
+                        <!-- Documento -->
+                        <div class="form-row">
+                            <div class="form-group" id="grupoCnpj">
+                                <label for="cnpjCliente">CNPJ</label>
+                                <input type="text" id="cnpjCliente" placeholder="00.000.000/0000-00" maxlength="18">
+                            </div>
+                            <div class="form-group" id="grupoCpf">
+                                <label for="cpfCliente">CPF</label>
+                                <input type="text" id="cpfCliente" placeholder="000.000.000-00" maxlength="14">
+                            </div>
+                        </div>
+
+                        <!-- Contato -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="telefoneCliente">Telefone</label>
+                                <input type="tel" id="telefoneCliente" placeholder="(11) 99999-9999" maxlength="15">
+                            </div>
+                            <div class="form-group">
+                                <label for="emailCliente">E-mail</label>
+                                <input type="email" id="emailCliente" placeholder="contato@empresa.com">
+                            </div>
+                        </div>
+
+                        <!-- Endereço: CEP -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cepCliente">CEP</label>
+                                <input type="text" id="cepCliente" placeholder="00000-000" maxlength="9"
+                                    oninput="mascaraCEP(this)" onblur="buscarCEP(this.value)">
+                            </div>
+                            <div class="form-group">
+                                <label for="ufCliente">UF</label>
+                                <input type="text" id="ufCliente" placeholder="SP" maxlength="2" style="text-transform:uppercase">
+                            </div>
+                        </div>
+
+                        <!-- Endereço: Rua e Número -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="enderecoCliente">Endereço</label>
+                                <input type="text" id="enderecoCliente" placeholder="Rua, Avenida...">
+                            </div>
+                            <div class="form-group" style="max-width:120px">
+                                <label for="numeroCliente">Número</label>
+                                <input type="text" id="numeroCliente" placeholder="123">
+                            </div>
+                        </div>
+
+                        <!-- Bairro e Cidade -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="bairroCliente">Bairro</label>
+                                <input type="text" id="bairroCliente" placeholder="Bairro">
+                            </div>
+                            <div class="form-group">
+                                <label for="cidadeCliente">Cidade</label>
+                                <input type="text" id="cidadeCliente" placeholder="Cidade">
+                            </div>
+                        </div>
+
+                        <!-- Complemento -->
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label for="complementoCliente">Complemento</label>
+                                <input type="text" id="complementoCliente" placeholder="Apto, sala, bloco...">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Cliente</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemCadastroCliente" class="message"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Cadastro de Motorista</h2>
+                    <form id="formCadastroMotorista" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="nomeMotorista">Nome Completo *</label>
+                                <input type="text" id="nomeMotorista" placeholder="Ex: João Silva" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cpfMotorista">CPF *</label>
+                                <input type="text" id="cpfMotorista" placeholder="000.000.000-00" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="telefoneMotorista">Telefone *</label>
+                                <input type="tel" id="telefoneMotorista" placeholder="(11) 99999-9999" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cnh">CNH *</label>
+                                <input type="text" id="cnh" placeholder="0000000000" required>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Motorista</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemCadastroMotorista" class="message"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Cadastro de Veículo</h2>
+                    <form id="formCadastroVeiculo" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="placaCegonha">Placa *</label>
+                                <input type="text" id="placaCegonha" placeholder="ABC1234" required style="text-transform:uppercase">
+                            </div>
+                            <div class="form-group">
+                                <label for="tipoCegonha">Tipo de Veículo *</label>
+                                <select id="tipoCegonha" required onchange="ajustarCapacidadeVeiculo(this.value)">
+                                    <option value="">Selecione o tipo</option>
+                                    <option value="Carreta 2 Eixos">Carreta 2 Eixos</option>
+                                    <option value="Cavalo Trucado 3 Eixos">Cavalo Trucado 3 Eixos</option>
+                                    <option value="Cavalo Simples 2 Eixos">Cavalo Simples 2 Eixos</option>
+                                    <option value="Caminhão 3/4 2 Eixos">Caminhão 3/4 2 Eixos</option>
+                                    <option value="Guincho">Guincho</option>
+                                    <option value="Prancha">Prancha</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="marcaCegonha">Marca *</label>
+                                <input type="text" id="marcaCegonha" placeholder="Ex: Volvo" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="modeloCegonha">Modelo *</label>
+                                <input type="text" id="modeloCegonha" placeholder="Ex: FH 540" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="anoCegonha">Ano *</label>
+                                <input type="number" id="anoCegonha" placeholder="2024" min="1990" max="2099" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="capacidadeCegonha">Capacidade de Vagas *</label>
+                                <input type="number" id="capacidadeCegonha" placeholder="Ex: 4" min="1" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="renavamVeiculo">RENAVAM</label>
+                                <input type="text" id="renavamVeiculo" placeholder="00000000000" maxlength="11">
+                            </div>
+                            <div class="form-group">
+                                <label for="chassiVeiculo">Chassi</label>
+                                <input type="text" id="chassiVeiculo" placeholder="9BWZZZ377VT004251" maxlength="17" style="text-transform:uppercase">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar Veículo</button>
+                            <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
+                        </div>
+                    </form>
+                    <div id="mensagemCadastroVeiculo" class="message"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2026 <strong>MOVEMASTER</strong> — Controle Logístico e Comercial · MVP v3.0 + Supabase</p>
+        </footer>
+
+        <!-- Modal: Avançar Status -->
+        <div id="modalStatus" class="modal">
+            <div class="modal-content modal-status-content">
+                <span class="close" onclick="fecharModal('modalStatus')">&times;</span>
+                <h2 id="modalStatusTitulo">Avançar Status</h2>
+                <div id="modalStatusResumo" class="status-resumo-pedido"></div>
+                <div class="status-flow" id="statusFlow"></div>
+                <form id="formStatus">
+                    <input type="hidden" id="statusPedidoId">
+                    <input type="hidden" id="statusAtual">
+                    <input type="hidden" id="statusNovo">
+                    <div class="form-group" id="grupoObservacao" style="display:none">
+                        <label for="statusObservacao">Observação</label>
+                        <textarea id="statusObservacao" rows="2" placeholder="Descreva a ocorrência ou motivo..."></textarea>
+                    </div>
+                    <div class="form-group" id="grupoCidadeTransbordo" style="display:none">
+                        <label for="cidadeTransbordo">Pátio do Transbordo *</label>
+                        <select id="cidadeTransbordo"
+                            onchange="document.getElementById('cidadeTransbordoOutra').style.display = this.value==='__outro' ? '' : 'none'">
+                            <option value="">Selecione o pátio...</option>
+                            <option value="Maringá/PR">Maringá/PR</option>
+                            <option value="Cascavel/PR">Cascavel/PR</option>
+                            <option value="São José dos Pinhais/PR">São José dos Pinhais/PR</option>
+                            <option value="Balneário Camboriú/SC">Balneário Camboriú/SC</option>
+                            <option value="São José/SC">São José/SC</option>
+                            <option value="Gravataí/RS">Gravataí/RS</option>
+                            <option value="São Paulo/SP">São Paulo/SP</option>
+                            <option value="__outro">Outra cidade...</option>
+                        </select>
+                        <input type="text" id="cidadeTransbordoOutra" placeholder="Digite a cidade/UF"
+                            style="display:none;margin-top:0.5rem">
+                    </div>
+                    <div id="mensagemStatus" class="message"></div>
+                    <div class="status-acoes-btn" id="statusAcoesBtns"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal: Histórico de Status -->
+        <div id="modalHistorico" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="fecharModal('modalHistorico')">&times;</span>
+                <h2>Histórico do Pedido <span id="historicoPedidoId"></span></h2>
+                <div id="listaHistorico" class="lista-historico"></div>
+            </div>
+        </div>
+    </div><!-- /appPrincipal -->
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script src="supabase-config.js"></script>
+
+    <script src="script.js"></script>
+
+
+</body>
+</html>
