@@ -12,8 +12,8 @@ var usuarioAtual = null;
 
 // Mapa de permissões por perfil
 const PERMISSOES = {
-    admin:      ['comercial','painel','logistica','faturamento','cadastros'],
-    comercial:  ['comercial','painel','cadastros'],
+    admin:      ['comercial','meusPedidos','painel','logistica','faturamento','cadastros'],
+    comercial:  ['comercial','meusPedidos','painel','cadastros'],
     logistica:  ['painel','logistica'],
     financeiro: ['faturamento'],
     motorista:  ['motorista'],
@@ -306,12 +306,6 @@ function mostrarTelaMotorista() {
                         <p>Envie a foto da placa para confirmar a coleta</p>
                         <button class="btn btn-primary">Enviar Foto</button>
                     </div>
-                    <div class="motorista-acao-card" onclick="abrirEnvioDocumento()">
-                        <span class="motorista-icon">📄</span>
-                        <h3>Documentos CTE</h3>
-                        <p>Envie o espelho PDF para geração das notas</p>
-                        <button class="btn btn-primary">Enviar PDF</button>
-                    </div>
                 </div>
                 <div class="message" id="mensagemMotorista"></div>
             </div>
@@ -347,6 +341,7 @@ function mostrarTelaFiscal() {
                     <h3 style="font-size:0.95rem">📄 Espelhos de Carga Recebidos</h3>
                     <button class="btn btn-secondary btn-sm" onclick="carregarDadosFiscal()">↻ Atualizar</button>
                 </div>
+                <div id="resumoCteFiscal"></div>
                 <div class="table-container">
                     <table class="table">
                         <thead>
@@ -355,8 +350,8 @@ function mostrarTelaFiscal() {
                                 <th>Veículos</th>
                                 <th>Motorista</th>
                                 <th>Valor Total</th>
+                                <th>Gerado / CTE</th>
                                 <th>Gerado por</th>
-                                <th>Data</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
@@ -416,7 +411,20 @@ async function carregarDadosFiscal() {
 
         if (!pdfs || pdfs.length === 0) {
             corpo.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum espelho de carga disponível ainda. A logística gera o espelho pelo Painel das Cegonhas.</td></tr>';
+            const resumoEl = document.getElementById('resumoCteFiscal');
+            if (resumoEl) resumoEl.innerHTML = '';
             return;
+        }
+
+        // Resumo: quantas cargas ainda faltam emitir o CTE
+        const pendentesCte = pdfs.filter(p => p.cte_emitido !== true).length;
+        const resumoEl = document.getElementById('resumoCteFiscal');
+        if (resumoEl) {
+            resumoEl.innerHTML = `
+                <div class="cte-resumo ${pendentesCte > 0 ? 'cte-resumo-alerta' : ''}">
+                    <span class="cte-resumo-num">${pendentesCte}</span>
+                    <span>carga(s) com CTE ${pendentesCte === 1 ? 'pendente' : 'pendentes'} de emissão</span>
+                </div>`;
         }
 
         corpo.innerHTML = pdfs.map(pdf => {
@@ -434,21 +442,52 @@ async function carregarDadosFiscal() {
             const veiculo = (typeof veiculosGlobais !== 'undefined' ? veiculosGlobais : []).find(v => v.placa === placaCegonha);
             const motorista = veiculo?.motorista_padrao || '—';
 
-            return `<tr>
+            // Status de emissão do CTE (guardado no próprio registro do espelho)
+            const emitido = pdf.cte_emitido === true;
+            const seloEmitido = emitido
+                ? `<span class="selo-cte-ok" title="Emitido por ${pdf.cte_emitido_por || '—'}${pdf.cte_emitido_em ? ' em ' + new Date(pdf.cte_emitido_em).toLocaleString('pt-BR') : ''}">✅ CTE emitido</span>`
+                : `<span class="selo-cte-pend">⏳ Pendente</span>`;
+
+            return `<tr class="${emitido ? 'linha-cte-emitido' : ''}">
                 <td><strong style="color:#f97316">${placaCegonha}</strong></td>
                 <td><span style="background:rgba(249,115,22,0.12);color:#f97316;padding:0.15rem 0.5rem;border-radius:4px;font-weight:700">${totalPedidos} veículo(s)</span></td>
                 <td>${motorista}</td>
                 <td style="color:#4ade80;font-weight:600">${totalFrete}</td>
-                <td style="font-size:0.78rem">${pdf.usuario_nome || '—'}</td>
-                <td style="font-size:0.75rem;color:var(--text-muted)">${gerado}</td>
-                <td>
-                    <button class="btn btn-primary btn-sm" onclick="regerarEspelhoCarga('${placaCegonha}')">📄 Ver / Imprimir</button>
+                <td style="font-size:0.78rem">${gerado}<br>${seloEmitido}</td>
+                <td style="font-size:0.75rem;color:var(--text-muted)">${pdf.usuario_nome || '—'}</td>
+                <td class="fiscal-acoes-td">
+                    <button class="btn btn-secondary btn-sm" onclick="regerarEspelhoCarga('${placaCegonha}')">📄 Ver / Imprimir</button>
+                    <button class="btn ${emitido ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="toggleCteEmitido('${pdf.id}', ${emitido})">
+                        ${emitido ? '↩️ Desmarcar' : '✅ Marcar emitido'}
+                    </button>
                 </td>
             </tr>`;
         }).join('');
 
     } catch(e) {
         console.error('Erro ao carregar dados fiscal:', e);
+    }
+}
+
+// Marca / desmarca a emissão do CTE de um espelho de carga
+async function toggleCteEmitido(pdfId, jaEmitido) {
+    if (!supabase) return;
+    const novoValor = !jaEmitido;
+
+    if (novoValor && !confirm('Confirmar que o CTE desta carga já foi emitido?')) return;
+    if (!novoValor && !confirm('Desmarcar a emissão do CTE desta carga?')) return;
+
+    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Fiscal';
+    try {
+        const { error } = await supabase.from('ocorrencias').update({
+            cte_emitido: novoValor,
+            cte_emitido_por: novoValor ? usuarioNome : null,
+            cte_emitido_em: novoValor ? new Date().toISOString() : null
+        }).eq('id', pdfId);
+        if (error) throw error;
+        carregarDadosFiscal();
+    } catch (e) {
+        alert('Erro ao atualizar o status do CTE: ' + e.message);
     }
 }
 
@@ -1250,13 +1289,13 @@ async function carregarPedidosMotorista() {
     lista.innerHTML = resumoHTML + pedidos.map(p => {
         const cor = cores[p.status] || '#888';
         const podeFoto = p.status === 'Em Coleta';
-        const podeCte = ['Em Coleta', 'Em Transporte'].includes(p.status);
         const podeOcorrencia = !['Entregue', 'Cancelado'].includes(p.status);
+        const emRota = !['Pendente','Entregue','Cancelado'].includes(p.status);
         return `
-        <div class="motorista-pedido-card">
+        <div class="motorista-pedido-card" style="--mp-cor:${cor}">
             <div class="mpedido-header">
                 <span class="mpedido-id">#${p.id}</span>
-                <span class="mpedido-status" style="color:${cor};background:${cor}20;border:1px solid ${cor}40">${p.status}</span>
+                <span class="mpedido-status" style="color:${cor};background:${cor}20;border:1px solid ${cor}40">${emRota ? '<span class="mp-pulse"></span>' : ''}${p.status}</span>
             </div>
             <div class="mpedido-cliente">${p.cliente || '—'}</div>
             <div class="mpedido-rota">${rotaFn(p)}</div>
@@ -1264,7 +1303,6 @@ async function carregarPedidosMotorista() {
             ${p.dataPrevColeta ? `<div class="mpedido-data">📅 Coleta: ${new Date(p.dataPrevColeta).toLocaleString('pt-BR')}</div>` : ''}
             <div class="mpedido-acoes">
                 ${podeFoto ? `<button class="btn-motorista-acao btn-macao-foto" onclick="abrirEnvioFotoRapido(${p.id})">📸 Foto da Placa</button>` : ''}
-                ${podeCte ? `<button class="btn-motorista-acao btn-macao-cte" onclick="abrirEnvioDocumentoRapido(${p.id})">📄 CTE</button>` : ''}
                 ${podeOcorrencia ? `<button class="btn-motorista-acao btn-macao-ocorrencia" onclick="abrirRegistrarOcorrencia(${p.id})">⚠️ Ocorrência</button>` : ''}
             </div>
         </div>`;

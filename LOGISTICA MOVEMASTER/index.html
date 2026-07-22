@@ -189,7 +189,8 @@
                 </div>
                 <nav class="nav-tabs">
                     <button class="nav-btn active" data-tab="comercial">Lançamento Comercial</button>
-                    <button class="nav-btn" data-tab="painel">Painel de Ocupação</button>
+                    <button class="nav-btn" data-tab="meusPedidos">Meus Pedidos</button>
+                    <button class="nav-btn" data-tab="painel">Painel de Acompanhamento</button>
                     <button class="nav-btn" data-tab="logistica">Gestão Logística</button>
                     <button class="nav-btn" data-tab="faturamento">Faturamento</button>
                     <button class="nav-btn" data-tab="cadastros">Cadastros</button>
@@ -202,146 +203,140 @@
             <!-- TAB 1: Lançamento Comercial -->
             <section id="comercial" class="tab-content active">
 
-                <!-- DASHBOARD RESUMO -->
-                <div class="comercial-dashboard" id="dashboardComercial">
-                    <div class="dash-card" id="dashHoje">
-                        <span class="dash-icon">📋</span>
-                        <div class="dash-info">
-                            <span class="dash-valor" id="dashValorHoje">—</span>
-                            <span class="dash-label">Pedidos Hoje</span>
-                        </div>
-                    </div>
-                    <div class="dash-card" id="dashSemana">
-                        <span class="dash-icon">📅</span>
-                        <div class="dash-info">
-                            <span class="dash-valor" id="dashValorSemana">—</span>
-                            <span class="dash-label">Esta Semana</span>
-                        </div>
-                    </div>
-                    <div class="dash-card" id="dashAberto">
-                        <span class="dash-icon">⏳</span>
-                        <div class="dash-info">
-                            <span class="dash-valor" id="dashValorAberto">—</span>
-                            <span class="dash-label">Aguard. Confirmação</span>
-                        </div>
-                    </div>
-                    <div class="dash-card" id="dashReceita">
-                        <span class="dash-icon">💰</span>
-                        <div class="dash-info">
-                            <span class="dash-valor" id="dashValorReceita">—</span>
-                            <span class="dash-label">Receita do Mês</span>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="card">
                     <h2>Novo Pedido de Transporte</h2>
                     <form id="formComercial" class="form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="cliente">Cliente *</label>
-                                <div class="cliente-busca-wrap">
-                                    <input type="text" id="clienteBusca" placeholder="🔍 Buscar por nome, CPF ou CNPJ..." 
-                                        autocomplete="off" oninput="filtrarClientes(this.value)" onblur="fecharListaClientes()" onfocus="filtrarClientes(this.value)">
-                                    <div id="listaClientesBusca" class="lista-clientes-dropdown"></div>
-                                    <input type="hidden" id="clienteId">
-                                    <input type="hidden" id="cliente">
-                                    <div id="clienteSelecionadoInfo" class="cliente-selecionado-info" style="display:none">
-                                        <button type="button" class="btn-hist-cliente" id="btnHistCliente" onclick="abrirHistoricoCliente()">📊 Histórico</button>
+                        <!-- Cliente e data -->
+                        <div class="form-secao">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="cliente">Cliente Pagador*</label>
+                                    <div class="cliente-busca-wrap">
+                                        <input type="text" id="clienteBusca" placeholder="🔍 Buscar por nome, CPF ou CNPJ..."
+                                            autocomplete="off" oninput="filtrarClientes(this.value)" onblur="fecharListaClientes()" onfocus="filtrarClientes(this.value)">
+                                        <div id="listaClientesBusca" class="lista-clientes-dropdown"></div>
+                                        <input type="hidden" id="clienteId">
+                                        <input type="hidden" id="cliente">
+                                        <div id="clienteSelecionadoInfo" class="cliente-selecionado-info" style="display:none">
+                                            <button type="button" class="btn-hist-cliente" id="btnHistCliente" onclick="abrirHistoricoCliente()">📊 Histórico</button>
+                                        </div>
                                     </div>
                                 </div>
+                                <div class="form-group">
+                                    <label for="dataSolicitacao">Data de Solicitação *</label>
+                                    <input type="date" id="dataSolicitacao" required>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="dataSolicitacao">Data de Solicitação *</label>
-                                <input type="date" id="dataSolicitacao" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="modelo">Modelo do Veículo *</label>
-                                <input type="text" id="modelo" placeholder="Ex: Honda Civic" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="placa">Placa do Veículo *</label>
-                                <input type="text" id="placa" placeholder="Ex: ABC1234" required>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="prazoEntregaEstimado">Prazo de Entrega Estimado</label>
+                                    <input type="date" id="prazoEntregaEstimado">
+                                </div>
+                                <div class="form-group"></div>
                             </div>
                         </div>
 
-                        <!-- Veículos adicionais do mesmo cliente (mesma origem/destino) -->
-                        <div id="veiculosExtras"></div>
-                        <div class="form-row">
+                        <!-- Veículo(s) -->
+                        <div class="form-secao">
+                            <div class="form-secao-titulo">🚗 Veículo(s)</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="modelo">Modelo do Veículo *</label>
+                                    <input type="text" id="modelo" placeholder="Ex: Honda Civic" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="placa">Placa do Veículo *</label>
+                                    <input type="text" id="placa" placeholder="Ex: ABC1234" required>
+                                </div>
+                            </div>
+                            <div id="veiculosExtras"></div>
                             <button type="button" class="btn-add-veiculo" onclick="adicionarVeiculoExtra()">
                                 ➕ Adicionar outro veículo (mesma origem e destino)
                             </button>
                         </div>
 
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="ufOrigem">UF Origem *</label>
-                                <select id="ufOrigem" required>
-                                    <option value="">Selecione o estado</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="cidadeOrigem">Cidade Origem *</label>
-                                <select id="cidadeOrigem" required>
-                                    <option value="">Selecione a cidade</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="ufDestino">UF Destino *</label>
-                                <select id="ufDestino" required>
-                                    <option value="">Selecione o estado</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="cidadeDestino">Cidade Destino *</label>
-                                <select id="cidadeDestino" required>
-                                    <option value="">Selecione a cidade</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group" style="max-width:160px">
-                                <label for="cepColeta">CEP Coleta</label>
-                                <input type="text" id="cepColeta" placeholder="00000-000" maxlength="9"
-                                    oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Coleta')">
-                            </div>
-                            <div class="form-group">
-                                <label for="enderecoColeta">Endereço de Coleta *</label>
-                                <input type="text" id="enderecoColeta" placeholder="Ex: Rua das Flores, 123" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group" style="max-width:160px">
-                                <label for="cepEntrega">CEP Entrega</label>
-                                <input type="text" id="cepEntrega" placeholder="00000-000" maxlength="9"
-                                    oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Entrega')">
-                            </div>
-                            <div class="form-group">
-                                <label for="enderecoEntrega">Endereço de Entrega *</label>
-                                <input type="text" id="enderecoEntrega" placeholder="Ex: Avenida Paulista, 456" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="valorFrete">Valor do Frete (R$) *</label>
-                                <div class="input-moeda-wrap">
-                                    <span class="input-moeda-prefixo">R$</span>
-                                    <input type="text" id="valorFrete" placeholder="0,00" 
-                                        oninput="mascaraMoeda(this)" required>
+                        <!-- Origem e destino -->
+                        <div class="form-secao">
+                            <div class="form-secao-titulo">📍 Origem e destino</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ufOrigem">UF Origem *</label>
+                                    <select id="ufOrigem" required>
+                                        <option value="">Selecione o estado</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="cidadeOrigem">Cidade Origem *</label>
+                                    <select id="cidadeOrigem" required>
+                                        <option value="">Selecione a cidade</option>
+                                    </select>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label for="responsavelComercial">Responsável Comercial *</label>
-                                <input type="text" id="responsavelComercial" placeholder="Seu nome" required>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ufDestino">UF Destino *</label>
+                                    <select id="ufDestino" required>
+                                        <option value="">Selecione o estado</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="cidadeDestino">Cidade Destino *</label>
+                                    <select id="cidadeDestino" required>
+                                        <option value="">Selecione a cidade</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Endereços -->
+                        <div class="form-secao">
+                            <div class="form-secao-titulo">🏠 Endereços</div>
+                            <div class="form-row">
+                                <div class="form-group endereco-grupo">
+                                    <label for="enderecoColeta">Endereço de Coleta *</label>
+                                    <div class="cep-endereco-linha">
+                                        <input type="text" id="cepColeta" class="input-cep" placeholder="CEP" maxlength="9"
+                                            oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Coleta')">
+                                        <input type="text" id="enderecoColeta" placeholder="Ex: Rua das Flores, 123" required>
+                                    </div>
+                                </div>
+                                <div class="form-group endereco-grupo">
+                                    <label for="enderecoEntrega">Endereço de Entrega *</label>
+                                    <div class="cep-endereco-linha">
+                                        <input type="text" id="cepEntrega" class="input-cep" placeholder="CEP" maxlength="9"
+                                            oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Entrega')">
+                                        <input type="text" id="enderecoEntrega" placeholder="Ex: Avenida Paulista, 456" required>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Comercial -->
+                        <div class="form-secao">
+                            <div class="form-secao-titulo">💰 Comercial</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="valorFrete">Valor do Frete (R$) *</label>
+                                    <div class="input-moeda-wrap">
+                                        <span class="input-moeda-prefixo">R$</span>
+                                        <input type="text" id="valorFrete" placeholder="0,00"
+                                            oninput="mascaraMoeda(this)" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="responsavelComercial">Responsável Comercial *</label>
+                                    <input type="text" id="responsavelComercial" placeholder="Seu nome" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="referenciaPedido">Referência (OC, ID, Solicitação)</label>
+                                    <input type="text" id="referenciaPedido" placeholder="Ex: OC 12345, ID cliente, nº solicitação...">
+                                </div>
+                                <div class="form-group">
+                                    <label for="observacaoPedido">Observações</label>
+                                    <textarea id="observacaoPedido" rows="1" placeholder="Informação adicional sobre este pedido..."></textarea>
+                                </div>
                             </div>
                         </div>
 
@@ -353,6 +348,51 @@
                     <div id="mensagemComercial" class="message"></div>
                 </div>
 
+            </section>
+
+            <!-- TAB: MEUS PEDIDOS (acompanhamento do comercial) -->
+            <section id="meusPedidos" class="tab-content">
+                <div id="mensagemMeusPedidos" class="message"></div>
+                <!-- RESUMO DO COMERCIAL -->
+                <div class="resumo-comercial-painel">
+                    <div class="resumo-comercial-titulo">📊 Meu resumo</div>
+                    <div class="comercial-dashboard" id="dashboardComercial">
+                        <div class="dash-card" id="dashHoje">
+                            <span class="dash-icon">📋</span>
+                            <div class="dash-info">
+                                <span class="dash-valor" id="dashValorHoje">—</span>
+                                <span class="dash-label">Pedidos Hoje</span>
+                            </div>
+                        </div>
+                        <div class="dash-card" id="dashSemana">
+                            <span class="dash-icon">📅</span>
+                            <div class="dash-info">
+                                <span class="dash-valor" id="dashValorSemana">—</span>
+                                <span class="dash-label">Esta Semana</span>
+                            </div>
+                        </div>
+                        <div class="dash-card" id="dashAberto">
+                            <span class="dash-icon">⏳</span>
+                            <div class="dash-info">
+                                <span class="dash-valor" id="dashValorAberto">—</span>
+                                <span class="dash-label">Aguard. Confirmação</span>
+                            </div>
+                        </div>
+                        <div class="dash-card" id="dashReceita">
+                            <span class="dash-icon">💰</span>
+                            <div class="dash-info">
+                                <span class="dash-valor" id="dashValorReceita">—</span>
+                                <span class="dash-label">Receita do Mês</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LIBERAÇÕES PARA COLETA (checkpoint do comercial, T-2h) -->
+                <div id="liberacoesComercial"></div>
+
+                <!-- OCORRÊNCIAS DA LOGÍSTICA AGUARDANDO RETORNO -->
+                <div id="ocorrenciasComercial"></div>
                 <!-- LISTAGEM DE PEDIDOS DO COMERCIAL -->
                 <div class="card">
                     <div class="card-header-row">
@@ -423,157 +463,77 @@
                     </div>
                 </div>
 
-                <!-- Modal: Checklist de Confirmação de Coleta -->
-                <div id="modalChecklist" class="modal">
-                    <div class="modal-content">
-                        <span class="close" onclick="fecharModal('modalChecklist')">&times;</span>
-                        <h2>✅ Checklist de Confirmação</h2>
-                        <p class="text-muted" style="margin-bottom:1.2rem">Pedido <strong id="checklistPedidoInfo"></strong></p>
-                        <div class="checklist-items">
-                            <label class="checklist-item">
-                                <input type="checkbox" id="check1">
-                                <span>Veículo disponível para coleta?</span>
-                            </label>
-                            <label class="checklist-item">
-                                <input type="checkbox" id="check2">
-                                <span>Cliente confirmou a disponibilidade?</span>
-                            </label>
-                            <label class="checklist-item">
-                                <input type="checkbox" id="check3">
-                                <span>Endereço de coleta está correto?</span>
-                            </label>
-                            <label class="checklist-item">
-                                <input type="checkbox" id="check4">
-                                <span>Documentos do veículo em ordem?</span>
-                            </label>
-                            <label class="checklist-item">
-                                <input type="checkbox" id="check5">
-                                <span>Valor do frete confirmado com o cliente?</span>
-                            </label>
-                        </div>
-                        <div class="form-group" style="margin-top:1rem">
-                            <label>Observação</label>
-                            <textarea id="checklistObs" rows="2" placeholder="Alguma observação adicional..."></textarea>
-                        </div>
-                        <div id="mensagemChecklist" class="message"></div>
-                        <div class="form-actions">
-                            <button class="btn btn-primary" id="btnConfirmarChecklist">Confirmar Coleta</button>
-                            <button class="btn btn-secondary" onclick="fecharModal('modalChecklist')">Cancelar</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal: Fotos da Placa -->
-                <div id="modalFotoPlaca" class="modal">
-                    <div class="modal-content">
-                        <span class="close" onclick="fecharModal('modalFotoPlaca')">&times;</span>
-                        <h2>📸 Fotos da Placa</h2>
-                        <p class="text-muted" id="modalFotoInfo" style="margin-bottom:1rem"></p>
-                        <div id="modalFotoConteudo" class="galeria-fotos-modal"></div>
-                    </div>
-                </div>
-
-                <!-- Modal: Mover pedido de cegonha -->
-                <div id="modalMoverPedido" class="modal">
-                    <div class="modal-content">
-                        <span class="close" onclick="fecharModal('modalMoverPedido')">&times;</span>
-                        <h2>🔄 Mover / Desalocar Pedido</h2>
-                        <div id="moverPedidoInfo" class="status-resumo-info" style="margin-bottom:1rem"></div>
-                        <div class="form-group">
-                            <label>Ação</label>
-                            <div class="mover-opcoes">
-                                <div class="mover-opcao" onclick="selecionarAcaoMover('remover')">
-                                    <span class="mover-icon">🗑️</span>
-                                    <div>
-                                        <strong>Remover da Cegonha</strong>
-                                        <p>Volta para "Pendente" e libera a vaga</p>
-                                    </div>
-                                </div>
-                                <div class="mover-opcao" onclick="selecionarAcaoMover('cancelar')">
-                                    <span class="mover-icon">❌</span>
-                                    <div>
-                                        <strong>Cancelar Pedido</strong>
-                                        <p>Cancela definitivamente o pedido</p>
-                                    </div>
-                                </div>
-                                <div class="mover-opcao" onclick="selecionarAcaoMover('mover')">
-                                    <span class="mover-icon">🚛</span>
-                                    <div>
-                                        <strong>Mover para outra Cegonha</strong>
-                                        <p>Transfere para um veículo diferente</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="grupoSelecionarCegonha" style="display:none" class="form-group">
-                            <label>Selecione a cegonha de destino</label>
-                            <select id="cegonhaDestino">
-                                <option value="">Selecione...</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Motivo</label>
-                            <textarea id="moverMotivo" rows="2" placeholder="Descreva o motivo..."></textarea>
-                        </div>
-                        <input type="hidden" id="moverPedidoId">
-                        <input type="hidden" id="moverAcao">
-                        <div id="mensagemMover" class="message"></div>
-                        <div class="form-actions">
-                            <button class="btn btn-primary" onclick="confirmarMoverPedido()">Confirmar</button>
-                            <button class="btn btn-secondary" onclick="fecharModal('modalMoverPedido')">Cancelar</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal: Histórico do Cliente -->
-                <div id="modalHistoricoCliente" class="modal">
-                    <div class="modal-content">
-                        <span class="close" onclick="fecharModal('modalHistoricoCliente')">&times;</span>
-                        <h2>📊 Histórico do Cliente</h2>
-                        <div id="historicoClienteInfo" class="status-resumo-info" style="margin-bottom:1rem"></div>
-                        <div id="historicoClienteStats" class="historico-cliente-stats"></div>
-                        <div class="table-container" style="margin-top:1rem">
-                            <table class="table">
-                                <thead>
-                                    <tr><th>ID</th><th>Rota</th><th>Valor</th><th>Status</th><th>Data</th></tr>
-                                </thead>
-                                <tbody id="corpoHistoricoCliente"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
             </section>
+
 
             <!-- TAB 2: Painel de Ocupação -->
             <section id="painel" class="tab-content">
                 <div class="card painel-card-full">
                     <div class="painel-header-bar">
-                        <h2>Painel de Ocupação de Cargas</h2>
+                        <h2>Painel de Acompanhamento</h2>
                         <button class="btn btn-secondary" id="btnCarregarPainel">↻ Atualizar</button>
                     </div>
-                    <!-- Kanban: 3 colunas de status -->
-                    <div class="kanban-board">
-                        <div class="kanban-col">
-                            <div class="kanban-col-header pendente">
-                                <span class="kanban-dot"></span> Pendentes
-                                <span class="kanban-count" id="countPendente">0</span>
+                    <!-- Cards de resumo -->
+                    <div class="ocup-resumo">
+                        <div class="ocup-resumo-card ativo" data-filtro="" onclick="filtrarOcupacao('', this)">
+                            <span class="ocup-resumo-label">Total ativo</span>
+                            <div class="ocup-resumo-topo">
+                                <span class="ocup-resumo-num" id="ocupTotal">0</span>
+                                <span class="ocup-resumo-ico">📦</span>
                             </div>
-                            <div class="kanban-col-body" id="kanbanPendente"></div>
                         </div>
-                        <div class="kanban-col">
-                            <div class="kanban-col-header em-rota">
-                                <span class="kanban-dot"></span> Em Rota
-                                <span class="kanban-count" id="countEmRota">0</span>
+                        <div class="ocup-resumo-card ocup-pendente" data-filtro="Pendente" onclick="filtrarOcupacao('Pendente', this)">
+                            <span class="ocup-resumo-label">Pendentes</span>
+                            <div class="ocup-resumo-topo">
+                                <span class="ocup-resumo-num" id="ocupPendente">0</span>
+                                <span class="ocup-resumo-ico">⏳</span>
                             </div>
-                            <div class="kanban-col-body" id="kanbanEmRota"></div>
                         </div>
-                        <div class="kanban-col">
-                            <div class="kanban-col-header entregue">
-                                <span class="kanban-dot"></span> Entregues
-                                <span class="kanban-count" id="countEntregue">0</span>
+                        <div class="ocup-resumo-card ocup-emrota" data-filtro="Em Rota" onclick="filtrarOcupacao('Em Rota', this)">
+                            <span class="ocup-resumo-label">Em rota</span>
+                            <div class="ocup-resumo-topo">
+                                <span class="ocup-resumo-num" id="ocupEmRota">0</span>
+                                <span class="ocup-resumo-ico">🚛</span>
                             </div>
-                            <div class="kanban-col-body" id="kanbanEntregue"></div>
                         </div>
+                        <div class="ocup-resumo-card ocup-entregue" data-filtro="Entregue" onclick="filtrarOcupacao('Entregue', this)">
+                            <span class="ocup-resumo-label">Entregues</span>
+                            <div class="ocup-resumo-topo">
+                                <span class="ocup-resumo-num" id="ocupEntregue">0</span>
+                                <span class="ocup-resumo-ico">✅</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filtros -->
+                    <div class="ocup-filtros">
+                        <div class="ocup-chips" id="ocupChips">
+                            <button class="ocup-chip active" data-filtro="" onclick="filtrarOcupacao('', this)">Todos</button>
+                            <button class="ocup-chip" data-filtro="Pendente" onclick="filtrarOcupacao('Pendente', this)">Pendentes</button>
+                            <button class="ocup-chip" data-filtro="Em Rota" onclick="filtrarOcupacao('Em Rota', this)">Em rota</button>
+                            <button class="ocup-chip" data-filtro="Entregue" onclick="filtrarOcupacao('Entregue', this)">Entregues</button>
+                        </div>
+                        <input type="text" id="ocupBusca" class="ocup-busca" placeholder="🔍 Buscar cliente, placa, cegonha..." oninput="renderizarOcupacao()">
+                    </div>
+
+                    <!-- Tabela -->
+                    <div class="tabela-scroll">
+                        <table class="ocup-tabela">
+                            <thead>
+                                <tr>
+                                    <th>Pedido</th>
+                                    <th>Rota</th>
+                                    <th>Veículo / Cegonha</th>
+                                    <th>Coleta prev.</th>
+                                    <th>Status</th>
+                                    <th style="text-align:right">Frete</th>
+                                    <th style="text-align:right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ocupTabelaCorpo">
+                                <tr><td colspan="7" class="text-center text-muted">Clique em Atualizar para carregar</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -588,7 +548,14 @@
                 <!-- ABAS INTERNAS DA LOGÍSTICA -->
                 <div class="logistica-tabs">
                     <button class="log-tab-btn active" onclick="trocarTabLogistica('alocacao', this)">🚛 Alocação de Carga</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('rotas', this)">🛣️ Rotas Planejadas</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('acompanhamento', this)">📊 Acompanhamento</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('confirmacoes', this)">⏰ Confirmações</button>
                     <button class="log-tab-btn" onclick="trocarTabLogistica('cegonhas', this)">📦 Painel das Cegonhas</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('terceiros', this)">🤝 Terceiros</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('validacaoPlacas', this)">🔎 Validação de Placas</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('manifestos', this)">🚛 Manifestos</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('patios', this)">🅿️ Carros nos Pátios</button>
                     <button class="log-tab-btn" onclick="trocarTabLogistica('fotos', this)">📸 Fotos das Placas</button>
                     <button class="btn btn-secondary btn-sm" style="margin-left:auto" id="btnCarregarPedidos">↻ Atualizar</button>
                 </div>
@@ -599,14 +566,7 @@
                         <div class="logistica-col pedidos-col">
                             <div class="logistica-col-header">
                                 <h3>📋 Pedidos para Alocar</h3>
-                                <select id="filtroPedidosLogistica" class="filtro-select" onchange="renderizarPedidosDrag()" style="font-size:0.78rem">
-                                    <option value="">Todos</option>
-                                    <option value="Pendente">Pendente</option>
-                                    <option value="Intenção Agendada">Intenção Agendada</option>
-                                    <option value="Aguardando Confirmação">Aguard. Confirmação</option>
-                                    <option value="Em Coleta">Em Coleta</option>
-                                    <option value="Em Transporte">Em Transporte</option>
-                                </select>
+                                <span id="contadorPendentesAlocar" class="patio-qtd" title="Somente pedidos pendentes de alocação aparecem aqui">—</span>
                             </div>
                             <div id="listaPedidosDrag" class="pedidos-drag-list">
                                 <p class="text-center text-muted">Clique em Atualizar para carregar</p>
@@ -627,6 +587,102 @@
                 <!-- ABA: PAINEL DAS CEGONHAS -->
                 <div id="logTab-cegonhas" class="log-tab-content" style="display:none">
                     <div id="painelCegonhas" class="painel-cegonhas-grid">
+                        <p class="text-center text-muted">Clique em Atualizar para carregar</p>
+                    </div>
+                </div>
+
+                <!-- ABA: TERCEIROS (cegonhas e guinchos de fora da frota) -->
+                <div id="logTab-terceiros" class="log-tab-content" style="display:none">
+                    <p class="text-muted text-sm" style="margin-bottom:0.8rem">Cegonhas e guinchos de transportadores terceiros. A ocupação, o espelho de carga e o custo funcionam igual à frota própria.</p>
+                    <div id="painelTerceiros" class="painel-cegonhas-grid">
+                        <p class="text-center text-muted">Clique em Atualizar para carregar</p>
+                    </div>
+                </div>
+
+                <!-- ABA: ACOMPANHAMENTO (PEDIDOS ALOCADOS) -->
+                <!-- ABA: ROTAS PLANEJADAS -->
+                <div id="logTab-rotas" class="log-tab-content" style="display:none">
+                    <div class="rotas-topo">
+                        <p class="text-muted text-sm" style="margin:0">Planeje a rota primeiro (cegonha + data + paradas na ordem) e vá vinculando os pedidos que se encaixam no caminho até encher a carreta.</p>
+                        <button class="btn btn-primary btn-sm" onclick="abrirNovaRota()">➕ Nova Rota</button>
+                    </div>
+                    <div id="painelRotas"><p class="text-center text-muted">Clique em Atualizar para carregar</p></div>
+                </div>
+
+                <div id="logTab-acompanhamento" class="log-tab-content" style="display:none">
+                    <div class="acomp-filtros">
+                        <div class="acomp-filtro">
+                            <label>Caminhão</label>
+                            <select id="acompFiltroCaminhao" class="filtro-select" onchange="renderizarAcompanhamento()">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div class="acomp-filtro">
+                            <label>Período (coleta) de</label>
+                            <input type="date" id="acompFiltroDe" class="filtro-select" onchange="renderizarAcompanhamento()">
+                        </div>
+                        <div class="acomp-filtro">
+                            <label>até</label>
+                            <input type="date" id="acompFiltroAte" class="filtro-select" onchange="renderizarAcompanhamento()">
+                        </div>
+                        <div class="acomp-filtro">
+                            <label>Status</label>
+                            <select id="acompFiltroStatus" class="filtro-select" onchange="renderizarAcompanhamento()">
+                                <option value="">Em andamento</option>
+                                <option value="Intenção Agendada">Intenção Agendada</option>
+                                <option value="Aguardando Confirmação">Aguard. Confirmação</option>
+                                <option value="Em Coleta">Em Coleta</option>
+                                <option value="Em Transporte">Em Transporte</option>
+                                <option value="Transbordo">Transbordo</option>
+                                <option value="Entregue">Entregue</option>
+                                <option value="Cancelado">Cancelado</option>
+                                <option value="__todos">Todos (inclui finalizados)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="limparFiltrosAcompanhamento()">Limpar</button>
+                    </div>
+                    <div class="tabela-scroll">
+                        <table class="tabela-padrao" id="tabelaAcompanhamento">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>Cliente</th><th>Veículo</th><th>Rota</th>
+                                    <th>Caminhão</th><th>Motorista</th><th>Coleta Prev.</th>
+                                    <th>Status</th><th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaAcompanhamento">
+                                <tr><td colspan="9" class="text-center text-muted">Clique em Atualizar para carregar</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ABA: CONFIRMAÇÕES (T-4h / T-2h) -->
+                <div id="logTab-confirmacoes" class="log-tab-content" style="display:none">
+                    <div class="card" style="border-color:rgba(167,139,250,0.35);margin-bottom:1rem">
+                        <h2 style="font-size:1.05rem;margin-bottom:0.3rem">✏️ Solicitações de Edição do Comercial</h2>
+                        <p class="text-muted text-sm" style="margin-bottom:0.6rem">Aprovar libera a edição do pedido. Se ele já passou de Pendente, será devolvido a Pendente e sairá da carga para nova alocação.</p>
+                        <div id="painelSolicitacoesEdicao"><p class="text-muted text-sm">Carregando...</p></div>
+                    </div>
+                    <div id="painelConfirmacoes">
+                        <p class="text-center text-muted">Clique em Atualizar para carregar</p>
+                    </div>
+                </div>
+
+                <!-- ABA: VALIDAÇÃO DE PLACAS (OCR) -->
+                <div id="logTab-validacaoPlacas" class="log-tab-content" style="display:none">
+                    <div id="painelValidacaoPlacas"><p class="text-center text-muted">Clique em Atualizar para carregar</p></div>
+                </div>
+
+                <!-- ABA: MANIFESTOS DE CARGA -->
+                <div id="logTab-manifestos" class="log-tab-content" style="display:none">
+                    <p class="text-muted text-sm" style="margin-bottom:0.8rem">Quantidade de veículos declarada na carga de cada caminhão, com a origem. Atualiza automaticamente a cada coleta, entrega ou transbordo.</p>
+                    <div id="painelManifestos"><p class="text-center text-muted">Clique em Atualizar para carregar</p></div>
+                </div>
+
+                <!-- ABA: CARROS NOS PÁTIOS (TRANSBORDO) -->
+                <div id="logTab-patios" class="log-tab-content" style="display:none">
+                    <div id="painelPatios">
                         <p class="text-center text-muted">Clique em Atualizar para carregar</p>
                     </div>
                 </div>
@@ -830,6 +886,15 @@
                             </div>
                         </div>
 
+                        <!-- Inscrição Estadual (apenas pessoa jurídica) -->
+                        <div class="form-row" id="grupoInscricaoEstadual" style="display:none">
+                            <div class="form-group">
+                                <label for="inscricaoEstadual">Inscrição Estadual</label>
+                                <input type="text" id="inscricaoEstadual" placeholder="Ex: 123.45678-90 ou ISENTO" maxlength="20">
+                            </div>
+                            <div class="form-group"></div>
+                        </div>
+
                         <!-- Contato -->
                         <div class="form-row">
                             <div class="form-group">
@@ -895,6 +960,37 @@
                     <div id="mensagemCadastroCliente" class="message"></div>
                 </div>
 
+                <!-- LISTAGEM E EDIÇÃO DE CLIENTES -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2 class="titulo-colapsavel" onclick="toggleCardLista('listaClientes')"><span class="chevron-colapso" id="chev_listaClientes">▸</span> Clientes Cadastrados <span class="patio-qtd" id="contadorClientes">0</span></h2>
+                        <div id="ctrl_listaClientes" style="display:none;gap:0.6rem;align-items:center;flex-wrap:wrap">
+                            <input type="text" id="buscaClientes" class="ocup-busca" placeholder="🔍 Buscar nome, CNPJ, CPF, cidade..."
+                                style="min-width:240px" oninput="renderizarListaClientes()">
+                            <button class="btn btn-secondary btn-sm" onclick="renderizarListaClientes()">↻ Atualizar</button>
+                        </div>
+                    </div>
+                    <div class="card-lista-corpo" id="corpo_listaClientes" style="display:none">
+                        <div class="tabela-scroll">
+                        <table class="ocup-tabela">
+                            <thead>
+                                <tr>
+                                    <th>Cliente</th>
+                                    <th>Tipo</th>
+                                    <th>Documento</th>
+                                    <th>Contato</th>
+                                    <th>Cidade/UF</th>
+                                    <th style="text-align:right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaClientes">
+                                <tr><td colspan="6" class="text-center text-muted">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    </div>
+                </div>
+
                 <div class="card">
                     <h2>Cadastro de Motorista</h2>
                     <form id="formCadastroMotorista" class="form">
@@ -920,12 +1016,57 @@
                             </div>
                         </div>
 
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="vinculoMotorista">Vínculo *</label>
+                                <select id="vinculoMotorista" required onchange="toggleTransportadorMotorista(this.value)">
+                                    <option value="proprio">🏢 Próprio (frota/CLT)</option>
+                                    <option value="terceiro">🤝 Terceiro / Agregado</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="grupoTransportadorMotorista" style="display:none">
+                                <label for="transportadorMotorista">Transportador / Empresa</label>
+                                <input type="text" id="transportadorMotorista" placeholder="Ex: autônomo ou nome da empresa">
+                            </div>
+                        </div>
+
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary">Salvar Motorista</button>
                             <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
                         </div>
                     </form>
                     <div id="mensagemCadastroMotorista" class="message"></div>
+                </div>
+
+                <!-- LISTAGEM E EDIÇÃO DE MOTORISTAS -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2 class="titulo-colapsavel" onclick="toggleCardLista('listaMotoristas')"><span class="chevron-colapso" id="chev_listaMotoristas">▸</span> Motoristas Cadastrados <span class="patio-qtd" id="contadorMotoristas">0</span></h2>
+                        <div id="ctrl_listaMotoristas" style="display:none;gap:0.6rem;align-items:center;flex-wrap:wrap">
+                            <input type="text" id="buscaMotoristas" class="ocup-busca" placeholder="🔍 Buscar nome, CPF, CNH..."
+                                style="min-width:220px" oninput="renderizarListaMotoristas()">
+                            <button class="btn btn-secondary btn-sm" onclick="renderizarListaMotoristas()">↻ Atualizar</button>
+                        </div>
+                    </div>
+                    <div class="card-lista-corpo" id="corpo_listaMotoristas" style="display:none">
+                        <div class="tabela-scroll">
+                        <table class="ocup-tabela">
+                            <thead>
+                                <tr>
+                                    <th>Motorista</th>
+                                    <th>CPF</th>
+                                    <th>CNH</th>
+                                    <th>Telefone</th>
+                                    <th>Vínculo</th>
+                                    <th style="text-align:right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaMotoristas">
+                                <tr><td colspan="6" class="text-center text-muted">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    </div>
                 </div>
 
                 <div class="card">
@@ -983,12 +1124,73 @@
                             </div>
                         </div>
 
+                        <!-- Propriedade: frota própria ou cegonha terceira -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="propriedadeCegonha">Propriedade *</label>
+                                <select id="propriedadeCegonha" required onchange="toggleCamposTerceiro(this.value)">
+                                    <option value="propria">🏢 Frota própria</option>
+                                    <option value="terceiro">🤝 Cegonha terceira</option>
+                                </select>
+                            </div>
+                            <div class="form-group"></div>
+                        </div>
+
+                        <div id="camposTerceiro" style="display:none">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="transportadorNome">Transportador (empresa/pessoa) *</label>
+                                    <input type="text" id="transportadorNome" placeholder="Ex: Transportes Silva Ltda">
+                                </div>
+                                <div class="form-group">
+                                    <label for="transportadorContato">Contato do Transportador</label>
+                                    <input type="text" id="transportadorContato" placeholder="Telefone / e-mail">
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary">Salvar Veículo</button>
                             <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
                         </div>
                     </form>
                     <div id="mensagemCadastroVeiculo" class="message"></div>
+                </div>
+
+                <!-- LISTAGEM E EDIÇÃO DE VEÍCULOS -->
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2 class="titulo-colapsavel" onclick="toggleCardLista('listaVeiculos')"><span class="chevron-colapso" id="chev_listaVeiculos">▸</span> Veículos Cadastrados <span class="patio-qtd" id="contadorVeiculos">0</span></h2>
+                        <div id="ctrl_listaVeiculos" style="display:none;gap:0.6rem;align-items:center;flex-wrap:wrap">
+                            <select id="filtroPropriedadeVeiculos" class="filtro-select" onchange="renderizarListaVeiculos()" style="font-size:0.8rem">
+                                <option value="">Todos</option>
+                                <option value="propria">🏢 Frota própria</option>
+                                <option value="terceiro">🤝 Terceiros</option>
+                            </select>
+                            <input type="text" id="buscaVeiculos" class="ocup-busca" placeholder="🔍 Buscar placa, marca, modelo..."
+                                style="min-width:220px" oninput="renderizarListaVeiculos()">
+                            <button class="btn btn-secondary btn-sm" onclick="renderizarListaVeiculos()">↻ Atualizar</button>
+                        </div>
+                    </div>
+                    <div class="card-lista-corpo" id="corpo_listaVeiculos" style="display:none">
+                        <div class="tabela-scroll">
+                        <table class="ocup-tabela">
+                            <thead>
+                                <tr>
+                                    <th>Placa</th>
+                                    <th>Tipo / Capacidade</th>
+                                    <th>Marca / Modelo</th>
+                                    <th>Motorista padrão</th>
+                                    <th>Propriedade</th>
+                                    <th style="text-align:right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpoTabelaVeiculos">
+                                <tr><td colspan="6" class="text-center text-muted">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    </div>
                 </div>
             </section>
         </main>
@@ -1009,6 +1211,16 @@
                     <input type="hidden" id="statusPedidoId">
                     <input type="hidden" id="statusAtual">
                     <input type="hidden" id="statusNovo">
+
+                    <!-- Tipo de transbordo (aparece só ao escolher Transbordo) -->
+                    <div class="form-group" id="grupoTipoTransbordo" style="display:none">
+                        <label>Tipo de transbordo *</label>
+                        <div class="transbordo-tipo-opcoes">
+                            <label class="radio-inline"><input type="radio" name="tipoTransbordo" value="patio" checked onchange="ajustarCamposTransbordo()"> 🅿️ Caminhão → Pátio</label>
+                            <label class="radio-inline"><input type="radio" name="tipoTransbordo" value="caminhao" onchange="ajustarCamposTransbordo()"> 🚛 Caminhão → Caminhão</label>
+                        </div>
+                    </div>
+
                     <div class="form-group" id="grupoObservacao" style="display:none">
                         <label for="statusObservacao">Observação</label>
                         <textarea id="statusObservacao" rows="2" placeholder="Descreva a ocorrência ou motivo..."></textarea>
@@ -1024,11 +1236,27 @@
                             <option value="Balneário Camboriú/SC">Balneário Camboriú/SC</option>
                             <option value="São José/SC">São José/SC</option>
                             <option value="Gravataí/RS">Gravataí/RS</option>
-                            <option value="São Paulo/SP">São Paulo/SP</option>
+                            <option value="São Paulo/SP">São Bernardo do Campo/SP</option>
                             <option value="__outro">Outra cidade...</option>
                         </select>
                         <input type="text" id="cidadeTransbordoOutra" placeholder="Digite a cidade/UF"
                             style="display:none;margin-top:0.5rem">
+                    </div>
+
+                    <!-- Cegonha de destino (transbordo caminhão → caminhão) -->
+                    <div class="form-group" id="grupoCegonhaDestino" style="display:none">
+                        <label for="cegonhaDestinoTransbordo">Cegonha de destino *</label>
+                        <select id="cegonhaDestinoTransbordo">
+                            <option value="">Selecione a cegonha...</option>
+                        </select>
+                    </div>
+
+                    <!-- Checklist verificado (entrega e transbordos) -->
+                    <div class="form-group checklist-verif-box" id="grupoChecklistVerif" style="display:none">
+                        <label class="checkbox-destaque">
+                            <input type="checkbox" id="checklistVerificado">
+                            <span>✅ Confirmo que verifiquei o <strong>checklist do motorista</strong> na plataforma da empresa</span>
+                        </label>
                     </div>
                     <div id="mensagemStatus" class="message"></div>
                     <div class="status-acoes-btn" id="statusAcoesBtns"></div>
@@ -1044,9 +1272,134 @@
                 <div id="listaHistorico" class="lista-historico"></div>
             </div>
         </div>
+
+        <!-- MODAIS GLOBAIS (movidos para fora das seções p/ funcionar em qualquer aba) -->
+                <!-- Modal: Checklist de Confirmação de Coleta -->
+                <div id="modalChecklist" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalChecklist')">&times;</span>
+                        <h2>✅ Checklist de Confirmação</h2>
+                        <p class="text-muted" style="margin-bottom:1.2rem">Pedido <strong id="checklistPedidoInfo"></strong></p>
+                        <div class="checklist-items">
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check1">
+                                <span>Veículo disponível para coleta?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check2">
+                                <span>Cliente confirmou a disponibilidade?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check3">
+                                <span>Endereço de coleta está correto?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check4">
+                                <span>Documentos do veículo em ordem?</span>
+                            </label>
+                            <label class="checklist-item">
+                                <input type="checkbox" id="check5">
+                                <span>Valor do frete confirmado com o cliente?</span>
+                            </label>
+                        </div>
+                        <div class="form-group" style="margin-top:1rem">
+                            <label>Observação</label>
+                            <textarea id="checklistObs" rows="2" placeholder="Alguma observação adicional..."></textarea>
+                        </div>
+                        <div id="mensagemChecklist" class="message"></div>
+                        <div class="form-actions">
+                            <button class="btn btn-primary" id="btnConfirmarChecklist">Confirmar Coleta</button>
+                            <button class="btn btn-secondary" onclick="fecharModal('modalChecklist')">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal: Fotos da Placa -->
+                <div id="modalFotoPlaca" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalFotoPlaca')">&times;</span>
+                        <h2>📸 Fotos da Placa</h2>
+                        <p class="text-muted" id="modalFotoInfo" style="margin-bottom:1rem"></p>
+                        <div id="modalFotoConteudo" class="galeria-fotos-modal"></div>
+                    </div>
+                </div>
+
+                <!-- Modal: Mover pedido de cegonha -->
+                <div id="modalMoverPedido" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalMoverPedido')">&times;</span>
+                        <h2>🔄 Mover / Desalocar Pedido</h2>
+                        <div id="moverPedidoInfo" class="status-resumo-info" style="margin-bottom:1rem"></div>
+                        <div class="form-group">
+                            <label>Ação</label>
+                            <div class="mover-opcoes">
+                                <div class="mover-opcao" onclick="selecionarAcaoMover('remover')">
+                                    <span class="mover-icon">🗑️</span>
+                                    <div>
+                                        <strong>Remover da Cegonha</strong>
+                                        <p>Volta para "Pendente" e libera a vaga</p>
+                                    </div>
+                                </div>
+                                <div class="mover-opcao" onclick="selecionarAcaoMover('cancelar')">
+                                    <span class="mover-icon">❌</span>
+                                    <div>
+                                        <strong>Cancelar Pedido</strong>
+                                        <p>Cancela definitivamente o pedido</p>
+                                    </div>
+                                </div>
+                                <div class="mover-opcao" onclick="selecionarAcaoMover('mover')">
+                                    <span class="mover-icon">🚛</span>
+                                    <div>
+                                        <strong>Mover para outra Cegonha</strong>
+                                        <p>Transfere para um veículo diferente</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="grupoSelecionarCegonha" style="display:none" class="form-group">
+                            <label>Selecione a cegonha de destino</label>
+                            <select id="cegonhaDestino">
+                                <option value="">Selecione...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Motivo</label>
+                            <textarea id="moverMotivo" rows="2" placeholder="Descreva o motivo..."></textarea>
+                        </div>
+                        <input type="hidden" id="moverPedidoId">
+                        <input type="hidden" id="moverAcao">
+                        <div id="mensagemMover" class="message"></div>
+                        <div class="form-actions">
+                            <button class="btn btn-primary" onclick="confirmarMoverPedido()">Confirmar</button>
+                            <button class="btn btn-secondary" onclick="fecharModal('modalMoverPedido')">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal: Histórico do Cliente -->
+                <div id="modalHistoricoCliente" class="modal">
+                    <div class="modal-content">
+                        <span class="close" onclick="fecharModal('modalHistoricoCliente')">&times;</span>
+                        <h2>📊 Histórico do Cliente</h2>
+                        <div id="historicoClienteInfo" class="status-resumo-info" style="margin-bottom:1rem"></div>
+                        <div id="historicoClienteStats" class="historico-cliente-stats"></div>
+                        <div class="table-container" style="margin-top:1rem">
+                            <table class="table">
+                                <thead>
+                                    <tr><th>ID</th><th>Rota</th><th>Valor</th><th>Status</th><th>Data</th></tr>
+                                </thead>
+                                <tbody id="corpoHistoricoCliente"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
     </div><!-- /appPrincipal -->
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- OCR de placas (Tesseract.js) — roda no navegador/celular do motorista -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <script src="supabase-config.js"></script>
 
