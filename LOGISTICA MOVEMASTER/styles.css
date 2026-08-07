@@ -5879,6 +5879,12 @@ select optgroup {
     border: 1px solid rgba(139, 92, 246, 0.35);
 }
 
+.badge-manutencao {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
 @media (max-width: 1000px) {
     .dir-kpis { grid-template-columns: repeat(2, 1fr); }
     .dir-colunas { grid-template-columns: 1fr; }
@@ -7889,3 +7895,300 @@ input:focus, select:focus, textarea:focus {
     color: var(--text-primary);
     padding-left: 0.5rem;
 }
+/* ============================================================
+   LOTE 2 — MANUTENÇÃO: checklist + tags de integridade
+   ============================================================ */
+.manut-toolbar {
+    display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+.manut-toolbar-campo { display: flex; flex-direction: column; gap: 6px; min-width: 280px; }
+.manut-toolbar-campo label { font-size: .85rem; opacity: .8; }
+.manut-toolbar-campo select {
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(255,255,255,.04); color: inherit;
+    border: 1px solid rgba(255,255,255,.12);
+}
+.manut-tag-atual { display: flex; align-items: center; gap: 8px; font-size: .9rem; opacity: .9; }
+
+.checklist-bloco {
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+}
+.checklist-bloco h4 { margin: 0 0 10px; font-size: .95rem; opacity: .95; }
+.checklist-linha {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.06);
+    flex-wrap: wrap;
+}
+.checklist-linha:first-of-type { border-top: none; }
+.checklist-item-nome { font-size: .92rem; }
+.checklist-opcoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.checklist-opcoes .opt {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.14); font-size: .85rem; user-select: none;
+}
+.checklist-opcoes .opt input { accent-color: currentColor; }
+.checklist-opcoes .opt-ok:has(input:checked) { background: rgba(74,222,128,.18); color:#4ade80; border-color: rgba(74,222,128,.4); }
+.checklist-opcoes .opt-at:has(input:checked) { background: rgba(251,191,36,.18); color:#fbbf24; border-color: rgba(251,191,36,.4); }
+.checklist-opcoes .opt-cr:has(input:checked) { background: rgba(248,113,113,.18); color:#f87171; border-color: rgba(248,113,113,.4); }
+
+.manut-acoes { margin: 6px 0 18px; }
+.manut-historico h3 { font-size: 1rem; margin: 18px 0 10px; }
+.checklist-hist-linha {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.03);
+    margin-bottom: 6px; font-size: .88rem;
+}
+
+/* Tags de integridade (item 13.7) — distintas das tags de ETA (item 16) */
+.tag-integridade {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 600;
+    white-space: nowrap;
+}
+.tag-integridade.tag-verde    { background: rgba(74,222,128,.16);  color:#4ade80; border:1px solid rgba(74,222,128,.35); }
+.tag-integridade.tag-amarelo  { background: rgba(251,191,36,.16);  color:#fbbf24; border:1px solid rgba(251,191,36,.35); }
+.tag-integridade.tag-vermelho { background: rgba(248,113,113,.16); color:#f87171; border:1px solid rgba(248,113,113,.35); }
+
+/* ============================================================
+   LOTE 3 — EPIs: avaliação, fila de compras, autosserviço
+   ============================================================ */
+.manut-epi { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.1); }
+.manut-epi h3 { font-size: 1rem; margin: 0 0 12px; }
+.epi-linha-dir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.epi-tamanho {
+    padding: 6px 10px; border-radius: 8px; font-size: .84rem; min-width: 180px;
+    background: rgba(255,255,255,.04); color: inherit; border: 1px solid rgba(255,255,255,.12);
+}
+
+.tabela-epi { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.tabela-epi th, .tabela-epi td {
+    text-align: left; padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.tabela-epi th { font-weight: 600; opacity: .8; }
+.epi-acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.epi-urg-alta { color: #f87171; font-weight: 600; }
+
+.epi-motorista-form { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
+.epi-motorista-form .manut-toolbar-campo { min-width: 200px; }
+.epi-motorista-form input, .epi-motorista-form select {
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(255,255,255,.04); color: inherit; border: 1px solid rgba(255,255,255,.12);
+}
+
+/* ============================================================
+   LOTE 4 — Agendamento de manutenção
+   ============================================================ */
+.manut-agendamento { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.1); }
+.manut-agendamento h3 { font-size: 1rem; margin: 0 0 12px; }
+.manut-agendamento input[type="datetime-local"] { color-scheme: dark; }
+
+/* ============================================================
+   LOTE 5 — Parada de emergência
+   ============================================================ */
+.manut-emergencia { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.1); }
+.manut-emergencia h3 { font-size: 1rem; margin: 0 0 4px; }
+.btn-danger { background: #dc2626; color: #fff; border: 1px solid #b91c1c; }
+.btn-danger:hover { background: #b91c1c; }
+.manut-emergencia input[type="datetime-local"] { color-scheme: dark; }
+
+.emergencia-linha {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; margin-bottom: 6px;
+    background: rgba(220,38,38,.10); border: 1px solid rgba(220,38,38,.30); font-size: .88rem;
+}
+.emergencia-badge { font-weight: 700; color: #f87171; white-space: nowrap; }
+
+.emergencia-banner {
+    margin: 10px 0 14px; padding: 12px 14px; border-radius: 12px;
+    background: rgba(220,38,38,.12); border: 1px solid rgba(220,38,38,.4);
+}
+.emergencia-banner-titulo { font-weight: 700; color: #fca5a5; margin-bottom: 8px; }
+
+/* ============================================================
+   LOTE 6 — Alerta crítico de segurança na diretoria
+   ============================================================ */
+.dir-alerta-critico {
+    background: rgba(220,38,38,.14) !important;
+    border: 1px solid rgba(220,38,38,.45) !important;
+}
+.dir-alerta-critico .dir-alerta-num { color: #f87171; }
+
+/* ============================================================
+   LOTE 7 — Item 6: exceção de capacidade
+   ============================================================ */
+.capacidade-excecao-lbl {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    font-size: .82rem; opacity: .85; font-weight: 400; cursor: pointer;
+}
+.capacidade-excecao-lbl input { width: auto; margin: 0; }
+
+/* ============================================================
+   LOTE 8 — Item 1: reserva com timer + tipo de entrega
+   ============================================================ */
+.reserva-check-lbl { display:flex; align-items:center; gap:8px; font-weight:400; cursor:pointer; }
+.reserva-check-lbl input { width:auto; margin:0; }
+
+.reservas-wrap { margin-bottom: 14px; }
+.reservas-box {
+    background: rgba(59,130,246,.10); border: 1px solid rgba(59,130,246,.35);
+    border-radius: 12px; padding: 12px 14px;
+}
+.reservas-titulo { font-weight: 700; color: #93c5fd; margin-bottom: 8px; }
+.reserva-linha {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; margin-bottom: 6px;
+    background: rgba(255,255,255,.03); font-size: .88rem;
+}
+.reserva-linha.reserva-critica { background: rgba(251,191,36,.12); border: 1px solid rgba(251,191,36,.35); }
+.reserva-rota { flex: 1; min-width: 200px; }
+.reserva-timer { font-variant-numeric: tabular-nums; font-weight: 700; color: #fbbf24; min-width: 78px; }
+.reserva-vagas { opacity: .8; }
+
+/* ============================================================
+   LOTE 9 — Item 5: desalocar/reverter
+   ============================================================ */
+.btn-reverter {
+    background: rgba(251,146,60,.15); color: #fb923c;
+    border: 1px solid rgba(251,146,60,.4);
+}
+.btn-reverter:hover { background: rgba(251,146,60,.28); }
+.status-cegonha-inline { font-size: .82rem; opacity: .85; }
+
+/* ============================================================
+   LOTE 10 — Item 12: cadastro de corredores
+   ============================================================ */
+.corredor-linha {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 12px; border-radius: 10px; margin-bottom: 8px;
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); flex-wrap: wrap;
+}
+.corredor-info { display: flex; flex-direction: column; gap: 3px; }
+.corredor-seq { font-size: .82rem; color: #93c5fd; }
+
+/* ============================================================
+   LOTE 11 — Item 12: sugestões de rota por corredor
+   ============================================================ */
+.sugestoes-wrap { margin-bottom: 14px; }
+.sugestoes-box {
+    background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.30);
+    border-radius: 12px; padding: 12px 14px;
+}
+.sugestoes-titulo { font-weight: 700; color: #93c5fd; margin-bottom: 10px; }
+.sugestao-card {
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+}
+.sugestao-cab { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.sug-ocup { margin-left: auto; font-weight: 700; }
+.sug-paradas { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; font-size: .84rem; }
+.sug-parada { opacity: .5; }
+.sug-parada-ativa { opacity: 1; color: #93c5fd; font-weight: 600; }
+.sug-seta { opacity: .35; }
+.sug-pedidos { display: flex; gap: 6px; flex-wrap: wrap; }
+.sug-pedido {
+    font-size: .78rem; padding: 2px 8px; border-radius: 999px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+}
+
+/* ============================================================
+   LOTE 12 — Item 16: tags de ETA (distintas das de integridade)
+   ============================================================ */
+.tag-eta {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 8px; border-radius: 999px; font-size: .76rem; font-weight: 600; white-space: nowrap;
+}
+.tag-eta.tag-verde    { background: rgba(74,222,128,.16);  color:#4ade80; border:1px solid rgba(74,222,128,.35); }
+.tag-eta.tag-amarelo  { background: rgba(251,191,36,.16);  color:#fbbf24; border:1px solid rgba(251,191,36,.35); }
+.tag-eta.tag-vermelho { background: rgba(248,113,113,.16); color:#f87171; border:1px solid rgba(248,113,113,.35); }
+
+/* ============================================================
+   LOTE 14 — Itens 7-8: confirmação comercial + fechamento
+   ============================================================ */
+.confirmacao-wrap { margin-bottom: 14px; }
+.confirmacao-box {
+    background: rgba(249,115,22,.08); border: 1px solid rgba(249,115,22,.30);
+    border-radius: 12px; padding: 12px 14px;
+}
+.confirmacao-titulo { font-weight: 700; color: #fdba74; margin-bottom: 8px; }
+.confirma-linha {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; margin-bottom: 6px;
+    background: rgba(255,255,255,.03); font-size: .88rem;
+}
+.confirma-linha-urgente { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.35); }
+.confirma-rota { flex: 1; min-width: 220px; }
+.confirma-urgente { color: #f87171; font-weight: 700; }
+.tag-fechada { color: #4ade80; font-weight: 700; }
+.tag-verde-ok { color: #4ade80; font-weight: 600; }
+
+/* ============================================================
+   LOTE 16 — Item 11: aviso preventivo de folga próxima (15 dias)
+   ============================================================ */
+.aviso-folga-proxima {
+    background: rgba(96,165,250,.12) !important;
+    border: 1px solid rgba(96,165,250,.4) !important;
+}
+
+/* ============================================================
+   LOTE 17 — Itens 3-4: last mile + equipes de entrega
+   ============================================================ */
+.lastmile-wrap { margin-bottom: 14px; }
+.lastmile-box {
+    background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.30);
+    border-radius: 12px; padding: 12px 14px;
+}
+.lastmile-titulo { font-weight: 700; color: #6ee7b7; margin-bottom: 8px; }
+.lastmile-linha {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; margin-bottom: 6px;
+    background: rgba(255,255,255,.03); font-size: .87rem;
+}
+.lastmile-rota { flex: 1; min-width: 220px; }
+.lastmile-linha select {
+    padding: 6px 9px; border-radius: 8px; font-size: .83rem;
+    background: rgba(255,255,255,.05); color: inherit; border: 1px solid rgba(255,255,255,.14);
+}
+
+/* ============================================================
+   LOTE 18 — Item 9: faturamento na logística + extrato motorista
+   ============================================================ */
+.rota-valor { color: #6ee7b7; font-weight: 600; }
+.extrato-cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.extrato-card {
+    flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 4px;
+    padding: 14px 16px; border-radius: 12px;
+    background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.25);
+}
+.extrato-num { font-size: 1.4rem; font-weight: 800; color: #6ee7b7; }
+.extrato-rot { font-size: .82rem; opacity: .8; }
+.extrato-linha {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; margin-bottom: 6px;
+    background: rgba(255,255,255,.03); font-size: .87rem;
+}
+
+/* ============================================================
+   LOTE 19 — Item 18: conferência de faturamento
+   ============================================================ */
+.conferencia-fat-wrap { margin-top: 6px; }
+.tabela-conf { width: 100%; border-collapse: collapse; font-size: .87rem; }
+.tabela-conf th, .tabela-conf td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.tabela-conf th { font-weight: 600; opacity: .8; }
+.conf-input {
+    width: 120px; padding: 6px 9px; border-radius: 8px;
+    background: rgba(255,255,255,.05); color: inherit; border: 1px solid rgba(255,255,255,.14);
+}
+.conf-ok { color: #4ade80; font-weight: 600; }
+.conf-divergente { color: #f87171; font-weight: 700; }
+.dir-conf-box {
+    margin-top: 10px; padding: 10px 14px; border-radius: 10px; font-size: .9rem;
+    background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.25);
+}
+.dir-conf-box.dir-conf-alerta { background: rgba(220,38,38,.10); border-color: rgba(220,38,38,.35); }
+
+/* Carimbo de origem do lançamento */
+.status-origem-inline { font-size: .8rem; opacity: .85; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.06); }
