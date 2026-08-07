@@ -7,6 +7,12 @@ let clientesGlobais = [];
 let motoristasGlobais = [];
 let veiculosGlobais = [];
 let rotasGlobais = [];
+let agendamentosManutencaoGlobais = [];
+let paradasEmergenciaGlobais = [];
+let episPendentesGlobais = [];
+let paramReservaTimerMin = 120;
+let equipesEntregaGlobais = [];
+let entregasLastMileGlobais = [];
 let estadosBrasil = [];
 let cidadesPorEstado = {};
 let notificacoesEnviadas = new Set();
@@ -101,6 +107,10 @@ function trocarAba(event) {
 
     if (tabAlvo === 'painel') carregarPainel();
     if (tabAlvo === 'logistica') carregarLogistica();
+    if (tabAlvo === 'manutencao' && typeof carregarManutencao === 'function') carregarManutencao();
+    if (tabAlvo === 'faturamento' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
+    if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); }
+    if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); }
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
     if (tabAlvo === 'meusPedidos') {
         renderizarPedidosComercial();
@@ -202,6 +212,52 @@ async function carregarDadosDoSupabase() {
         // Folgas e lembretes (tabela opcional)
         if (typeof carregarFolgas === 'function') await carregarFolgas();
 
+        // Agendamentos de manutenção (tabela opcional — Lote 4)
+        try {
+            const { data: ags } = await supabase.from('agendamentos_manutencao')
+                .select('*').order('data_hora', { ascending: true });
+            agendamentosManutencaoGlobais = ags || [];
+        } catch (e) { agendamentosManutencaoGlobais = []; }
+
+        // Paradas de emergência (tabela opcional — Lote 5)
+        try {
+            const { data: emg } = await supabase.from('paradas_emergencia')
+                .select('*').order('created_at', { ascending: false });
+            paradasEmergenciaGlobais = emg || [];
+        } catch (e) { paradasEmergenciaGlobais = []; }
+
+        // EPIs pendentes (para o indicador de conformidade — item 14)
+        try {
+            const { data: eps } = await supabase.from('solicitacoes_epi')
+                .select('motorista_id,motorista_nome,status').eq('status','pendente');
+            episPendentesGlobais = eps || [];
+        } catch (e) { episPendentesGlobais = []; }
+
+        // Parâmetro global do timer de reserva (item 1)
+        try {
+            const { data: par } = await supabase.from('parametros_sistema')
+                .select('valor').eq('chave','reserva_timer_minutos').single();
+            if (par && par.valor) paramReservaTimerMin = parseInt(par.valor,10) || 120;
+        } catch (e) {}
+
+        // Corredores + paradas (item 12 — usados na sugestão de rotas e no ETA)
+        try {
+            const { data: cors } = await supabase.from('corredores').select('*').order('nome');
+            corredoresGlobais = cors || [];
+            const { data: paradas } = await supabase.from('corredor_paradas').select('*').order('ordem');
+            const porCor = {};
+            (paradas||[]).forEach(p => { (porCor[p.corredor_id] = porCor[p.corredor_id] || []).push(p); });
+            corredoresGlobais.forEach(c => { c._paradas = porCor[c.id] || []; });
+        } catch (e) { corredoresGlobais = []; }
+
+        // Last mile — equipes e registros (itens 3-4)
+        try {
+            const { data: eq } = await supabase.from('equipes_entrega').select('*').order('nome');
+            equipesEntregaGlobais = eq || [];
+            const { data: en } = await supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false });
+            entregasLastMileGlobais = en || [];
+        } catch (e) { equipesEntregaGlobais = []; entregasLastMileGlobais = []; }
+
         if (resClientes.data)   clientesGlobais   = resClientes.data;
         if (resMotoristas.data) motoristasGlobais = resMotoristas.data;
         if (resVeiculos.data)   veiculosGlobais   = resVeiculos.data;
@@ -240,6 +296,16 @@ async function carregarDadosDoSupabase() {
                 patioDesde: p.patio_desde || null,
                 grupoId: p.grupo_id || null,
                 rotaId: p.rota_id || null,
+                tipoEntrega: p.tipo_entrega || 'patio',
+                fluxoEntrega: p.fluxo_entrega || null,
+                equipeEntregaId: p.equipe_entrega_id || null,
+                origemLancamento: p.origem_lancamento || null,
+                criadoPorNome: p.criado_por_nome || null,
+                isReserva: p.is_reserva === true,
+                reservaStatus: p.reserva_status || null,
+                reservaExpiraEm: p.reserva_expira_em || null,
+                statusReprogramacao: p.status_reprogramacao || null,
+                etaReprogramado: p.eta_reprogramado || null,
                 confLogisticaEm: p.confirmacao_logistica_em || null,
                 confLogisticaPor: p.confirmacao_logistica_por || null,
                 confComercialEm: p.confirmacao_comercial_em || null,
@@ -463,6 +529,11 @@ function gerarGrupoId() {
 async function salvarPedidoComercial(event) {
     event.preventDefault();
 
+    // Item 1 — modo Reserva (fluxo leve, sem veículos, com timer)
+    if (document.getElementById('pedidoReserva')?.checked) {
+        return salvarReservaComercial();
+    }
+
     const pedido = {
         cliente: document.getElementById('cliente').value,
         dataSolicitacao: document.getElementById('dataSolicitacao').value,
@@ -523,6 +594,9 @@ async function salvarPedidoComercial(event) {
                 responsavel_comercial: pedido.responsavelComercial,
                 referencia: pedido.referencia,
                 observacao_pedido: pedido.observacao,
+                tipo_entrega: document.getElementById('tipoEntregaPedido')?.value || 'patio',
+                origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
+                criado_por_nome: (document.getElementById('usuarioLogado')?.textContent || null),
                 status: 'Pendente'
             };
 
@@ -558,7 +632,7 @@ async function salvarPedidoComercial(event) {
             // Avisa a logística que chegou pedido novo
             notificar({
                 perfil: 'logistica', tipo: 'acao',
-                titulo: qtd > 1 ? `Nova carga fechada: ${qtd} carros` : 'Novo pedido para alocar',
+                titulo: qtd > 1 ? `Nova ${nomenclaturaCarga(qtd)}: ${qtd} carros` : 'Novo pedido para alocar',
                 mensagem: `${pedido.cliente} · ${pedido.cidadeOrigem}/${pedido.ufOrigem} → ${pedido.cidadeDestino}/${pedido.ufDestino}`
             });
             document.getElementById('formComercial').reset();
@@ -787,6 +861,10 @@ async function carregarLogistica() {
     renderizarPedidosDrag();
     renderizarVeiculosDrop();
     verificarNotificacoesColeta();
+    if (typeof renderizarParadasEmergencia === 'function') renderizarParadasEmergencia();
+    if (typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
+    if (typeof renderizarLastMile === 'function') renderizarLastMile();
+    if (typeof renderizarConferenciaFaturamento === 'function') renderizarConferenciaFaturamento();
 }
 
 // ============================================
@@ -861,7 +939,68 @@ function mostrarAvisoFolgaMotorista(nomeMotorista, pedido) {
     if (alvo && alvo.parentNode) alvo.parentNode.insertBefore(aviso, alvo);
 }
 
+// Item 11 — folga próxima (dentro de N dias da data de referência)?
+function folgaProximaMotorista(nomeMotorista, dataRefISO, dias) {
+    if (!nomeMotorista) return null;
+    const janela = dias || 15;
+    const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                       .toUpperCase().replace(/\s+/g, ' ').trim();
+    const alvo = norm(nomeMotorista);
+    const ref = new Date((dataRefISO || new Date().toISOString().slice(0,10)) + 'T12:00').getTime();
+    let maisProxima = null;
+    (folgasGlobais || []).forEach(f => {
+        if (!f.motorista_id || norm(f.motorista_nome) !== alvo) return;
+        if ((f.tipo || 'folga') === 'lembrete') return;
+        const ini = new Date(String(f.data_inicio).slice(0,10) + 'T12:00').getTime();
+        const difDias = (ini - ref) / 86400000;
+        if (difDias >= 0 && difDias <= janela) {
+            if (!maisProxima || ini < maisProxima._ini) { maisProxima = { ...f, _ini: ini, _dias: Math.round(difDias) }; }
+        }
+    });
+    return maisProxima;
+}
+
+// Aviso preventivo de folga próxima na alocação (evitar viagens longas)
+function mostrarAvisoFolgaProxima(nomeMotorista, pedido) {
+    const antigo = document.getElementById('avisoFolgaProxima');
+    if (antigo) antigo.remove();
+    if (!nomeMotorista) return;
+    const dataRef = (pedido?.dataPrevColeta || new Date().toISOString()).slice(0, 10);
+    // se já está de folga na data, o outro aviso cobre
+    if (motoristaIndisponivel(nomeMotorista, dataRef)) return;
+    const prox = folgaProximaMotorista(nomeMotorista, dataRef, 15);
+    if (!prox) return;
+    const dataFmt = new Date(prox._ini).toLocaleDateString('pt-BR');
+    const aviso = document.createElement('div');
+    aviso.id = 'avisoFolgaProxima';
+    aviso.className = 'aviso-folga-alocacao aviso-folga-proxima';
+    aviso.innerHTML = `
+        <strong>🗓️ ${nomeMotorista} tem folga em ${prox._dias} dia(s) (${dataFmt})</strong>
+        <span>Folga a 15 dias ou menos — evite escalar em viagem longa que avance sobre a data.</span>`;
+    const alvo = document.getElementById('alocMotoristaResumo') ||
+                 document.getElementById('alocMotoristaCampos');
+    if (alvo && alvo.parentNode) alvo.parentNode.insertBefore(aviso, alvo);
+}
+
+// ============================================
+// ITEM 2 — GOVERNANÇA: alocação/transbordo só Logística
+// Trava explícita (defesa em profundidade, além da aba já ser restrita).
+// ============================================
+const PERFIS_LOGISTICA = ['logistica', 'admin'];
+function podeAlocarOuTransbordar() {
+    const p = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+    return PERFIS_LOGISTICA.includes(p);
+}
+function bloquearSeNaoLogistica(acao) {
+    if (podeAlocarOuTransbordar()) return false;
+    alert(`Apenas o Setor de Logística pode executar ${acao || 'esta ação'}.`);
+    return true;
+}
+
 async function abrirModalAlocacaoCarga(itens, veiculo) {
+    if (bloquearSeNaoLogistica('a alocação de veículos')) return;
+    const _bloq = (typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(veiculo) : null;
+    if (_bloq && _bloq.bloqueado) { alert(`Veículo ${veiculo.placa} indisponível: ${_bloq.motivo}.`); return; }
     const emUso = pedidosGlobais.filter(p =>
         p.placaCegonha === veiculo.placa && !['Entregue','Cancelado'].includes(p.status)
     ).length;
@@ -939,7 +1078,7 @@ function montarBlocoCargaFechada(grupoId, itens) {
         <div class="cf-topo" onclick="alternarCargaFechada('${grupoId}')">
             <span class="cf-chevron">${aberto ? '▾' : '▸'}</span>
             <div class="cf-info">
-                <span class="cf-titulo">📦 Carga fechada · ${itens.length} carros</span>
+                <span class="cf-titulo">📦 ${nomenclaturaCarga(itens.length)} · ${itens.length} carros</span>
                 <span class="cf-cliente">${p0.cliente || '—'}</span>
                 <span class="cf-rota">${rota}</span>
             </div>
@@ -1152,7 +1291,8 @@ function renderizarVeiculosDrop() {
         );
         const vagas = (v.capacidade || 4) - pedidosNoVeiculo.length;
         const motoristaPadrao = v.motorista_padrao || '';
-        const manut = typeof manutencaoAtivaDoVeiculo === 'function' ? manutencaoAtivaDoVeiculo(v.placa) : null;
+        const bloqueio = (typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(v) : { bloqueado:false, selo:null, motivo:'' };
+        const manut = bloqueio.bloqueado ? bloqueio : null;
 
         const card = document.createElement('div');
         card.className = 'veiculo-drop-card' + (manut ? ' veiculo-drop-manutencao' : '');
@@ -1162,11 +1302,12 @@ function renderizarVeiculosDrop() {
         const vagasClass = vagas <= 0 ? 'vagas-cheio' : vagas <= 1 ? 'vagas-quase' : 'vagas-livre';
 
         card.innerHTML = `
-            ${manut ? `<div class="veiculo-drop-manut-selo">🔧 Em manutenção${manut.descricao ? ' — ' + manut.descricao : ''}${manut.data_fim ? ' · até ' + new Date(manut.data_fim + 'T12:00').toLocaleDateString('pt-BR') : ''}</div>` : ''}
+            ${bloqueio.selo ? `<div class="veiculo-drop-manut-selo">${bloqueio.selo}</div>` : ''}
             <div class="veiculo-drop-header">
                 <div class="veiculo-drop-title">
                     <span class="veiculo-placa">${v.placa}</span>
                     <span class="veiculo-tipo">${v.tipo || 'Cegonha'}</span>
+                    ${(typeof tagIntegridadeHTML === 'function' && v.propriedade !== 'terceiro') ? tagIntegridadeHTML(v) : ''}
                     ${v.propriedade === 'terceiro' ? `<span class="badge-terceiro" title="Terceiro${v.transportador_nome ? ' — ' + v.transportador_nome : ''}">🤝</span>` : ''}
                     ${(() => {
                         const rp = (rotasGlobais || []).find(r => r.placa_cegonha === v.placa && ['planejada','em_andamento'].includes(r.status));
@@ -1189,7 +1330,7 @@ function renderizarVeiculosDrop() {
                 `).join('') || '<span class="text-muted text-sm">Nenhum pedido alocado</span>'}
             </div>
             <div class="drop-zone ${manut ? 'drop-zone-manutencao' : (vagas <= 0 ? 'drop-zone-cheio' : '')}" data-placa="${v.placa}">
-                ${manut ? '🔧 Bloqueado — em manutenção' : (vagas <= 0 ? '🔒 Veículo lotado' : '⬇ Arraste um pedido aqui')}
+                ${manut ? ('🔧 ' + (bloqueio.motivo || 'Bloqueado para manutenção')) : (vagas <= 0 ? '🔒 Veículo lotado' : '⬇ Arraste um pedido aqui')}
             </div>
         `;
 
@@ -1561,6 +1702,9 @@ async function carregarTrechosDoPedido(pedido, veiculo) {
 }
 
 function abrirModalAlocacao(pedido, veiculo) {
+    if (bloquearSeNaoLogistica('a alocação de veículos')) return;
+    const _bloq = (typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(veiculo) : null;
+    if (_bloq && _bloq.bloqueado) { alert(`Veículo ${veiculo.placa} indisponível: ${_bloq.motivo}.`); return; }
     const modal = document.getElementById('modalAlocacao');
     if (!modal) return;
     alocModoEdicao = false; // alocação inicial (não é edição)
@@ -1607,6 +1751,7 @@ function abrirModalAlocacao(pedido, veiculo) {
 
     // Aviso se o motorista da cegonha estiver de folga na data da coleta
     mostrarAvisoFolgaMotorista(veiculo.motorista_padrao, pedido);
+    if (typeof mostrarAvisoFolgaProxima === 'function') mostrarAvisoFolgaProxima(veiculo.motorista_padrao, pedido);
     initAlocTrechos(pedido, veiculo);
 
     if (veiculo.motorista_padrao) {
@@ -1640,6 +1785,7 @@ function alternarCamposMotorista(mostrarCampos, semPadrao) {
 
 async function confirmarAlocacao(event) {
     event.preventDefault();
+    if (bloquearSeNaoLogistica('a alocação de veículos')) return;
 
     const pedidoId = document.getElementById('alocPedidoId').value;
     const veiculoPlaca = document.getElementById('alocVeiculoId').value;
@@ -2468,6 +2614,7 @@ async function salvarCadastroCliente(event) {
                 nome, cnpj, cpf, telefone, email,
                 inscricao_estadual: inscricaoEstadual,
                 tipo_cliente: tipo,
+                tipo_entrega_padrao: document.getElementById('tipoEntregaPadrao')?.value || 'patio',
                 cep, endereco, numero, complemento, bairro, cidade, uf,
                 codigo
             });
@@ -2776,6 +2923,10 @@ function abrirEdicaoVeiculo(veiculoId) {
                 <div class="form-group">
                     <label>Capacidade (vagas)</label>
                     <input type="number" id="edVeiCapacidade" value="${v.capacidade||''}" min="1" max="20">
+                    <label class="capacidade-excecao-lbl">
+                        <input type="checkbox" id="edVeiCapacidadeExcecao" ${v.capacidade_excecao ? 'checked' : ''}>
+                        Exceção de capacidade (acima de 11)
+                    </label>
                 </div>
                 <div class="form-group">
                     <label>Motorista padrão</label>
@@ -2852,10 +3003,18 @@ async function salvarEdicaoVeiculo(veiculoId) {
 
     const anterior = (veiculosGlobais || []).find(x => String(x.id) === String(veiculoId));
     const propriedade = document.getElementById('edVeiPropriedade').value;
+    const _capEdit = parseInt(document.getElementById('edVeiCapacidade').value) || null;
+    const _capExcEdit = document.getElementById('edVeiCapacidadeExcecao')?.checked || false;
+    if (_capEdit && !_capExcEdit && _capEdit > 11) {
+        msgEl.textContent = 'Capacidade acima do teto padrão (11). Marque "Exceção de capacidade" para permitir.';
+        msgEl.className = 'message show error';
+        return;
+    }
     const dados = {
         placa,
         tipo: document.getElementById('edVeiTipo').value,
-        capacidade: parseInt(document.getElementById('edVeiCapacidade').value) || null,
+        capacidade: _capEdit,
+        capacidade_excecao: _capExcEdit,
         motorista_padrao: document.getElementById('edVeiMotorista').value || null,
         marca: document.getElementById('edVeiMarca').value.trim() || null,
         modelo: document.getElementById('edVeiModelo').value.trim() || null,
@@ -3263,9 +3422,14 @@ async function salvarCadastroVeiculo(event) {
     const placa = document.getElementById('placaCegonha').value;
     const tipo = document.getElementById('tipoCegonha').value;
     const capacidade = parseInt(document.getElementById('capacidadeCegonha').value, 10);
+    const capacidadeExcecao = document.getElementById('capacidadeExcecao')?.checked || false;
 
     if (!placa || !tipo || !capacidade) {
         exibirMensagem('mensagemCadastroVeiculo', 'Preencha os campos obrigatórios!', 'error');
+        return;
+    }
+    if (!capacidadeExcecao && capacidade > 11) {
+        exibirMensagem('mensagemCadastroVeiculo', 'Capacidade acima do teto padrão (11). Marque "Exceção de capacidade" para permitir.', 'error');
         return;
     }
 
@@ -3290,6 +3454,7 @@ async function salvarCadastroVeiculo(event) {
         try {
             const { error } = await supabase.from('veiculos').insert({
                 placa, tipo, capacidade, renavam, chassi, marca, modelo, ano,
+                capacidade_excecao: capacidadeExcecao,
                 propriedade, transportador_nome: transportadorNome, transportador_contato: transportadorContato
             });
             if (error) throw error;
@@ -3429,13 +3594,20 @@ function abrirModalStatus(pedidoId) {
     document.getElementById('statusAtual').value = statusAtual;
 
     // Resumo do pedido
+    const _podeReverter = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar())
+        && pedido.placaCegonha
+        && ['Intenção Agendada','Aguardando Confirmação'].includes(statusAtual);
     document.getElementById('modalStatusResumo').innerHTML = `
         <div class="status-resumo-info">
             <span><strong>#${pedido.id}</strong> — ${pedido.cliente || '—'}</span>
+            ${pedido.origemLancamento ? `<span class="status-origem-inline" title="Quem lançou o pedido">📝 ${(typeof NOMES_PERFIL!=='undefined' && NOMES_PERFIL[pedido.origemLancamento]) || pedido.origemLancamento}${pedido.criadoPorNome ? ' · '+pedido.criadoPorNome : ''}</span>` : ''}
             <span>${pedido.cidadeOrigem || ''}/${pedido.ufOrigem || ''} → ${pedido.cidadeDestino || ''}/${pedido.ufDestino || ''}</span>
             <span class="status-badge-inline" style="background:${config.cor}20;color:${config.cor};border:1px solid ${config.cor}40">
                 ${statusAtual}
             </span>
+            ${pedido.placaCegonha ? `<span class="status-cegonha-inline">🚛 ${pedido.placaCegonha}</span>` : ''}
+            ${pedido.etaReprogramado ? `<span class="tag-eta tag-${pedido.statusReprogramacao==='atrasado'?'vermelho':'amarelo'}" title="ETA reprogramado no transbordo">${pedido.statusReprogramacao==='atrasado'?'🔴':'🟡'} ETA ${new Date(pedido.etaReprogramado).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>` : ''}
+            ${_podeReverter ? `<button type="button" class="btn btn-sm btn-reverter" onclick="desalocarPedido(${pedido.id})" title="Remove a cegonha e devolve o pedido para a fila">↩️ Desalocar</button>` : ''}
         </div>
     `;
 
@@ -3496,6 +3668,8 @@ function selecionarProximoStatus(novoStatus) {
     grupoTipoTransb.style.display = 'none';
     grupoCegonhaDest.style.display = 'none';
     grupoChecklist.style.display = 'none';
+    const _grupoReprog = document.getElementById('grupoReprogTransbordo');
+    if (_grupoReprog) _grupoReprog.style.display = 'none';
     const chkVerif = document.getElementById('checklistVerificado');
     if (chkVerif) chkVerif.checked = false;
 
@@ -3504,6 +3678,7 @@ function selecionarProximoStatus(novoStatus) {
         grupoObs.style.display = 'block';
         grupoTipoTransb.style.display = 'block';
         grupoChecklist.style.display = 'block';
+        if (_grupoReprog) _grupoReprog.style.display = 'block';
         document.getElementById('grupoObservacao').querySelector('label').textContent = 'Motivo do Transbordo';
         ajustarCamposTransbordo(); // decide pátio vs cegonha destino
     } else if (novoStatus === 'Entregue') {
@@ -3757,9 +3932,18 @@ async function confirmarMudancaStatus() {
     const tipoTransbordo = document.querySelector('input[name="tipoTransbordo"]:checked')?.value || 'patio';
     const cegonhaDestino = document.getElementById('cegonhaDestinoTransbordo')?.value || '';
     const checklistVerificado = document.getElementById('checklistVerificado')?.checked || false;
+    const motivoTransbordo = document.getElementById('motivoTransbordo')?.value || 'planejado';
+    const novoEtaTransbordoRaw = document.getElementById('novoEtaTransbordo')?.value || null;
 
     if (!statusNovo) {
         msgEl.textContent = 'Selecione o próximo status.';
+        msgEl.className = 'message show error';
+        return;
+    }
+
+    // ITEM 2 — Definição de Transbordo é exclusiva da Logística
+    if (statusNovo === 'Transbordo' && !podeAlocarOuTransbordar()) {
+        msgEl.textContent = 'Apenas o Setor de Logística pode definir transbordo.';
         msgEl.className = 'message show error';
         return;
     }
@@ -3861,6 +4045,29 @@ async function confirmarMudancaStatus() {
             .update(atualizacao)
             .eq('id', pedidoId);
         if (errPedido) throw errPedido;
+
+        // ITEM 17.3 — Reprogramação de ETA no transbordo.
+        // Por padrão o ETA original é PRESERVADO (nada muda). Só recalcula se a
+        // Logística digitou um novo ETA final. Aplica ao grupo (carga fechada) se houver.
+        if (statusNovo === 'Transbordo' && novoEtaTransbordoRaw) {
+            try {
+                const novoEtaISO = new Date(novoEtaTransbordoRaw).toISOString();
+                const atrasado = new Date(novoEtaISO).getTime() < Date.now();
+                const patchReprog = {
+                    eta_reprogramado: novoEtaISO,
+                    status_reprogramacao: atrasado ? 'atrasado' : 'reprogramado'
+                };
+                const idsReprog = (_statusGrupoIds && _statusGrupoIds.length > 1)
+                    ? _statusGrupoIds.map(x => parseInt(x)) : [parseInt(pedidoId)];
+                await supabase.from('pedidos').update(patchReprog).in('id', idsReprog);
+                // Avisa o Comercial
+                if (typeof notificar === 'function') notificar({
+                    perfil: 'comercial', tipo: 'alerta',
+                    titulo: atrasado ? '🔴 Entrega atrasada (transbordo)' : '🟡 Entrega reprogramada (transbordo)',
+                    mensagem: `Pedido #${pedidoId}: novo ETA ${new Date(novoEtaISO).toLocaleString('pt-BR')}`
+                });
+            } catch(e){ console.warn('Reprogramação de ETA não aplicada:', e.message); }
+        }
 
         // 2. Registrar no histórico
         let descTransbordo = '';
@@ -4052,6 +4259,13 @@ function selecionarCliente(id, nome, doc, tipo, codigo) {
     document.getElementById('clienteBusca').value = nome;
     document.getElementById('cliente').value = nome;
     document.getElementById('clienteId').value = id;
+
+    // Item 1 — tipo de entrega padrão do cliente (editável por exceção)
+    try {
+        const cli = (clientesGlobais||[]).find(c => String(c.id) === String(id));
+        const selTE = document.getElementById('tipoEntregaPedido');
+        if (cli && selTE && cli.tipo_entrega_padrao) selTE.value = cli.tipo_entrega_padrao;
+    } catch(e){}
 
     const info = document.getElementById('clienteSelecionadoInfo');
     if (info) {
@@ -6443,7 +6657,7 @@ function renderizarRotasComercial() {
                 <div class="rota-com-nome">${r.nome || 'Rota #' + r.id}</div>
                 ${seloVaga}
             </div>
-            <div class="rota-com-meta">🚛 <strong>${r.placa_cegonha || 'a definir'}</strong>${dataSaida ? ' · 📅 ' + dataSaida : ''}</div>
+            <div class="rota-com-meta">🚛 <strong>${r.placa_cegonha || 'a definir'}</strong>${dataSaida ? ' · 📅 ' + dataSaida : ''}${typeof etaRotaHTML === 'function' ? etaRotaHTML(r) : ''}</div>
             <div class="rota-com-cidades">${rotaTxt}</div>
             <div class="rota-com-ocup"><div class="rota-com-barra"><div class="rota-com-barra-inner" style="width:${Math.min(pct, 100)}%;background:${corPct}"></div></div><span>${vinculados}/${capacidade}</span></div>
         </div>`;
@@ -6771,7 +6985,8 @@ function renderizarDiretoria() {
         return { placa: v.placa, tipo: v.tipo, carros, capacidade: v.capacidade || 11,
                  terceiro: v.propriedade === 'terceiro' };
     });
-    const comCarga = ocupacoes.filter(o => o.carros > 0);
+    // Item 10 — ocupação considera SÓ frota própria (isola terceiros/agregados)
+    const comCarga = ocupacoes.filter(o => o.carros > 0 && !o.terceiro);
     const ocupMedia = comCarga.length > 0
         ? Math.round(comCarga.reduce((a, o) => a + (o.carros / o.capacidade) * 100, 0) / comCarga.length)
         : 0;
@@ -6782,6 +6997,7 @@ function renderizarDiretoria() {
             : `<span class="dir-var dir-var-baixa">▼ ${Math.abs(variacao).toFixed(0)}%</span>`;
 
     const elKpis = document.getElementById('dirIndicadores');
+    const _conf = (typeof _conformidadeSeguranca === 'function') ? _conformidadeSeguranca() : null;
     if (elKpis) elKpis.innerHTML = `
         <div class="dir-kpi">
             <span class="dir-kpi-rot">Cargas em rota agora</span>
@@ -6801,8 +7017,19 @@ function renderizarDiretoria() {
         <div class="dir-kpi">
             <span class="dir-kpi-rot">Ocupação média da frota</span>
             <span class="dir-kpi-num" style="color:${ocupMedia >= 80 ? '#4ade80' : ocupMedia >= 50 ? '#fbbf24' : '#ef4444'}">${ocupMedia}%</span>
-            <span class="dir-kpi-obs">nas cegonhas que estão rodando</span>
-        </div>`;
+            <span class="dir-kpi-obs">frota própria em operação</span>
+        </div>
+        ${_conf ? `
+        <div class="dir-kpi">
+            <span class="dir-kpi-rot">Conformidade — Veículos</span>
+            <span class="dir-kpi-num" style="color:${_conf.corVeic}">${_conf.veiculosPct}</span>
+            <span class="dir-kpi-obs">checklist em dia · frota própria (${_conf.totalVeic})</span>
+        </div>
+        <div class="dir-kpi">
+            <span class="dir-kpi-rot">Conformidade — EPIs</span>
+            <span class="dir-kpi-num" style="color:${_conf.corEpi}">${_conf.episPct}</span>
+            <span class="dir-kpi-obs">motoristas sem pendência (${_conf.totalMot})</span>
+        </div>` : ''}`;
 
     const elPeriodo = document.getElementById('dirPeriodo');
     if (elPeriodo) elPeriodo.textContent =
@@ -6822,14 +7049,15 @@ function renderizarDiretoria() {
     const alertas = [
         { n: prazoVencido, txt: 'pedido(s) com prazo de entrega vencido', ico: '⏰' },
         { n: patioParado,  txt: 'carro(s) parado(s) em pátio há mais de 48h', ico: '🅿️' },
-        { n: semCegonha,   txt: 'pedido(s) confirmado(s) sem cegonha definida', ico: '🚛' }
+        { n: semCegonha,   txt: 'pedido(s) confirmado(s) sem cegonha definida', ico: '🚛' },
+        { n: (_conf ? _conf.criticos : 0), txt: 'veículo(s) da frota própria com pendência CRÍTICA de segurança', ico: '🔴', critico: true }
     ].filter(a => a.n > 0);
 
     const elAlertas = document.getElementById('dirAlertas');
     if (elAlertas) elAlertas.innerHTML = alertas.length === 0
         ? '<div class="dir-tudo-ok">✅ Nenhum ponto de atenção no momento.</div>'
         : `<div class="dir-alertas">${alertas.map(a =>
-            `<div class="dir-alerta"><span class="dir-alerta-num">${a.ico} ${a.n}</span><span>${a.txt}</span></div>`
+            `<div class="dir-alerta${a.critico ? ' dir-alerta-critico' : ''}"><span class="dir-alerta-num">${a.ico} ${a.n}</span><span>${a.txt}</span></div>`
           ).join('')}</div>`;
 
     // ---------- Faturamento 6 meses ----------
@@ -6862,21 +7090,25 @@ function renderizarDiretoria() {
 
     // ---------- Ocupação da frota ----------
     const elFrota = document.getElementById('dirFrota');
-    const frotaOrd = ocupacoes.sort((a, b) => (b.carros / b.capacidade) - (a.carros / a.capacidade));
-    if (elFrota) elFrota.innerHTML = frotaOrd.length === 0
-        ? '<p class="text-muted text-sm">Nenhum veículo cadastrado.</p>'
+    const propriasOcup = ocupacoes.filter(o => !o.terceiro);
+    const qtdTerceiros = ocupacoes.length - propriasOcup.length;
+    const frotaOrd = propriasOcup.sort((a, b) => (b.carros / b.capacidade) - (a.carros / a.capacidade));
+    if (elFrota) elFrota.innerHTML = (frotaOrd.length === 0
+        ? '<p class="text-muted text-sm">Nenhum veículo próprio cadastrado.</p>'
         : frotaOrd.map(o => {
             const pct = Math.round((o.carros / o.capacidade) * 100);
             const cor = pct >= 80 ? '#4ade80' : pct >= 40 ? '#fbbf24' : pct > 0 ? '#fb923c' : '#4b5563';
             return `
             <div class="dir-barra-linha">
-                <span class="dir-barra-rot">${o.placa}${o.terceiro ? ' <span class="badge-terceiro">🤝</span>' : ''}</span>
+                <span class="dir-barra-rot">${o.placa}</span>
                 <div class="dir-barra-trilho">
                     <div class="dir-barra" style="width:${Math.max(2, pct)}%;background:${cor}"></div>
                 </div>
                 <span class="dir-barra-val">${o.carros}/${o.capacidade}<small>${pct}%</small></span>
             </div>`;
-        }).join('');
+        }).join(''))
+        + (qtdTerceiros > 0 ? `<p class="text-muted text-sm" style="margin-top:8px">🤝 ${qtdTerceiros} veículo(s) de terceiros/agregados não entram nos indicadores de ocupação.</p>` : '');
+    if (typeof renderizarConferenciaDiretoria === 'function') renderizarConferenciaDiretoria();
 
     // ---------- Rankings ----------
     const ranking = (chaveFn, elId, vazio) => {
@@ -6996,6 +7228,9 @@ function renderizarFolgas() {
     const ativos   = folgasGlobais.filter(f => folgaCobreData(f, hoje));
     const proximos = folgasGlobais.filter(f => String(f.data_inicio).slice(0,10) > hoje
                                             && String(f.data_inicio).slice(0,10) <= emDias(30));
+    const proximos15 = folgasGlobais.filter(f => (f.tipo||'folga') !== 'lembrete'
+                                            && String(f.data_inicio).slice(0,10) > hoje
+                                            && String(f.data_inicio).slice(0,10) <= emDias(15));
     const passados = folgasGlobais.filter(f =>
         String(f.data_fim || f.data_inicio).slice(0,10) < hoje).slice(-10).reverse();
 
@@ -7023,6 +7258,9 @@ function renderizarFolgas() {
         <div class="patios-resumo">
             <div class="patios-resumo-item ${ativos.length > 0 ? 'patios-resumo-alerta' : ''}">
                 <strong>${ativos.length}</strong><span>indisponível(is) hoje</span>
+            </div>
+            <div class="patios-resumo-item ${proximos15.length > 0 ? 'patios-resumo-alerta' : ''}">
+                <strong>${proximos15.length}</strong><span>⚠️ folga(s) em ≤ 15 dias</span>
             </div>
             <div class="patios-resumo-item">
                 <strong>${proximos.length}</strong><span>agendado(s) nos próximos 30 dias</span>
@@ -7325,6 +7563,9 @@ function renderizarRotas() {
                 🚛 ${r.placa_cegonha || '<span class="tag-adefinir">A DEFINIR</span>'}
                 ${r.data_saida ? ` · 📅 ${new Date(r.data_saida + 'T12:00').toLocaleDateString('pt-BR')}` : ''}
                 ${vagas > 0 ? ` · <strong style="color:${corPct}">faltam ${vagas} carro(s)</strong>` : ' · <strong style="color:#4ade80">carreta cheia ✔</strong>'}
+                ${typeof etaRotaHTML === 'function' ? etaRotaHTML(r) : ''}
+                ${typeof fechamentoRotaHTML === 'function' ? fechamentoRotaHTML(r) : ''}
+                ${r.valor_previsto ? ` · <span class="rota-valor">💰 ${Number(r.valor_previsto).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span>` : ''}
             </div>
 
             <div class="cegonha-rota-linha" style="margin:0.5rem 0">${paradasHTML}</div>
@@ -7416,6 +7657,27 @@ function _abrirModalRota(rota) {
                 </div>
             </div>
 
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Corredor (define o SLA para o ETA)</label>
+                    <select id="rotaCorredor">
+                        <option value="">Sem corredor</option>
+                        ${(corredoresGlobais||[]).map(c => `<option value="${c.id}" data-sla="${c.sla_horas}" ${String(rota?.corredor_id)===String(c.id)?'selected':''}>${c.nome} (SLA ${c.sla_horas}h)</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Horário previsto de saída</label>
+                    <input type="time" id="rotaHoraPrev" value="${rota?.hora_saida_prevista || ''}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Data/hora REAL de saída (para calcular o ETA)</label>
+                    <input type="datetime-local" id="rotaSaidaReal" value="${rota?.data_hora_saida_real ? String(rota.data_hora_saida_real).slice(0,16) : ''}">
+                </div>
+            </div>
+
             <div class="form-group">
                 <label>Tipo de cegonha *</label>
                 <div class="rota-tipo-selector">
@@ -7440,6 +7702,17 @@ function _abrirModalRota(rota) {
                     <button type="button" class="btn btn-secondary btn-sm" onclick="adicionarParadaRota()">+ Adicionar</button>
                 </div>
                 <div id="listaParadasRota" class="lista-paradas"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>💰 Valor de tabela (R$)</label>
+                    <input type="number" step="0.01" id="rotaValorTabela" placeholder="0,00" value="${rota?.valor_tabela ?? ''}">
+                </div>
+                <div class="form-group">
+                    <label>Excedente (R$)</label>
+                    <input type="number" step="0.01" id="rotaValorExcedente" placeholder="0,00" value="${rota?.valor_excedente ?? ''}">
+                </div>
             </div>
 
             <div class="form-group">
@@ -7543,10 +7816,30 @@ async function salvarNovaRota() {
         return;
     }
     const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+
+    // Item 16 — ETA = saída real + SLA do corredor
+    const corredorId = document.getElementById('rotaCorredor')?.value || null;
+    const horaPrev = document.getElementById('rotaHoraPrev')?.value || null;
+    const saidaRealRaw = document.getElementById('rotaSaidaReal')?.value || null;
+    let etaCalc = null;
+    if (saidaRealRaw && corredorId){
+        const cor = (corredoresGlobais||[]).find(c => String(c.id) === String(corredorId));
+        if (cor && cor.sla_horas){
+            etaCalc = new Date(new Date(saidaRealRaw).getTime() + cor.sla_horas*3600000).toISOString();
+        }
+    }
+
     const dados = {
         nome: document.getElementById('rotaNome').value.trim() || null,
         placa_cegonha: document.getElementById('rotaCegonha').value || null,
         data_saida: document.getElementById('rotaData').value || null,
+        corredor_id: corredorId ? parseInt(corredorId) : null,
+        hora_saida_prevista: horaPrev,
+        data_hora_saida_real: saidaRealRaw ? new Date(saidaRealRaw).toISOString() : null,
+        eta: etaCalc,
+        valor_tabela: parseFloat(document.getElementById('rotaValorTabela')?.value) || null,
+        valor_excedente: parseFloat(document.getElementById('rotaValorExcedente')?.value) || null,
+        valor_previsto: ((parseFloat(document.getElementById('rotaValorTabela')?.value) || 0) + (parseFloat(document.getElementById('rotaValorExcedente')?.value) || 0)) || null,
         paradas: _paradasNovaRota,
         observacao: document.getElementById('rotaObs').value.trim() || null
     };
@@ -8939,4 +9232,1442 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
     const janela = window.open('', '_blank');
     janela.document.write(html);
     janela.document.close();
+}
+// ============================================================
+// LOTE 2 — MANUTENÇÃO: CHECKLIST DE SEGURANÇA + TAG DE INTEGRIDADE
+// (itens 13.2 e 13.7)
+// ============================================================
+const CHECKLIST_BLOCOS = [
+  { grupo: 'Mecânica e Rodagem',      itens: ['Pneus','Freios','Sistema de Direção','Iluminação/Sinalização'] },
+  { grupo: 'Segurança e Cegonha',     itens: ['Cintas de Amarração','Catracas','Decks/Rampas Hidráulicas','Pinos de Trava'] },
+  { grupo: 'Acessórios Obrigatórios', itens: ['Tacógrafo','Extintor','Triângulo','Cinto de Segurança','Macaco/Chave de Roda'] }
+];
+
+function _hojeISO(){ return new Date().toISOString().slice(0,10); }
+function _addUmMes(iso){ const d = new Date(iso+'T12:00'); d.setMonth(d.getMonth()+1); return d.toISOString().slice(0,10); }
+function _fmtDataChk(iso){ if(!iso) return '—'; return new Date(iso+'T12:00').toLocaleDateString('pt-BR'); }
+
+// Regra da tag (item 13): >=1 crítico OU >=6 atenção => vermelho; 1..5 atenção => amarelo; senão verde
+function calcularTagChecklist(qtdAtencao, qtdCritico){
+  if (qtdCritico >= 1 || qtdAtencao >= 6) return 'vermelho';
+  if (qtdAtencao >= 1) return 'amarelo';
+  return 'verde';
+}
+
+// Status efetivo considerando a validade mensal: vencido => no mínimo amarelo
+function statusIntegridadeEfetivo(v){
+  const base = v.status_integridade || 'verde';
+  const vencido = v.checklist_valido_ate ? (v.checklist_valido_ate < _hojeISO()) : true; // sem checklist = vencido
+  if (base === 'vermelho') return { cor:'vermelho', motivo:'Pendência crítica' };
+  if (vencido) return { cor:'amarelo', motivo: v.checklist_valido_ate ? 'Checklist vencido' : 'Sem checklist' };
+  return { cor: base, motivo: base === 'amarelo' ? 'Pontos em atenção' : 'Checklist em dia' };
+}
+
+const _TAG_META = {
+  verde:   { emoji:'🟢', label:'Aprovado' },
+  amarelo: { emoji:'🟡', label:'Atenção' },
+  vermelho:{ emoji:'🔴', label:'Impedido' }
+};
+
+function tagIntegridadeHTML(v){
+  const ef = statusIntegridadeEfetivo(v);
+  const m = _TAG_META[ef.cor] || _TAG_META.verde;
+  const val = v.checklist_valido_ate ? ' (válido até '+_fmtDataChk(v.checklist_valido_ate)+')' : '';
+  return `<span class="tag-integridade tag-${ef.cor}" title="${m.label} — ${ef.motivo}${val}">${m.emoji} ${m.label}</span>`;
+}
+
+// Só frota própria tem checklist (itens 10/13)
+function _veiculosFrotaPropria(){
+  return (veiculosGlobais||[]).filter(v => v.propriedade !== 'terceiro');
+}
+
+function carregarManutencao(){
+  const sel = document.getElementById('checklistVeiculo');
+  if (!sel) return;
+  const atual = sel.value;
+  const lista = _veiculosFrotaPropria();
+  sel.innerHTML = '<option value="">Selecione o veículo...</option>' +
+    lista.map(v => `<option value="${v.id}">${v.placa} — ${v.modelo || v.tipo || ''}</option>`).join('');
+  if (atual) sel.value = atual;
+  renderChecklistForm();
+  renderEPIForm();
+  _preencherMotoristasEPI();
+  if (typeof _preencherVeiculosAgendamento === 'function') _preencherVeiculosAgendamento();
+  if (typeof listarAgendamentos === 'function') listarAgendamentos();
+  if (typeof _preencherVeiculosEmergencia === 'function') _preencherVeiculosEmergencia();
+  if (typeof renderizarParadasEmergencia === 'function') renderizarParadasEmergencia();
+  aoTrocarVeiculoChecklist();
+}
+
+function renderChecklistForm(){
+  const cont = document.getElementById('checklistForm');
+  if (!cont) return;
+  cont.innerHTML = CHECKLIST_BLOCOS.map((bloco, bi) => `
+    <div class="checklist-bloco">
+      <h4>${bloco.grupo}</h4>
+      ${bloco.itens.map((item, ii) => {
+        const name = 'chk_'+bi+'_'+ii;
+        return `
+        <div class="checklist-linha">
+          <span class="checklist-item-nome">${item}</span>
+          <div class="checklist-opcoes">
+            <label class="opt opt-ok"><input type="radio" name="${name}" value="OK" checked> OK</label>
+            <label class="opt opt-at"><input type="radio" name="${name}" value="Atencao"> Atenção</label>
+            <label class="opt opt-cr"><input type="radio" name="${name}" value="Critico"> Crítico</label>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+function _lerChecklistSelecionado(){
+  const itens = [];
+  let qtdAtencao = 0, qtdCritico = 0;
+  CHECKLIST_BLOCOS.forEach((bloco, bi) => {
+    bloco.itens.forEach((item, ii) => {
+      const val = document.querySelector('input[name="chk_'+bi+'_'+ii+'"]:checked')?.value || 'OK';
+      if (val === 'Atencao') qtdAtencao++;
+      if (val === 'Critico') qtdCritico++;
+      itens.push({ grupo: bloco.grupo, item, status: val });
+    });
+  });
+  return { itens, qtdAtencao, qtdCritico };
+}
+
+function aoTrocarVeiculoChecklist(){
+  const sel = document.getElementById('checklistVeiculo');
+  const tagEl = document.getElementById('checklistTagAtual');
+  const id = sel?.value;
+  if (!id){ if(tagEl) tagEl.innerHTML=''; carregarHistoricoChecklist(null); return; }
+  const v = (veiculosGlobais||[]).find(x => String(x.id) === String(id));
+  if (tagEl && v) tagEl.innerHTML = 'Status atual: ' + tagIntegridadeHTML(v);
+  if (typeof _preencherMotoristasEPI === 'function') _preencherMotoristasEPI();
+  carregarHistoricoChecklist(id);
+}
+
+async function salvarChecklist(){
+  const msgEl = document.getElementById('mensagemChecklist');
+  const sel = document.getElementById('checklistVeiculo');
+  const id = sel?.value;
+  if (!id){ msgEl.textContent='Selecione um veículo.'; msgEl.className='message show error'; return; }
+  const v = (veiculosGlobais||[]).find(x => String(x.id) === String(id));
+  if (!v){ msgEl.textContent='Veículo não encontrado.'; msgEl.className='message show error'; return; }
+
+  const { itens, qtdAtencao, qtdCritico } = _lerChecklistSelecionado();
+  const cor = calcularTagChecklist(qtdAtencao, qtdCritico);
+  const hoje = _hojeISO();
+  const validoAte = _addUmMes(hoje);
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+
+  msgEl.textContent='Salvando...'; msgEl.className='message show';
+  try {
+    const ins = await supabase.from('checklists_veiculo').insert({
+      veiculo_id: parseInt(id), placa: v.placa, data_checklist: hoje, valido_ate: validoAte,
+      status_geral: cor, qtd_atencao: qtdAtencao, qtd_critico: qtdCritico,
+      itens: itens, realizado_por: usuario
+    });
+    if (ins.error) throw ins.error;
+
+    const upd = await supabase.from('veiculos').update({
+      status_integridade: cor, checklist_ultimo: hoje, checklist_valido_ate: validoAte
+    }).eq('id', parseInt(id));
+    if (upd.error) throw upd.error;
+
+    v.status_integridade = cor; v.checklist_ultimo = hoje; v.checklist_valido_ate = validoAte;
+
+    const m = _TAG_META[cor];
+    msgEl.textContent = 'Checklist salvo. Status do veículo: '+m.emoji+' '+m.label+'. Válido até '+_fmtDataChk(validoAte)+'.';
+    msgEl.className = 'message show success';
+    aoTrocarVeiculoChecklist();
+    if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+  } catch(e){
+    msgEl.textContent = 'Erro ao salvar: ' + (e.message || e);
+    msgEl.className = 'message show error';
+  }
+}
+
+async function carregarHistoricoChecklist(veiculoId){
+  const cont = document.getElementById('checklistHistorico');
+  if (!cont) return;
+  if (!veiculoId){ cont.innerHTML = '<p class="text-muted">Selecione um veículo.</p>'; return; }
+  cont.innerHTML = '<p class="text-muted">Carregando...</p>';
+  try {
+    const { data, error } = await supabase.from('checklists_veiculo')
+      .select('*').eq('veiculo_id', parseInt(veiculoId))
+      .order('data_checklist', { ascending: false }).limit(12);
+    if (error) throw error;
+    if (!data || data.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhum checklist registrado ainda.</p>'; return; }
+    cont.innerHTML = data.map(c => {
+      const m = _TAG_META[c.status_geral] || _TAG_META.verde;
+      return '<div class="checklist-hist-linha">'
+        + '<span class="tag-integridade tag-'+c.status_geral+'">'+m.emoji+' '+m.label+'</span>'
+        + '<span>'+_fmtDataChk(c.data_checklist)+'</span>'
+        + '<span class="text-muted">'+(c.qtd_atencao||0)+' atenção · '+(c.qtd_critico||0)+' crítico</span>'
+        + '<span class="text-muted">por '+(c.realizado_por||'—')+'</span>'
+        + '<span class="text-muted">válido até '+_fmtDataChk(c.valido_ate)+'</span>'
+        + '</div>';
+    }).join('');
+  } catch(e){
+    cont.innerHTML = '<p class="message show error">Erro ao carregar histórico: '+(e.message||e)+'</p>';
+  }
+}
+
+// ============================================================
+// LOTE 3 — EPIs: avaliação (13.3), alerta p/ Compras (13.4) e
+// autosserviço do motorista (13.5)
+// ============================================================
+const EPI_ITENS = ['Uniforme','Colete Refletivo','Talabarte','Capacete','Protetor Solar','Botina de Segurança'];
+const _EPI_OPCOES = [
+  { val:'OK',         label:'OK',                 cls:'opt-ok' },
+  { val:'Reposicao',  label:'Necessita Reposição',cls:'opt-at' },
+  { val:'Inadequado', label:'Inadequado',         cls:'opt-cr' }
+];
+
+// ---- 13.3 Avaliação de EPIs (perfil Manutenção) ----
+function renderEPIForm(){
+  const cont = document.getElementById('epiForm');
+  if (!cont) return;
+  cont.innerHTML = EPI_ITENS.map((item, i) => `
+    <div class="checklist-linha">
+      <span class="checklist-item-nome">${item}</span>
+      <div class="epi-linha-dir">
+        <input type="text" class="epi-tamanho" id="epi_tam_${i}" placeholder="Tamanho / especificação">
+        <div class="checklist-opcoes">
+          ${_EPI_OPCOES.map(o => `
+            <label class="opt ${o.cls}"><input type="radio" name="epi_${i}" value="${o.val}" ${o.val==='OK'?'checked':''}> ${o.label}</label>
+          `).join('')}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// popula o select de motorista (default: motorista padrão do veículo do checklist)
+function _preencherMotoristasEPI(){
+  const sel = document.getElementById('epiMotorista');
+  if (!sel) return;
+  const lista = motoristasGlobais || [];
+  sel.innerHTML = '<option value="">Selecione o motorista...</option>' +
+    lista.map(m => `<option value="${m.id}">${m.nome}</option>`).join('');
+  // tenta casar com o motorista padrão do veículo selecionado no checklist
+  const vSel = document.getElementById('checklistVeiculo')?.value;
+  const v = (veiculosGlobais||[]).find(x => String(x.id) === String(vSel));
+  if (v?.motorista_padrao){
+    const m = lista.find(x => (x.nome||'').trim() === (v.motorista_padrao||'').trim());
+    if (m) sel.value = m.id;
+  }
+}
+
+async function salvarAvaliacaoEPI(){
+  const msgEl = document.getElementById('mensagemEPI');
+  const sel = document.getElementById('epiMotorista');
+  const motoristaId = sel?.value;
+  if (!motoristaId){ msgEl.textContent='Selecione o motorista.'; msgEl.className='message show error'; return; }
+  const motorista = (motoristasGlobais||[]).find(m => String(m.id) === String(motoristaId));
+  const urgencia = document.getElementById('epiUrgencia')?.value || 'normal';
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+
+  // Coleta itens que precisam de ação: Necessita Reposição OU Inadequado
+  const solicitacoes = [];
+  EPI_ITENS.forEach((item, i) => {
+    const val = document.querySelector(`input[name="epi_${i}"]:checked`)?.value || 'OK';
+    if (val === 'OK') return;
+    const tamanho = document.getElementById(`epi_tam_${i}`)?.value.trim() || null;
+    solicitacoes.push({
+      motorista_id: parseInt(motoristaId),
+      motorista_nome: motorista?.nome || null,
+      item: item + (val === 'Inadequado' ? ' (inadequado)' : ''),
+      tamanho,
+      urgencia: val === 'Inadequado' ? 'alta' : urgencia, // inadequado = segurança => alta
+      origem: 'checklist',
+      status: 'pendente',
+      solicitado_por: usuario
+    });
+  });
+
+  if (solicitacoes.length === 0){
+    msgEl.textContent='Nenhum item marcado para reposição/inadequado — nada a solicitar.';
+    msgEl.className='message show';
+    return;
+  }
+
+  msgEl.textContent='Enviando...'; msgEl.className='message show';
+  try {
+    const { error } = await supabase.from('solicitacoes_epi').insert(solicitacoes);
+    if (error) throw error;
+    msgEl.textContent = `${solicitacoes.length} solicitação(ões) enviada(s) ao Financeiro/Compras.`;
+    msgEl.className = 'message show success';
+    renderEPIForm();
+  } catch(e){
+    msgEl.textContent = 'Erro ao enviar: ' + (e.message || e);
+    msgEl.className = 'message show error';
+  }
+}
+
+// ---- 13.4 Fila do Financeiro / Compras ----
+async function renderizarSolicitacoesEPI(){
+  const cont = document.getElementById('listaSolicitacoesEPI');
+  if (!cont) return;
+  cont.innerHTML = '<p class="text-muted">Carregando...</p>';
+  try {
+    const { data, error } = await supabase.from('solicitacoes_epi')
+      .select('*').eq('status','pendente')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    if (!data || data.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhuma solicitação pendente. 👍</p>'; return; }
+    cont.innerHTML = `
+      <table class="tabela-epi">
+        <thead><tr><th>Motorista</th><th>Item</th><th>Tam./Espec.</th><th>Urgência</th><th>Origem</th><th>Ações</th></tr></thead>
+        <tbody>
+          ${data.map(s => `
+            <tr>
+              <td>${s.motorista_nome || '—'}</td>
+              <td>${s.item}</td>
+              <td>${s.tamanho || '—'}</td>
+              <td>${s.urgencia === 'alta' ? '<span class="epi-urg-alta">🔴 Alta</span>' : 'Normal'}</td>
+              <td>${s.origem === 'autosservico' ? '📱 Motorista' : '🔧 Checklist'}</td>
+              <td class="epi-acoes">
+                <button class="btn btn-sm btn-primary" onclick="atenderSolicitacaoEPI(${s.id})">✓ Atender</button>
+                <button class="btn btn-sm btn-secondary" onclick="recusarSolicitacaoEPI(${s.id})">✕ Recusar</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e){
+    cont.innerHTML = '<p class="message show error">Erro ao carregar: '+(e.message||e)+'</p>';
+  }
+}
+
+async function _atualizarStatusEPI(id, status){
+  try {
+    const patch = { status };
+    if (status === 'atendida') patch.atendida_em = new Date().toISOString();
+    const { error } = await supabase.from('solicitacoes_epi').update(patch).eq('id', id);
+    if (error) throw error;
+    renderizarSolicitacoesEPI();
+  } catch(e){
+    alert('Erro ao atualizar solicitação: ' + (e.message || e));
+  }
+}
+function atenderSolicitacaoEPI(id){ if (confirm('Marcar como atendida (compra/reembolso/liberação feita)?')) _atualizarStatusEPI(id, 'atendida'); }
+function recusarSolicitacaoEPI(id){ if (confirm('Recusar esta solicitação?')) _atualizarStatusEPI(id, 'recusada'); }
+
+// ---- 13.5 Autosserviço do motorista ----
+function abrirSolicitacaoEPI(){
+  const card = document.getElementById('cardSolicitacaoEPI');
+  if (!card) return;
+  card.style.display = '';
+  const selItem = document.getElementById('epiMotItem');
+  if (selItem && !selItem.options.length){
+    selItem.innerHTML = EPI_ITENS.map(i => `<option value="${i}">${i}</option>`).join('');
+  }
+  carregarMinhasEPI();
+  card.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function _motoristaLogadoInfo(){
+  if (typeof nomesDoMotoristaLogado === 'function'){
+    const { motoristaVinculado } = nomesDoMotoristaLogado();
+    if (motoristaVinculado) return { id: motoristaVinculado.id, nome: motoristaVinculado.nome };
+  }
+  const nome = document.getElementById('usuarioLogado')?.textContent || 'Motorista';
+  return { id: null, nome };
+}
+
+async function enviarSolicitacaoEPIMotorista(){
+  const msgEl = document.getElementById('mensagemEPIMotorista');
+  const item = document.getElementById('epiMotItem')?.value;
+  const tamanho = document.getElementById('epiMotTamanho')?.value.trim() || null;
+  const urgencia = document.getElementById('epiMotUrgencia')?.value || 'normal';
+  if (!item){ msgEl.textContent='Selecione o item.'; msgEl.className='message show error'; return; }
+  const mot = _motoristaLogadoInfo();
+
+  msgEl.textContent='Enviando...'; msgEl.className='message show';
+  try {
+    const { error } = await supabase.from('solicitacoes_epi').insert({
+      motorista_id: mot.id ? parseInt(mot.id) : null,
+      motorista_nome: mot.nome,
+      item, tamanho, urgencia,
+      origem: 'autosservico', status: 'pendente',
+      solicitado_por: mot.nome
+    });
+    if (error) throw error;
+    msgEl.textContent = 'Solicitação enviada ao Financeiro/Compras. 👍';
+    msgEl.className = 'message show success';
+    document.getElementById('epiMotTamanho').value = '';
+    carregarMinhasEPI();
+  } catch(e){
+    msgEl.textContent = 'Erro ao enviar: ' + (e.message || e);
+    msgEl.className = 'message show error';
+  }
+}
+
+async function carregarMinhasEPI(){
+  const cont = document.getElementById('listaMinhasEPI');
+  if (!cont) return;
+  const mot = _motoristaLogadoInfo();
+  cont.innerHTML = '<p class="text-muted">Carregando...</p>';
+  try {
+    let q = supabase.from('solicitacoes_epi').select('*').order('created_at', { ascending:false }).limit(20);
+    q = mot.id ? q.eq('motorista_id', parseInt(mot.id)) : q.eq('motorista_nome', mot.nome);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0){ cont.innerHTML = '<p class="text-muted">Você ainda não fez solicitações.</p>'; return; }
+    const rot = { pendente:'⏳ Pendente', atendida:'✅ Atendida', recusada:'✕ Recusada' };
+    cont.innerHTML = data.map(s => `
+      <div class="checklist-hist-linha">
+        <span>${s.item}</span>
+        <span class="text-muted">${s.tamanho || ''}</span>
+        <span class="text-muted">${rot[s.status] || s.status}</span>
+        <span class="text-muted">${new Date(s.created_at).toLocaleDateString('pt-BR')}</span>
+      </div>`).join('');
+  } catch(e){
+    cont.innerHTML = '<p class="message show error">Erro: '+(e.message||e)+'</p>';
+  }
+}
+
+// ============================================================
+// LOTE 4 — AGENDAMENTO DE MANUTENÇÃO + BLOQUEIO NA LOGÍSTICA
+// (item 13.6) + regra do 🔴 impedir alocação (13.7) + gancho item 15
+// ============================================================
+
+// Decisão CENTRAL de bloqueio de alocação de um veículo.
+// Fontes: integridade (checklist 🔴), manutenção via folgas (legado),
+// agendamento de manutenção, e (Lote futuro) parada de emergência (item 15).
+function statusManutencaoVeiculo(v){
+  // 1) Impedido por integridade do checklist (🔴)
+  if (typeof statusIntegridadeEfetivo === 'function'){
+    const ef = statusIntegridadeEfetivo(v);
+    if (ef.cor === 'vermelho' && v.propriedade !== 'terceiro')
+      return { bloqueado:true, cor:'vermelho', selo:'🔴 Impedido — '+ef.motivo, motivo:'Impedido — '+ef.motivo };
+  }
+  // 2) Manutenção via folgas (mecanismo legado já existente)
+  const mf = (typeof manutencaoAtivaDoVeiculo === 'function') ? manutencaoAtivaDoVeiculo(v.placa) : null;
+  if (mf)
+    return { bloqueado:true, cor:'vermelho', selo:'🔧 Em manutenção'+(mf.descricao?' — '+mf.descricao:''), motivo:'Em manutenção' };
+  // 3) Agendamento de manutenção
+  const ag = (agendamentosManutencaoGlobais||[]).find(a => a.placa === v.placa && a.status !== 'concluido');
+  if (ag){
+    const dt = new Date(ag.data_hora), agora = new Date();
+    const fmt = dt.toLocaleDateString('pt-BR');
+    if (dt <= agora)
+      return { bloqueado:true, cor:'vermelho', selo:'🔧 Bloqueado — manutenção agendada ('+fmt+')', motivo:'Manutenção agendada / na base', agendamento:ag };
+    return { bloqueado:false, cor:'amarelo', selo:'🟡 Manutenção prevista '+fmt, motivo:'Manutenção prevista', agendamento:ag };
+  }
+  // 4) [item 15] Parada de emergência: ALERTA, nunca bloqueia (decisão fica fora do sistema)
+  const emg = (paradasEmergenciaGlobais||[]).find(e => e.placa === v.placa && e.status === 'ativa');
+  if (emg)
+    return { bloqueado:false, cor:'vermelho', selo:'🚨 Parada de emergência'+(emg.motivo?' — '+emg.motivo:''), motivo:'Parada de emergência (alerta)', emergencia:emg };
+  return { bloqueado:false, cor:null, selo:null, motivo:'' };
+}
+
+// ---- Cadastro de agendamento (perfil Manutenção) ----
+function _preencherVeiculosAgendamento(){
+  const sel = document.getElementById('agVeiculo');
+  if (!sel) return;
+  const atual = sel.value;
+  const lista = (veiculosGlobais||[]).filter(v => v.propriedade !== 'terceiro');
+  sel.innerHTML = '<option value="">Selecione o veículo...</option>' +
+    lista.map(v => `<option value="${v.placa}">${v.placa} — ${v.modelo || v.tipo || ''}</option>`).join('');
+  if (atual) sel.value = atual;
+}
+
+async function salvarAgendamentoManutencao(){
+  const msgEl = document.getElementById('mensagemAgendamento');
+  const placa = document.getElementById('agVeiculo')?.value;
+  const dataHora = document.getElementById('agDataHora')?.value;
+  const prazo = document.getElementById('agPrazo')?.value.trim() || null;
+  const obs = document.getElementById('agObs')?.value.trim() || null;
+  if (!placa){ msgEl.textContent='Selecione o veículo.'; msgEl.className='message show error'; return; }
+  if (!dataHora){ msgEl.textContent='Informe a data/hora da manutenção.'; msgEl.className='message show error'; return; }
+
+  const v = (veiculosGlobais||[]).find(x => x.placa === placa);
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+  msgEl.textContent='Agendando...'; msgEl.className='message show';
+  try {
+    const { data, error } = await supabase.from('agendamentos_manutencao').insert({
+      veiculo_id: v?.id || null, placa, data_hora: new Date(dataHora).toISOString(),
+      prazo_estimado: prazo, observacao: obs, status: 'agendado', criado_por: usuario
+    }).select();
+    if (error) throw error;
+    if (data && data[0]) agendamentosManutencaoGlobais.push(data[0]);
+    msgEl.textContent = 'Manutenção agendada. A Logística verá o bloqueio/aviso na alocação.';
+    msgEl.className = 'message show success';
+    document.getElementById('agDataHora').value = '';
+    document.getElementById('agPrazo').value = '';
+    document.getElementById('agObs').value = '';
+    listarAgendamentos();
+    if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+  } catch(e){
+    msgEl.textContent = 'Erro ao agendar: ' + (e.message || e);
+    msgEl.className = 'message show error';
+  }
+}
+
+function listarAgendamentos(){
+  const cont = document.getElementById('listaAgendamentos');
+  if (!cont) return;
+  const ativos = (agendamentosManutencaoGlobais||[]).filter(a => a.status !== 'concluido')
+    .sort((a,b) => new Date(a.data_hora) - new Date(b.data_hora));
+  if (ativos.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhum agendamento ativo.</p>'; return; }
+  const agora = new Date();
+  cont.innerHTML = ativos.map(a => {
+    const dt = new Date(a.data_hora);
+    const venceu = dt <= agora;
+    const tag = venceu ? '<span class="tag-integridade tag-vermelho">🔧 Na base/bloqueado</span>'
+                       : '<span class="tag-integridade tag-amarelo">🟡 Prevista</span>';
+    return `<div class="checklist-hist-linha">
+      ${tag}
+      <span><strong>${a.placa}</strong></span>
+      <span>${dt.toLocaleDateString('pt-BR')} ${dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="text-muted">${a.prazo_estimado || ''}</span>
+      <span class="text-muted">${a.observacao || ''}</span>
+      <button class="btn btn-sm btn-secondary" onclick="concluirAgendamento(${a.id})">✓ Concluir</button>
+    </div>`;
+  }).join('');
+}
+
+async function concluirAgendamento(id){
+  if (!confirm('Concluir esta manutenção? O veículo volta a ficar disponível para a Logística.')) return;
+  try {
+    const { error } = await supabase.from('agendamentos_manutencao')
+      .update({ status:'concluido' }).eq('id', id);
+    if (error) throw error;
+    const a = (agendamentosManutencaoGlobais||[]).find(x => x.id === id);
+    if (a) a.status = 'concluido';
+    listarAgendamentos();
+    if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+  } catch(e){
+    alert('Erro ao concluir: ' + (e.message || e));
+  }
+}
+
+// ============================================================
+// LOTE 5 — PARADA DE EMERGÊNCIA (item 15)
+// Só registro/alerta. Não cancela, não aloca, não desaloca.
+// Criação: exclusiva do Gestor de Manutenção (perfil manutencao/admin).
+// Conclusão: Manutenção OU Logística.
+// ============================================================
+function _ehGestorManutencao(){
+  const p = (typeof perfilAtual !== 'undefined') ? perfilAtual : null;
+  return p === 'manutencao' || p === 'admin';
+}
+function _podeConcluirEmergencia(){
+  const p = (typeof perfilAtual !== 'undefined') ? perfilAtual : null;
+  return ['manutencao','logistica','admin'].includes(p);
+}
+
+function _preencherVeiculosEmergencia(){
+  const sel = document.getElementById('emgVeiculo');
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Selecione o veículo...</option>' +
+    (veiculosGlobais||[]).map(v => `<option value="${v.placa}">${v.placa} — ${v.modelo || v.tipo || ''}</option>`).join('');
+  if (atual) sel.value = atual;
+}
+
+async function salvarParadaEmergencia(){
+  const msgEl = document.getElementById('mensagemEmergencia');
+  if (!_ehGestorManutencao()){
+    msgEl.textContent = 'Apenas o Gestor de Manutenção pode registrar uma parada de emergência.';
+    msgEl.className = 'message show error'; return;
+  }
+  const placa = document.getElementById('emgVeiculo')?.value;
+  const motivo = document.getElementById('emgMotivo')?.value.trim();
+  const previsaoRaw = document.getElementById('emgPrevisao')?.value;
+  if (!placa){ msgEl.textContent='Selecione o veículo.'; msgEl.className='message show error'; return; }
+  if (!motivo){ msgEl.textContent='Descreva o motivo/defeito.'; msgEl.className='message show error'; return; }
+
+  const v = (veiculosGlobais||[]).find(x => x.placa === placa);
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+  msgEl.textContent='Registrando...'; msgEl.className='message show';
+  try {
+    const { data, error } = await supabase.from('paradas_emergencia').insert({
+      veiculo_id: v?.id || null, placa, motivo,
+      previsao_retorno: previsaoRaw ? new Date(previsaoRaw).toISOString() : null,
+      status: 'ativa', criado_por: usuario
+    }).select();
+    if (error) throw error;
+    if (data && data[0]) paradasEmergenciaGlobais.unshift(data[0]);
+    msgEl.textContent = 'Emergência registrada. A Logística já vê o alerta (nenhuma alocação foi alterada).';
+    msgEl.className = 'message show success';
+    document.getElementById('emgMotivo').value = '';
+    document.getElementById('emgPrevisao').value = '';
+    renderizarParadasEmergencia();
+    if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+  } catch(e){
+    msgEl.textContent = 'Erro ao registrar: ' + (e.message || e);
+    msgEl.className = 'message show error';
+  }
+}
+
+function _linhaEmergenciaHTML(e, comConcluir){
+  const dt = e.created_at ? new Date(e.created_at).toLocaleString('pt-BR') : '';
+  const prev = e.previsao_retorno ? ' · retorno prev.: ' + new Date(e.previsao_retorno).toLocaleString('pt-BR') : '';
+  const btn = comConcluir && _podeConcluirEmergencia()
+    ? `<button class="btn btn-sm btn-secondary" onclick="concluirEmergencia(${e.id})">✓ Concluir</button>` : '';
+  return `<div class="emergencia-linha">
+    <span class="emergencia-badge">🚨 ${e.placa}</span>
+    <span>${e.motivo || ''}</span>
+    <span class="text-muted">${dt}${prev}</span>
+    ${btn}
+  </div>`;
+}
+
+function renderizarParadasEmergencia(){
+  const ativas = (paradasEmergenciaGlobais||[]).filter(e => e.status === 'ativa');
+
+  // Painel na aba Manutenção
+  const contManut = document.getElementById('listaEmergenciasManut');
+  if (contManut){
+    contManut.innerHTML = ativas.length === 0
+      ? '<p class="text-muted">Nenhuma emergência ativa.</p>'
+      : ativas.map(e => _linhaEmergenciaHTML(e, true)).join('');
+  }
+
+  // Banner na aba Logística (só aparece se houver emergência)
+  const wrapLog = document.getElementById('emergenciasLogWrap');
+  if (wrapLog){
+    wrapLog.innerHTML = ativas.length === 0 ? '' :
+      `<div class="emergencia-banner">
+        <div class="emergencia-banner-titulo">🚨 Paradas de emergência ativas (${ativas.length}) — decida a carga com a Manutenção</div>
+        ${ativas.map(e => _linhaEmergenciaHTML(e, true)).join('')}
+      </div>`;
+  }
+}
+
+async function concluirEmergencia(id){
+  if (!_podeConcluirEmergencia()){ alert('Sem permissão para concluir.'); return; }
+  if (!confirm('Marcar esta emergência como concluída?')) return;
+  const perfil = (typeof perfilAtual !== 'undefined') ? perfilAtual : null;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+  try {
+    const { error } = await supabase.from('paradas_emergencia').update({
+      status:'concluida', concluida_por: usuario, concluida_perfil: perfil,
+      concluida_em: new Date().toISOString()
+    }).eq('id', id);
+    if (error) throw error;
+    const e = (paradasEmergenciaGlobais||[]).find(x => x.id === id);
+    if (e) e.status = 'concluida';
+    renderizarParadasEmergencia();
+    if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+  } catch(err){
+    alert('Erro ao concluir: ' + (err.message || err));
+  }
+}
+
+// ============================================================
+// LOTE 6 — INDICADORES DE MANUTENÇÃO NO DASHBOARD (item 14)
+// Veículos % e EPIs %, só frota própria. Alerta 🔴 por pendência crítica.
+// ============================================================
+function _conformidadeSeguranca(){
+  // ----- Veículos (frota própria): checklist em dia = 🟢 efetivo -----
+  const frota = (veiculosGlobais||[]).filter(v => v.propriedade !== 'terceiro');
+  const totalVeic = frota.length;
+  let verdes = 0, criticos = 0;
+  frota.forEach(v => {
+    const cor = (typeof statusIntegridadeEfetivo === 'function') ? statusIntegridadeEfetivo(v).cor : 'verde';
+    if (cor === 'verde') verdes++;
+    // pendência CRÍTICA = checklist vermelho (crítico/6+ atenção), não apenas vencido
+    if (v.status_integridade === 'vermelho') criticos++;
+  });
+  const veiculosPctNum = totalVeic > 0 ? Math.round((verdes / totalVeic) * 100) : null;
+
+  // ----- EPIs (motoristas): em dia = sem solicitação pendente -----
+  const totalMot = (motoristasGlobais||[]).length;
+  const pendSet = new Set();
+  (episPendentesGlobais||[]).forEach(e => pendSet.add(e.motorista_id != null ? 'id:'+e.motorista_id : 'nome:'+(e.motorista_nome||'')));
+  const motComPend = pendSet.size;
+  const motEmDia = Math.max(0, totalMot - motComPend);
+  const episPctNum = totalMot > 0 ? Math.round((motEmDia / totalMot) * 100) : null;
+
+  const _cor = (pct) => pct === null ? '#9ca3af' : pct >= 90 ? '#4ade80' : pct >= 70 ? '#fbbf24' : '#ef4444';
+
+  return {
+    totalVeic, totalMot, criticos,
+    veiculosPct: veiculosPctNum === null ? '—' : veiculosPctNum + '%',
+    episPct:     episPctNum === null ? '—' : episPctNum + '%',
+    corVeic: criticos > 0 ? '#ef4444' : _cor(veiculosPctNum),
+    corEpi:  _cor(episPctNum)
+  };
+}
+
+// ============================================================
+// LOTE 7 — ITEM 6: nomenclatura por capacidade + exceção de teto
+// 1 a 9 => "Múltiplos Veículos"; 10..capacidade => "Carga Fechada".
+// Teto padrão 11; acima disso exige exceção no cadastro do veículo.
+// ============================================================
+function nomenclaturaCarga(qtd, capacidade){
+  const cap = Number(capacidade) || null;
+  if ((cap && qtd >= cap) || qtd >= 10) return 'Carga Fechada';
+  return 'Múltiplos Veículos';
+}
+
+// Ajusta o teto do input de capacidade conforme a exceção (cadastro novo)
+function ajustarTetoCapacidade(){
+  const chk = document.getElementById('capacidadeExcecao');
+  const cap = document.getElementById('capacidadeCegonha');
+  if (!cap) return;
+  cap.max = (chk && chk.checked) ? 12 : 11;
+  if (!(chk && chk.checked) && parseInt(cap.value,10) > 11) cap.value = 11;
+}
+
+// ============================================================
+// LOTE 8 — ITEM 1: RESERVA COM TIMER GLOBAL + TIPO DE ENTREGA
+// ============================================================
+function toggleModoReserva(){
+  const on = document.getElementById('pedidoReserva')?.checked;
+  const wrap = document.getElementById('reservaVagasWrap');
+  if (wrap) wrap.style.display = on ? '' : 'none';
+  // Em modo reserva, placa/modelo deixam de ser obrigatórios
+  ['placa','modelo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el){ if (on) el.removeAttribute('required'); else el.setAttribute('required',''); }
+  });
+}
+
+async function salvarReservaComercial(){
+  const cliente = document.getElementById('cliente').value;
+  const clienteId = document.getElementById('clienteId')?.value || null;
+  const dataSolicitacao = document.getElementById('dataSolicitacao').value;
+  const cidadeOrigem = document.getElementById('cidadeOrigem').value;
+  const ufOrigem = document.getElementById('ufOrigem').value;
+  const cidadeDestino = document.getElementById('cidadeDestino').value;
+  const ufDestino = document.getElementById('ufDestino').value;
+  const responsavel = document.getElementById('responsavelComercial').value;
+  const vagas = parseInt(document.getElementById('reservaVagas')?.value,10) || 1;
+  const tipoEntrega = document.getElementById('tipoEntregaPedido')?.value || 'patio';
+
+  if (!cliente || !dataSolicitacao || !cidadeOrigem || !ufOrigem || !cidadeDestino || !ufDestino || !responsavel){
+    exibirMensagem('mensagemComercial', 'Reserva precisa de: cliente, data, origem, destino e responsável.', 'error');
+    return;
+  }
+
+  const expira = new Date(Date.now() + paramReservaTimerMin * 60000).toISOString();
+  const grupoId = (typeof gerarGrupoId === 'function' && vagas > 1) ? gerarGrupoId() : null;
+  const base = {
+    cliente, cliente_id: clienteId ? parseInt(clienteId) : null,
+    data_solicitacao: dataSolicitacao,
+    modelo: 'A definir', placa: null,
+    cidade_origem: cidadeOrigem, uf_origem: ufOrigem,
+    cidade_destino: cidadeDestino, uf_destino: ufDestino,
+    responsavel_comercial: responsavel,
+    tipo_entrega: tipoEntrega,
+    origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
+    criado_por_nome: (document.getElementById('usuarioLogado')?.textContent || null),
+    status: 'Pendente',
+    is_reserva: true, reserva_status: 'ativa', reserva_expira_em: expira
+  };
+  const linhas = Array.from({length: vagas}, () => grupoId ? { ...base, grupo_id: grupoId } : { ...base });
+
+  try {
+    const { error } = await supabase.from('pedidos').insert(linhas);
+    if (error) throw error;
+    if (typeof notificar === 'function') notificar({
+      perfil:'comercial', tipo:'acao',
+      titulo:`🕒 Nova reserva: ${vagas} vaga(s)`,
+      mensagem:`${cliente} · ${cidadeOrigem}/${ufOrigem} → ${cidadeDestino}/${ufDestino} · expira em ${paramReservaTimerMin} min`
+    });
+    await carregarDadosDoSupabase();
+    exibirMensagem('mensagemComercial', `✅ Reserva de ${vagas} vaga(s) criada. Confirme antes de expirar (${paramReservaTimerMin} min).`, 'success');
+    document.getElementById('formComercial').reset();
+    toggleModoReserva();
+    renderizarReservasAtivas();
+  } catch(e){
+    exibirMensagem('mensagemComercial', 'Erro ao criar reserva: ' + (e.message||e), 'error');
+  }
+}
+
+function _reservasAtivas(){
+  return (pedidosGlobais||[]).filter(p => p.isReserva && p.reservaStatus === 'ativa');
+}
+
+function _fmtRestante(ms){
+  if (ms <= 0) return 'expirada';
+  const min = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000);
+  return `${min}m ${String(s).padStart(2,'0')}s`;
+}
+
+function renderizarReservasAtivas(){
+  const wrap = document.getElementById('reservasAtivasWrap');
+  if (!wrap) return;
+  const ativas = _reservasAtivas();
+  if (ativas.length === 0){ wrap.innerHTML = ''; return; }
+  const agora = Date.now();
+  // agrupa por grupo_id (ou id isolado)
+  const grupos = {};
+  ativas.forEach(p => { const k = p.grupoId || ('p'+p.id); (grupos[k] = grupos[k] || []).push(p); });
+  wrap.innerHTML = `<div class="reservas-box">
+    <div class="reservas-titulo">🕒 Reservas aguardando confirmação (${ativas.length} vaga(s))</div>
+    ${Object.entries(grupos).map(([k, itens]) => {
+      const p = itens[0];
+      const exp = p.reservaExpiraEm ? new Date(p.reservaExpiraEm).getTime() : agora;
+      const restante = exp - agora;
+      const critico = restante < 30*60000;
+      return `<div class="reserva-linha ${critico?'reserva-critica':''}">
+        <span class="reserva-rota">${p.cliente} · ${p.cidadeOrigem}/${p.ufOrigem} → ${p.cidadeDestino}/${p.ufDestino}</span>
+        <span class="reserva-vagas">${itens.length} vaga(s)</span>
+        <span class="reserva-timer" data-exp="${exp}">${_fmtRestante(restante)}</span>
+        <button class="btn btn-sm btn-primary" onclick="confirmarReserva('${k}')">✓ Confirmar</button>
+        <button class="btn btn-sm btn-secondary" onclick="cancelarReserva('${k}')">✕ Cancelar</button>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function _idsDoGrupoReserva(chave){
+  if (chave.startsWith('p')) { const id = parseInt(chave.slice(1),10); return _reservasAtivas().filter(p=>p.id===id).map(p=>p.id); }
+  return _reservasAtivas().filter(p => p.grupoId === chave).map(p => p.id);
+}
+
+async function confirmarReserva(chave){
+  const ids = _idsDoGrupoReserva(chave);
+  if (ids.length === 0) return;
+  try {
+    const { error } = await supabase.from('pedidos')
+      .update({ is_reserva:false, reserva_status:'confirmada' }).in('id', ids);
+    if (error) throw error;
+    ids.forEach(id => { const p=(pedidosGlobais||[]).find(x=>x.id===id); if(p){p.isReserva=false;p.reservaStatus='confirmada';} });
+    exibirMensagem('mensagemComercial', '✅ Reserva confirmada. Complete os veículos pela edição do pedido.', 'success');
+    renderizarReservasAtivas();
+  } catch(e){ alert('Erro ao confirmar: '+(e.message||e)); }
+}
+
+async function cancelarReserva(chave, automatico){
+  const ids = _idsDoGrupoReserva(chave);
+  if (ids.length === 0) return;
+  if (!automatico && !confirm('Cancelar esta reserva?')) return;
+  try {
+    const { error } = await supabase.from('pedidos')
+      .update({ is_reserva:false, reserva_status:'cancelada', status:'Cancelado' }).in('id', ids);
+    if (error) throw error;
+    ids.forEach(id => { const p=(pedidosGlobais||[]).find(x=>x.id===id); if(p){p.isReserva=false;p.reservaStatus='cancelada';p.status='Cancelado';} });
+    if (automatico && typeof notificar === 'function') notificar({
+      perfil:'comercial', tipo:'alerta', titulo:'⏱️ Reserva expirada e cancelada',
+      mensagem:'Uma reserva não foi confirmada a tempo e foi cancelada automaticamente.'
+    });
+    renderizarReservasAtivas();
+  } catch(e){ if(!automatico) alert('Erro ao cancelar: '+(e.message||e)); }
+}
+
+// Tick de 1s: atualiza contadores e auto-cancela expiradas
+let _reservaTickIniciado = false;
+function iniciarTickReservas(){
+  if (_reservaTickIniciado) return;
+  _reservaTickIniciado = true;
+  setInterval(() => {
+    const timers = document.querySelectorAll('.reserva-timer');
+    const agora = Date.now();
+    let expirou = false;
+    timers.forEach(t => {
+      const exp = parseInt(t.dataset.exp,10);
+      const restante = exp - agora;
+      t.textContent = _fmtRestante(restante);
+      if (restante <= 0) expirou = true;
+    });
+    if (expirou){
+      // auto-cancela as vencidas
+      const grupos = {};
+      _reservasAtivas().forEach(p => { const k=p.grupoId||('p'+p.id); (grupos[k]=grupos[k]||[]).push(p); });
+      Object.entries(grupos).forEach(([k, itens]) => {
+        const exp = itens[0].reservaExpiraEm ? new Date(itens[0].reservaExpiraEm).getTime() : agora;
+        if (exp - agora <= 0) cancelarReserva(k, true);
+      });
+    }
+  }, 1000);
+}
+
+// ============================================================
+// LOTE 9 — ITEM 5: DESALOCAR / REVERTER ALOCAÇÃO (Logística)
+// Remove a cegonha e devolve o pedido à fila, antes do fechamento.
+// ============================================================
+async function desalocarPedido(pedidoId){
+  if (bloquearSeNaoLogistica('a reversão de alocação')) return;
+  const pedido = (pedidosGlobais||[]).find(p => String(p.id) === String(pedidoId));
+  if (!pedido){ return; }
+  if (!['Intenção Agendada','Aguardando Confirmação'].includes(pedido.status)){
+    alert('Só é possível desalocar antes do fechamento (status de coleta em diante não pode ser revertido por aqui).');
+    return;
+  }
+  if (!confirm(`Desalocar o pedido #${pedido.id} da cegonha ${pedido.placaCegonha}?\n\nEle volta para a fila de alocação como "Pendente".`)) return;
+
+  const reversao = {
+    placa_cegonha: null, rota: null, rota_id: null,
+    motorista_1: null, percent_motorista_1: null,
+    motorista_2: null, percent_motorista_2: null,
+    data_prev_coleta: null, data_prev_entrega: null,
+    status: 'Pendente'
+  };
+  try {
+    const { error } = await supabase.from('pedidos').update(reversao).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    // Limpa os trechos de transbordo, se houver
+    try { await supabase.from('pedido_trechos').delete().eq('pedido_id', parseInt(pedidoId)); } catch(e){}
+    // Registra no histórico, se a trilha existir
+    try {
+      const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId), status_novo: 'Pendente',
+        usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+        observacao: `↩️ Alocação revertida (desalocado da cegonha) por ${usuario}`
+      });
+    } catch(e){}
+
+    if (typeof fecharModal === 'function') fecharModal('modalStatus');
+    await carregarDadosDoSupabase();
+    if (typeof carregarLogistica === 'function') carregarLogistica();
+    if (typeof exibirMensagem === 'function')
+      exibirMensagem('mensagemLogistica', `↩️ Pedido #${pedidoId} desalocado e devolvido à fila.`, 'success');
+  } catch(e){
+    alert('Erro ao desalocar: ' + (e.message || e));
+  }
+}
+
+// ============================================================
+// LOTE 10 — ITEM 12 (parte 1): CADASTRO DE CORREDORES + SLA
+// ============================================================
+let corredoresGlobais = [];
+
+async function carregarCorredores(){
+  const cont = document.getElementById('listaCorredores');
+  try {
+    const { data: cors, error } = await supabase.from('corredores')
+      .select('*').order('nome');
+    if (error) throw error;
+    corredoresGlobais = cors || [];
+    // paradas de cada corredor
+    const { data: paradas } = await supabase.from('corredor_paradas')
+      .select('*').order('ordem');
+    const porCor = {};
+    (paradas||[]).forEach(p => { (porCor[p.corredor_id] = porCor[p.corredor_id] || []).push(p); });
+    corredoresGlobais.forEach(c => { c._paradas = porCor[c.id] || []; });
+    _renderCorredores();
+  } catch(e){
+    if (cont) cont.innerHTML = '<p class="message show error">Erro ao carregar corredores: '+(e.message||e)+'</p>';
+  }
+}
+
+function _renderCorredores(){
+  const cont = document.getElementById('listaCorredores');
+  if (!cont) return;
+  if (corredoresGlobais.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhum corredor cadastrado ainda.</p>'; return; }
+  cont.innerHTML = corredoresGlobais.map(c => {
+    const seq = (c._paradas||[]).map(p => p.cidade).join(' → ') || `${c.origem} → ${c.destino}`;
+    return `<div class="corredor-linha">
+      <div class="corredor-info">
+        <strong>${c.nome}</strong>
+        <span class="text-muted">${c.origem} → ${c.destino} · SLA ${c.sla_horas}h</span>
+        <span class="corredor-seq">🛣️ ${seq}</span>
+      </div>
+      <button class="btn btn-sm btn-secondary" onclick="excluirCorredor(${c.id})">🗑️ Excluir</button>
+    </div>`;
+  }).join('');
+}
+
+async function salvarCorredor(){
+  const msgEl = document.getElementById('mensagemCorredor');
+  const nome = document.getElementById('corNome')?.value.trim();
+  const origem = document.getElementById('corOrigem')?.value.trim();
+  const destino = document.getElementById('corDestino')?.value.trim();
+  const sla = parseInt(document.getElementById('corSla')?.value,10);
+  const paradasRaw = document.getElementById('corParadas')?.value.trim();
+  if (!nome || !origem || !destino){ msgEl.textContent='Preencha nome, origem e destino.'; msgEl.className='message show error'; return; }
+  if (!sla || sla < 1){ msgEl.textContent='Informe um SLA válido (horas).'; msgEl.className='message show error'; return; }
+
+  msgEl.textContent='Salvando...'; msgEl.className='message show';
+  try {
+    const { data, error } = await supabase.from('corredores').insert({
+      nome, origem, destino, sla_horas: sla, ativo: true
+    }).select();
+    if (error) throw error;
+    const cor = data && data[0];
+    // paradas: usa a lista informada; se vazia, usa origem+destino
+    let cidades = paradasRaw ? paradasRaw.split(',').map(s => s.trim()).filter(Boolean) : [origem, destino];
+    if (cor && cidades.length){
+      const linhas = cidades.map((cidade, i) => ({ corredor_id: cor.id, ordem: i+1, cidade }));
+      await supabase.from('corredor_paradas').insert(linhas);
+    }
+    msgEl.textContent = 'Corredor salvo.';
+    msgEl.className = 'message show success';
+    ['corNome','corOrigem','corDestino','corParadas'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+    document.getElementById('corSla').value = 24;
+    carregarCorredores();
+  } catch(e){
+    msgEl.textContent = 'Erro ao salvar: ' + (e.message||e);
+    msgEl.className = 'message show error';
+  }
+}
+
+async function excluirCorredor(id){
+  if (!confirm('Excluir este corredor? As paradas associadas também serão removidas.')) return;
+  try {
+    await supabase.from('corredor_paradas').delete().eq('corredor_id', id);
+    const { error } = await supabase.from('corredores').delete().eq('id', id);
+    if (error) throw error;
+    corredoresGlobais = corredoresGlobais.filter(c => c.id !== id);
+    _renderCorredores();
+  } catch(e){ alert('Erro ao excluir: ' + (e.message||e)); }
+}
+
+// ============================================================
+// LOTE 11 — ITEM 12 (parte 2): SUGESTÃO INTELIGENTE POR CORREDORES
+// Cruza pedidos pendentes com corredores; agrupa por sequência de
+// paradas e janela de datas; mostra ocupação p/ validação da Logística.
+// ============================================================
+const _CEGONHA_CAP_REF = 11;          // capacidade de referência p/ ocupação
+const _JANELA_DIAS_SUG = 3;           // janela de datas para agrupar
+
+function _norm(txt){
+  return (txt||'').toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+// posição de uma cidade na sequência do corredor (-1 se não estiver)
+function _posNaSeq(seq, cidade){
+  const alvo = _norm(cidade);
+  return seq.findIndex(s => _norm(s) === alvo);
+}
+
+function gerarSugestoesRota(){
+  const wrap = document.getElementById('sugestoesRotaWrap');
+  if (!wrap) return;
+  const corredores = (corredoresGlobais||[]).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
+  if (corredores.length === 0){ wrap.innerHTML = ''; return; }
+
+  // pedidos pendentes, não-reserva, sem cegonha
+  const pendentes = (pedidosGlobais||[]).filter(p =>
+    p.status === 'Pendente' && !p.isReserva && !p.placaCegonha);
+  if (pendentes.length === 0){ wrap.innerHTML = ''; return; }
+
+  const sugestoes = [];
+  corredores.forEach(cor => {
+    const seq = (cor._paradas||[]).length >= 2 ? cor._paradas.map(p=>p.cidade) : [cor.origem, cor.destino];
+    // pedidos que "cabem" no corredor: origem e destino na sequência, na ordem certa
+    const fits = pendentes.filter(p => {
+      const io = _posNaSeq(seq, p.cidadeOrigem);
+      const id = _posNaSeq(seq, p.cidadeDestino);
+      return io !== -1 && id !== -1 && io < id;
+    });
+    if (fits.length === 0) return;
+
+    // agrupa por janela de datas (data_solicitacao)
+    const ordenados = fits.slice().sort((a,b) => (a.dataSolicitacao||'').localeCompare(b.dataSolicitacao||''));
+    let cluster = [];
+    let inicio = null;
+    const flush = () => {
+      if (cluster.length){ sugestoes.push({ cor, seq, itens: cluster.slice() }); cluster = []; }
+    };
+    ordenados.forEach(p => {
+      const d = p.dataSolicitacao ? new Date(p.dataSolicitacao+'T12:00') : null;
+      if (!inicio || !d){ if (cluster.length===0) inicio = d; cluster.push(p); return; }
+      const difDias = Math.abs((d - inicio)/86400000);
+      if (difDias <= _JANELA_DIAS_SUG){ cluster.push(p); }
+      else { flush(); inicio = d; cluster.push(p); }
+    });
+    flush();
+  });
+
+  if (sugestoes.length === 0){ wrap.innerHTML = ''; return; }
+
+  wrap.innerHTML = `<div class="sugestoes-box">
+    <div class="sugestoes-titulo">🧭 Sugestões de rota por corredor (${sugestoes.length}) — para validação da Logística</div>
+    ${sugestoes.map((s, idx) => {
+      const ocup = Math.min(100, Math.round((s.itens.length / _CEGONHA_CAP_REF) * 100));
+      const corPct = ocup >= 80 ? '#4ade80' : ocup >= 50 ? '#fbbf24' : '#fb923c';
+      const datas = s.itens.map(p=>p.dataSolicitacao).filter(Boolean).sort();
+      const janela = datas.length ? `${_fmtDataChk(datas[0])}${datas.length>1?' a '+_fmtDataChk(datas[datas.length-1]):''}` : '—';
+      const paradasComPedido = s.seq.map(cidade => {
+        const temColeta = s.itens.some(p => _norm(p.cidadeOrigem) === _norm(cidade));
+        const temEntrega = s.itens.some(p => _norm(p.cidadeDestino) === _norm(cidade));
+        const marca = temColeta && temEntrega ? '↕' : temColeta ? '↑' : temEntrega ? '↓' : '·';
+        return `<span class="sug-parada ${marca!=='·'?'sug-parada-ativa':''}">${marca} ${cidade}</span>`;
+      }).join('<span class="sug-seta">→</span>');
+      return `<div class="sugestao-card">
+        <div class="sugestao-cab">
+          <strong>${s.cor.nome}</strong>
+          <span class="text-muted">SLA ${s.cor.sla_horas}h · janela ${janela}</span>
+          <span class="sug-ocup" style="color:${corPct}">${s.itens.length}/${_CEGONHA_CAP_REF} · ${ocup}% da cegonha</span>
+        </div>
+        <div class="sug-paradas">${paradasComPedido}</div>
+        <div class="sug-pedidos">${s.itens.map(p =>
+          `<span class="sug-pedido">#${p.id} ${p.cliente} (${p.cidadeOrigem}→${p.cidadeDestino})</span>`).join('')}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ============================================================
+// LOTE 12 — ITEM 16: HORÁRIO PREVISTO + ETA AUTOMÁTICO
+// ETA = saída real + SLA do corredor. Tags de entrega 🟢🟡🔴.
+// ============================================================
+const _ETA_ATENCAO_H = 3; // horas antes do ETA em que entra em "Atenção"
+
+function statusETA(etaISO){
+  if (!etaISO) return null;
+  const eta = new Date(etaISO).getTime();
+  const agora = Date.now();
+  const restanteH = (eta - agora) / 3600000;
+  if (restanteH < 0)  return { cor:'vermelho', emoji:'🔴', label:'Em Atraso',  txt:`atrasado ${Math.abs(Math.round(restanteH))}h` };
+  if (restanteH <= _ETA_ATENCAO_H) return { cor:'amarelo', emoji:'🟡', label:'Atenção', txt:`restam ~${Math.max(0,Math.round(restanteH))}h` };
+  return { cor:'verde', emoji:'🟢', label:'Na Janela', txt:`restam ~${Math.round(restanteH)}h` };
+}
+
+function etaRotaHTML(r){
+  if (!r || !r.eta) return '';
+  const s = statusETA(r.eta);
+  if (!s) return '';
+  const etaFmt = new Date(r.eta).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  return ` · <span class="tag-eta tag-${s.cor}" title="ETA ${etaFmt} · ${s.txt}">${s.emoji} ETA ${etaFmt}</span>`;
+}
+
+// ============================================================
+// LOTE 14 — ITENS 7 e 8: CONFIRMAÇÃO DO COMERCIAL (aviso 4h) +
+// FECHAMENTO POR STATUS VERDE (rota) + envio ao motorista
+// ============================================================
+const _CONFIRM_AVISO_H = 4; // aviso quando faltam <= 4h para a coleta
+
+function _horasAteColeta(p){
+  const dt = p.dataPrevColeta || p.data_prev_coleta;
+  if (!dt) return null;
+  return (new Date(dt).getTime() - Date.now()) / 3600000;
+}
+
+function renderizarConfirmacaoComercial(){
+  const wrap = document.getElementById('confirmacaoComercialWrap');
+  if (!wrap) return;
+  const aguardando = (pedidosGlobais||[]).filter(p => p.status === 'Aguardando Confirmação');
+  if (aguardando.length === 0){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="confirmacao-box">
+    <div class="confirmacao-titulo">✅ Intenções aguardando sua confirmação (${aguardando.length})</div>
+    ${aguardando.map(p => {
+      const h = _horasAteColeta(p);
+      const urgente = h !== null && h <= _CONFIRM_AVISO_H;
+      const aviso = h === null ? ''
+        : urgente ? `<span class="confirma-urgente">${h < 0 ? '⏰ coleta vencida' : `🔴 faltam ${Math.max(0,Math.round(h))}h p/ coleta`}</span>`
+        : `<span class="text-muted">coleta em ~${Math.round(h)}h</span>`;
+      return `<div class="confirma-linha ${urgente?'confirma-linha-urgente':''}">
+        <span class="confirma-rota">#${p.id} · ${p.cliente} · ${p.cidadeOrigem}/${p.ufOrigem} → ${p.cidadeDestino}/${p.ufDestino}</span>
+        <span>🚛 ${p.placaCegonha || 'A definir'}</span>
+        ${aviso}
+        <button class="btn btn-sm btn-primary" onclick="abrirModalStatus(${p.id})">Revisar e confirmar</button>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ---------- Item 8: fechamento da rota quando tudo "verde" ----------
+// "verde" = pedido já passou da confirmação (Em Coleta em diante).
+function _pedidosDaRota(rotaId, placaCegonha){
+  return (pedidosGlobais||[]).filter(p =>
+    (String(p.rotaId) === String(rotaId)) ||
+    (placaCegonha && p.placaCegonha === placaCegonha && !['Entregue','Cancelado'].includes(p.status))
+  );
+}
+function _rotaStatusVerde(rotaId, placaCegonha){
+  const ped = _pedidosDaRota(rotaId, placaCegonha).filter(p => p.status !== 'Cancelado');
+  if (ped.length === 0) return { total:0, verdes:0, todosVerdes:false };
+  const verdes = ped.filter(p => !['Pendente','Intenção Agendada','Aguardando Confirmação'].includes(p.status)).length;
+  return { total: ped.length, verdes, todosVerdes: verdes === ped.length };
+}
+function fechamentoRotaHTML(r){
+  const v = _rotaStatusVerde(r.id, r.placa_cegonha);
+  if (v.total === 0) return '';
+  if (r.carga_fechada) return ` · <span class="tag-fechada">🔒 Carga fechada</span>`;
+  if (v.todosVerdes && (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar())){
+    return ` · <span class="tag-verde-ok">✅ Tudo validado</span> <button class="btn btn-sm btn-primary" onclick="fecharCargaRota(${r.id})">🔒 Fechar e enviar ao motorista</button>`;
+  }
+  return ` · <span class="text-muted">${v.verdes}/${v.total} validado(s)</span>`;
+}
+
+async function fecharCargaRota(rotaId){
+  if (bloquearSeNaoLogistica('o fechamento da carga')) return;
+  const r = (rotasGlobais||[]).find(x => String(x.id) === String(rotaId));
+  if (!r) return;
+  const v = _rotaStatusVerde(r.id, r.placa_cegonha);
+  if (!v.todosVerdes){ alert('Ainda há pedidos não validados nesta rota.'); return; }
+  if (!confirm(`Fechar a carga da rota "${r.nome || '#'+r.id}" e enviar ao motorista da cegonha ${r.placa_cegonha||'—'}?`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error } = await supabase.from('rotas_planejadas')
+      .update({ carga_fechada:true, fechada_em:new Date().toISOString(), fechada_por:usuario })
+      .eq('id', rotaId);
+    if (error) throw error;
+    r.carga_fechada = true;
+    // envia ao motorista (notificação) — ele confere as placas no app
+    try {
+      if (r.placa_cegonha){
+        const ped = _pedidosDaRota(r.id, r.placa_cegonha)[0];
+        if (ped && typeof notificarMotoristaDoPedido === 'function'){
+          await notificarMotoristaDoPedido(ped, {
+            titulo: '🔒 Carga fechada — confira as placas',
+            corpo: `Rota ${r.nome || '#'+r.id} liberada. Confira as placas dos veículos pelo app.`
+          });
+        }
+      }
+    } catch(e){}
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', '🔒 Carga fechada e enviada ao motorista.', 'success');
+  } catch(e){
+    alert('Erro ao fechar carga: ' + (e.message||e));
+  }
+}
+
+// ============================================================
+// LOTE 17 — ITENS 3-4: LAST MILE (fila da Logística) + EQUIPES
+// ============================================================
+// ---- Item 4: cadastro de equipes de entrega ----
+async function salvarEquipeEntrega(){
+  const msgEl = document.getElementById('mensagemEquipe');
+  const nome = document.getElementById('eqNome')?.value.trim();
+  const responsavel = document.getElementById('eqResponsavel')?.value.trim() || null;
+  if (!nome){ msgEl.textContent='Informe o nome da equipe.'; msgEl.className='message show error'; return; }
+  msgEl.textContent='Salvando...'; msgEl.className='message show';
+  try {
+    const { data, error } = await supabase.from('equipes_entrega')
+      .insert({ nome, responsavel, ativo:true }).select();
+    if (error) throw error;
+    if (data && data[0]) equipesEntregaGlobais.push(data[0]);
+    msgEl.textContent='Equipe salva.'; msgEl.className='message show success';
+    document.getElementById('eqNome').value=''; document.getElementById('eqResponsavel').value='';
+    renderizarEquipesEntrega();
+  } catch(e){ msgEl.textContent='Erro: '+(e.message||e); msgEl.className='message show error'; }
+}
+
+function renderizarEquipesEntrega(){
+  const cont = document.getElementById('listaEquipes');
+  if (!cont) return;
+  if (equipesEntregaGlobais.length === 0){ cont.innerHTML='<p class="text-muted">Nenhuma equipe cadastrada.</p>'; return; }
+  cont.innerHTML = equipesEntregaGlobais.map(e => `
+    <div class="corredor-linha">
+      <div class="corredor-info"><strong>${e.nome}</strong>
+        <span class="text-muted">${e.responsavel ? 'Resp.: '+e.responsavel : ''}</span></div>
+      <button class="btn btn-sm btn-secondary" onclick="excluirEquipeEntrega(${e.id})">🗑️ Excluir</button>
+    </div>`).join('');
+}
+
+async function excluirEquipeEntrega(id){
+  if (!confirm('Excluir esta equipe?')) return;
+  try {
+    const { error } = await supabase.from('equipes_entrega').delete().eq('id', id);
+    if (error) throw error;
+    equipesEntregaGlobais = equipesEntregaGlobais.filter(e => e.id !== id);
+    renderizarEquipesEntrega();
+  } catch(e){ alert('Erro ao excluir: '+(e.message||e)); }
+}
+
+// ---- Item 3: fila de last mile (após a viagem principal) ----
+// Entram pedidos "Em Transporte" ainda sem definição de entrega final.
+function _pedidosLastMile(){
+  return (pedidosGlobais||[]).filter(p =>
+    p.status === 'Em Transporte' && !p.fluxoEntrega && p.status !== 'Cancelado');
+}
+
+function renderizarLastMile(){
+  const wrap = document.getElementById('lastMileWrap');
+  if (!wrap) return;
+  const fila = _pedidosLastMile();
+  if (fila.length === 0){ wrap.innerHTML = ''; return; }
+  const opcoesEquipe = (equipesEntregaGlobais||[]).map(e => `<option value="${e.id}">${e.nome}${e.responsavel?' ('+e.responsavel+')':''}</option>`).join('');
+  wrap.innerHTML = `<div class="lastmile-box">
+    <div class="lastmile-titulo">🚚 Last mile — definir entrega final (${fila.length})</div>
+    ${fila.map(p => `
+      <div class="lastmile-linha" id="lm_${p.id}">
+        <span class="lastmile-rota">#${p.id} · ${p.cliente} · → ${p.cidadeDestino}/${p.ufDestino}
+          <span class="text-muted">(entrega: ${p.tipoEntrega === 'estabelecimento' ? 'estabelecimento' : 'pátio'})</span></span>
+        <select class="lm-fluxo" onchange="_lmToggleEquipe(${p.id})" id="lmFluxo_${p.id}">
+          <option value="">Definir…</option>
+          <option value="direta">Entrega direta</option>
+          <option value="equipe">Via equipe local</option>
+        </select>
+        <select class="lm-equipe" id="lmEquipe_${p.id}" style="display:none">
+          <option value="">Selecione a equipe…</option>${opcoesEquipe}
+        </select>
+        <select class="lm-modalidade" id="lmModal_${p.id}">
+          <option value="patio">Pátio</option>
+          <option value="estabelecimento">Estabelecimento</option>
+        </select>
+        <button class="btn btn-sm btn-primary" onclick="definirLastMile(${p.id})">✓ Registrar</button>
+      </div>`).join('')}
+  </div>`;
+  // pré-seleciona a modalidade conforme o tipo de entrega do pedido
+  fila.forEach(p => { const m=document.getElementById('lmModal_'+p.id); if(m) m.value = p.tipoEntrega || 'patio'; });
+}
+
+function _lmToggleEquipe(id){
+  const fluxo = document.getElementById('lmFluxo_'+id)?.value;
+  const selEq = document.getElementById('lmEquipe_'+id);
+  if (selEq) selEq.style.display = (fluxo === 'equipe') ? '' : 'none';
+}
+
+async function definirLastMile(pedidoId){
+  if (bloquearSeNaoLogistica('a definição de entrega')) return;
+  const fluxo = document.getElementById('lmFluxo_'+pedidoId)?.value;
+  const equipeId = document.getElementById('lmEquipe_'+pedidoId)?.value || null;
+  const modalidade = document.getElementById('lmModal_'+pedidoId)?.value || 'patio';
+  if (!fluxo){ alert('Escolha entrega direta ou via equipe.'); return; }
+  if (fluxo === 'equipe' && !equipeId){ alert('Selecione a equipe local.'); return; }
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  const equipe = (equipesEntregaGlobais||[]).find(e => String(e.id) === String(equipeId));
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error: e1 } = await supabase.from('entregas_last_mile').insert({
+      pedido_id: parseInt(pedidoId), fluxo_entrega: fluxo,
+      equipe_id: equipeId ? parseInt(equipeId) : null,
+      responsavel: equipe?.responsavel || null, modalidade,
+      concluida_por: usuario, concluida_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      created_at: new Date().toISOString()
+    });
+    if (e1) throw e1;
+    const { error: e2 } = await supabase.from('pedidos')
+      .update({ fluxo_entrega: fluxo, equipe_entrega_id: equipeId ? parseInt(equipeId) : null })
+      .eq('id', parseInt(pedidoId));
+    if (e2) throw e2;
+    if (p){ p.fluxoEntrega = fluxo; p.equipeEntregaId = equipeId; }
+    renderizarLastMile();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      `🚚 Entrega do #${pedidoId} definida: ${fluxo === 'equipe' ? 'via '+(equipe?.nome||'equipe') : 'direta'} (${modalidade}).`, 'success');
+  } catch(e){ alert('Erro ao registrar entrega: '+(e.message||e)); }
+}
+
+// ============================================================
+// LOTE 18 — ITEM 9: FATURAMENTO NA LOGÍSTICA + EXTRATO DO MOTORISTA
+// ============================================================
+function _fmtBRL(v){
+  return (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+}
+
+// Extrato simplificado: viagens concluídas + faturamento previsto
+function carregarExtratoMotorista(){
+  const resumo = document.getElementById('extratoMotoristaResumo');
+  const lista = document.getElementById('extratoMotoristaLista');
+  if (!lista) return;
+
+  // nomes do motorista logado
+  let nomes = [];
+  if (typeof nomesDoMotoristaLogado === 'function'){
+    try { nomes = (nomesDoMotoristaLogado().nomes || []); } catch(e){}
+  }
+  if (nomes.length === 0){
+    const n = document.getElementById('usuarioLogado')?.textContent; if (n) nomes = [n];
+  }
+  const norm = t => (t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  const alvos = nomes.map(norm).filter(Boolean);
+  const ehDoMotorista = p => {
+    const m1 = norm(p.motorista1 || p.motorista_1);
+    const m2 = norm(p.motorista2 || p.motorista_2);
+    return alvos.includes(m1) || alvos.includes(m2);
+  };
+
+  const meus = (pedidosGlobais||[]).filter(ehDoMotorista);
+  const concluidas = meus.filter(p => p.status === 'Entregue');
+
+  // faturamento previsto: soma do valor_previsto das rotas em que o motorista está
+  // (conta cada rota uma vez), considerando pedidos não entregues/cancelados.
+  const rotaIds = new Set();
+  meus.forEach(p => { if (p.rotaId && !['Entregue','Cancelado'].includes(p.status)) rotaIds.add(String(p.rotaId)); });
+  let previsto = 0;
+  (rotasGlobais||[]).forEach(r => { if (rotaIds.has(String(r.id)) && r.valor_previsto) previsto += Number(r.valor_previsto); });
+
+  if (resumo){
+    resumo.innerHTML = `
+      <div class="extrato-cards">
+        <div class="extrato-card"><span class="extrato-num">${concluidas.length}</span><span class="extrato-rot">viagens concluídas</span></div>
+        <div class="extrato-card"><span class="extrato-num">${_fmtBRL(previsto)}</span><span class="extrato-rot">faturamento previsto</span></div>
+      </div>`;
+  }
+
+  if (concluidas.length === 0){
+    lista.innerHTML = '<p class="text-muted">Nenhuma viagem concluída ainda.</p>';
+    return;
+  }
+  lista.innerHTML = '<h3 class="conf-titulo">Viagens concluídas</h3>' +
+    concluidas.slice(0,30).map(p => `
+      <div class="extrato-linha">
+        <span>#${p.id} · ${p.cidadeOrigem}/${p.ufOrigem} → ${p.cidadeDestino}/${p.ufDestino}</span>
+        <span class="text-muted">${p.cliente || ''}</span>
+        <span class="tag-eta tag-verde">✔ Entregue</span>
+      </div>`).join('');
+}
+
+// ============================================================
+// LOTE 19 — ITEM 18: CONFERÊNCIA / AUDITORIA DE FATURAMENTO
+// Só conferência (não emite). Previsto x emitido por entrada manual.
+// Tela na Logística; leitura na Diretoria; divergência sinalizada.
+// ============================================================
+const _DIVERGENCIA_TOLERANCIA = 0.01;
+
+function _rotasComFaturamento(){
+  return (rotasGlobais||[]).filter(r => r.valor_previsto != null)
+    .sort((a,b) => (b.data_saida||'').localeCompare(a.data_saida||''));
+}
+
+// Painel editável (Logística)
+function renderizarConferenciaFaturamento(){
+  const wrap = document.getElementById('conferenciaFatWrap');
+  if (!wrap) return;
+  const rotas = _rotasComFaturamento();
+  if (rotas.length === 0){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="card">
+    <div class="painel-header-bar"><h2>🧾 Conferência de Faturamento (previsto × emitido)</h2>
+      <button class="btn btn-secondary btn-sm" onclick="renderizarConferenciaFaturamento()">↻ Atualizar</button></div>
+    <p class="text-muted" style="margin:.2rem 0 1rem;font-size:.86rem">
+      Confira antes/depois da emissão externa de NFe/CTe. O sistema só compara e sinaliza — não emite nada.</p>
+    <table class="tabela-conf">
+      <thead><tr><th>Rota</th><th>Previsto</th><th>Emitido (NFe/CTe)</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${rotas.map(r => {
+          const prev = Number(r.valor_previsto)||0;
+          const emit = r.valor_emitido != null ? Number(r.valor_emitido) : null;
+          const div = emit != null && Math.abs(prev - emit) > _DIVERGENCIA_TOLERANCIA;
+          const st = emit == null ? '<span class="text-muted">a conferir</span>'
+                    : div ? `<span class="conf-divergente">⚠️ divergência ${_fmtBRL(emit-prev)}</span>`
+                          : '<span class="conf-ok">✅ confere</span>';
+          return `<tr>
+            <td>${r.nome || '#'+r.id} <span class="text-muted">${r.placa_cegonha||''}</span></td>
+            <td>${_fmtBRL(prev)}</td>
+            <td><input type="number" step="0.01" class="conf-input" id="confEmit_${r.id}" value="${emit!=null?emit:''}" placeholder="0,00"></td>
+            <td>${st}</td>
+            <td><button class="btn btn-sm btn-primary" onclick="salvarConferenciaRota(${r.id})">Salvar</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function salvarConferenciaRota(rotaId){
+  if (bloquearSeNaoLogistica('a conferência de faturamento')) return;
+  const r = (rotasGlobais||[]).find(x => String(x.id) === String(rotaId));
+  if (!r) return;
+  const emit = parseFloat(document.getElementById('confEmit_'+rotaId)?.value);
+  if (isNaN(emit)){ alert('Informe o valor emitido.'); return; }
+  const prev = Number(r.valor_previsto)||0;
+  const div = Math.abs(prev - emit) > _DIVERGENCIA_TOLERANCIA;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error } = await supabase.from('rotas_planejadas').update({
+      valor_emitido: emit, conf_divergencia: div,
+      conferido_por: usuario, conferido_em: new Date().toISOString()
+    }).eq('id', rotaId);
+    if (error) throw error;
+    r.valor_emitido = emit; r.conf_divergencia = div;
+    renderizarConferenciaFaturamento();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      div ? `⚠️ Divergência registrada na rota ${r.nome||'#'+r.id}.` : `✅ Faturamento da rota ${r.nome||'#'+r.id} confere.`,
+      div ? 'error' : 'success');
+  } catch(e){ alert('Erro ao salvar conferência: '+(e.message||e)); }
+}
+
+// Espelho de leitura (Diretoria)
+function renderizarConferenciaDiretoria(){
+  const el = document.getElementById('dirConferenciaFat');
+  if (!el) return;
+  const rotas = _rotasComFaturamento().filter(r => r.valor_emitido != null);
+  const divergentes = rotas.filter(r => r.conf_divergencia);
+  if (rotas.length === 0){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="dir-conf-box ${divergentes.length?'dir-conf-alerta':''}">
+    <strong>🧾 Conferência de faturamento:</strong>
+    ${rotas.length} rota(s) conferida(s) ·
+    ${divergentes.length ? `<span class="conf-divergente">${divergentes.length} com divergência</span>` : '<span class="conf-ok">todas conferem</span>'}
+  </div>`;
 }
