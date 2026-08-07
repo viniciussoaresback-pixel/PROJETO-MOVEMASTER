@@ -196,6 +196,10 @@
                             <span class="perfil-icon">📊</span>
                             <span class="perfil-nome">Diretoria</span>
                         </div>
+                        <div class="perfil-acesso-card" onclick="entrarComoAdmin('manutencao')">
+                            <span class="perfil-icon">🔧</span>
+                            <span class="perfil-nome">Manutenção / Oficina</span>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -222,6 +226,7 @@
                                 <option value="financeiro">Financeiro</option>
                                 <option value="fiscal">Fiscal (CTE)</option>
                                 <option value="diretoria">Diretoria</option>
+                                <option value="manutencao">Manutenção / Oficina</option>
                                 <option value="admin">Administrador</option>
                             </select>
                         </div>
@@ -290,6 +295,7 @@
                     <button class="nav-btn" data-tab="logistica">Gestão Logística</button>
                     <button class="nav-btn" data-tab="faturamento">Faturamento</button>
                     <button class="nav-btn" data-tab="cadastros">Cadastros</button>
+                    <button class="nav-btn" data-tab="manutencao">🔧 Manutenção</button>
                 </nav>
             </div>
         </header>
@@ -318,6 +324,7 @@
                     <div class="dir-bloco">
                         <h3 class="dir-bloco-titulo">🚛 Ocupação da frota</h3>
                         <div id="dirFrota"></div>
+                        <div id="dirConferenciaFat"></div>
                     </div>
                 </div>
 
@@ -334,6 +341,9 @@
             </section>
 
             <section id="comercial" class="tab-content active">
+
+                <div id="reservasAtivasWrap" class="reservas-wrap"></div>
+                <div id="confirmacaoComercialWrap" class="confirmacao-wrap"></div>
 
                 <div class="card" id="cardRotasDisponiveis" style="display:none">
                     <div class="painel-header-bar">
@@ -365,6 +375,25 @@
                                 <div class="form-group">
                                     <label for="dataSolicitacao">Data de Solicitação *</label>
                                     <input type="date" id="dataSolicitacao" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="tipoEntregaPedido">Tipo de entrega</label>
+                                    <select id="tipoEntregaPedido">
+                                        <option value="patio">Pátio</option>
+                                        <option value="estabelecimento">Estabelecimento</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="reserva-check-lbl">
+                                        <input type="checkbox" id="pedidoReserva" onchange="toggleModoReserva()">
+                                        🕒 Salvar como <strong>Reserva</strong> (sem veículos, com timer)
+                                    </label>
+                                    <div id="reservaVagasWrap" style="display:none;margin-top:8px">
+                                        <label for="reservaVagas">Nº de vagas reservadas</label>
+                                        <input type="number" id="reservaVagas" min="1" max="12" value="1">
+                                    </div>
                                 </div>
                             </div>
                             <div class="form-row">
@@ -775,6 +804,10 @@
 
                 <!-- Notificações de coleta -->
                 <div id="notificacoesColeta"></div>
+                <div id="emergenciasLogWrap" class="emergencia-wrap"></div>
+                <div id="sugestoesRotaWrap" class="sugestoes-wrap"></div>
+                <div id="lastMileWrap" class="lastmile-wrap"></div>
+                <div id="conferenciaFatWrap" class="conferencia-fat-wrap"></div>
                 <div id="mensagemLogistica" class="message"></div>
 
                 <!-- ABAS INTERNAS DA LOGÍSTICA — ORDEM DO PASSO A PASSO -->
@@ -1134,7 +1167,125 @@
             </section>
 
             <!-- TAB 4: Faturamento -->
+            <!-- TAB: MANUTENÇÃO / OFICINA (itens 13, 14, 15) -->
+            <section id="manutencao" class="tab-content">
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>🔧 Manutenção &amp; Checklist de Segurança</h2>
+                    </div>
+                    <div id="painelManutencao">
+                        <div class="manut-toolbar">
+                            <div class="manut-toolbar-campo">
+                                <label for="checklistVeiculo">Veículo (frota própria)</label>
+                                <select id="checklistVeiculo" onchange="aoTrocarVeiculoChecklist()"></select>
+                            </div>
+                            <div class="manut-tag-atual" id="checklistTagAtual"></div>
+                        </div>
+
+                        <div id="checklistForm"></div>
+
+                        <div id="mensagemChecklist" class="message"></div>
+
+                        <div class="manut-acoes">
+                            <button type="button" class="btn btn-primary" onclick="salvarChecklist()">💾 Salvar checklist</button>
+                        </div>
+
+                        <div class="manut-epi">
+                            <h3>🦺 Avaliação do Motorista / EPIs</h3>
+                            <div class="manut-toolbar">
+                                <div class="manut-toolbar-campo">
+                                    <label for="epiMotorista">Motorista</label>
+                                    <select id="epiMotorista"></select>
+                                </div>
+                                <div class="manut-toolbar-campo" style="min-width:160px">
+                                    <label for="epiUrgencia">Grau de urgência</label>
+                                    <select id="epiUrgencia">
+                                        <option value="normal">Normal</option>
+                                        <option value="alta">Alta</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="epiForm"></div>
+                            <div id="mensagemEPI" class="message"></div>
+                            <div class="manut-acoes">
+                                <button type="button" class="btn btn-primary" onclick="salvarAvaliacaoEPI()">🦺 Gerar solicitações de reposição</button>
+                            </div>
+                        </div>
+
+                        <div class="manut-agendamento">
+                            <h3>🗓️ Agendamento de Manutenção</h3>
+                            <div class="epi-motorista-form">
+                                <div class="manut-toolbar-campo">
+                                    <label for="agVeiculo">Veículo / Placa</label>
+                                    <select id="agVeiculo"></select>
+                                </div>
+                                <div class="manut-toolbar-campo" style="min-width:210px">
+                                    <label for="agDataHora">Data / hora</label>
+                                    <input type="datetime-local" id="agDataHora">
+                                </div>
+                                <div class="manut-toolbar-campo" style="min-width:150px">
+                                    <label for="agPrazo">Prazo estimado</label>
+                                    <input type="text" id="agPrazo" placeholder="Ex.: 2 dias">
+                                </div>
+                                <div class="manut-toolbar-campo" style="flex:1;min-width:200px">
+                                    <label for="agObs">Observação</label>
+                                    <input type="text" id="agObs" placeholder="Opcional">
+                                </div>
+                            </div>
+                            <div id="mensagemAgendamento" class="message"></div>
+                            <div class="manut-acoes">
+                                <button type="button" class="btn btn-primary" onclick="salvarAgendamentoManutencao()">🗓️ Agendar manutenção</button>
+                            </div>
+                            <div id="listaAgendamentos"><p class="text-muted">Nenhum agendamento carregado.</p></div>
+                        </div>
+
+                        <div class="manut-emergencia">
+                            <h3>🚨 Parada Eventual — Manutenção de Emergência</h3>
+                            <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.86rem">
+                                Registro de corretiva não planejada. Apenas <strong>alerta e histórico</strong> —
+                                o sistema não cancela, aloca nem desaloca. A decisão sobre a carga é tratada entre as áreas.
+                            </p>
+                            <div class="epi-motorista-form">
+                                <div class="manut-toolbar-campo">
+                                    <label for="emgVeiculo">Veículo / Placa</label>
+                                    <select id="emgVeiculo"></select>
+                                </div>
+                                <div class="manut-toolbar-campo" style="flex:1;min-width:220px">
+                                    <label for="emgMotivo">Motivo / descrição do defeito</label>
+                                    <input type="text" id="emgMotivo" placeholder="Ex.: pane elétrica na BR-277">
+                                </div>
+                                <div class="manut-toolbar-campo" style="min-width:210px">
+                                    <label for="emgPrevisao">Previsão de retorno (opcional)</label>
+                                    <input type="datetime-local" id="emgPrevisao">
+                                </div>
+                            </div>
+                            <div id="mensagemEmergencia" class="message"></div>
+                            <div class="manut-acoes">
+                                <button type="button" class="btn btn-danger" onclick="salvarParadaEmergencia()">🚨 Registrar emergência</button>
+                            </div>
+                            <div id="listaEmergenciasManut"><p class="text-muted">Nenhuma emergência ativa.</p></div>
+                        </div>
+
+                        <div class="manut-historico">
+                            <h3>📋 Últimos checklists deste veículo</h3>
+                            <div id="checklistHistorico"><p class="text-muted">Selecione um veículo.</p></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section id="faturamento" class="tab-content">
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>🦺 Solicitações de EPI / Uniforme (Compras)</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarSolicitacoesEPI()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="margin:.3rem 0 1rem">
+                        Pedidos vindos do checklist da manutenção e do autosserviço dos motoristas.
+                        Valide e execute (compra/reembolso/liberação no almoxarifado).
+                    </p>
+                    <div id="listaSolicitacoesEPI"><p class="text-muted">Clique em Atualizar para carregar.</p></div>
+                </div>
                 <div class="card">
                     <div class="painel-header-bar">
                         <h2>💰 Receitas — conferência de recebimentos</h2>
@@ -1227,6 +1378,54 @@
             <!-- TAB 5: Cadastros -->
             <section id="cadastros" class="tab-content">
                 <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>🛣️ Corredores Logísticos (rotas com SLA)</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="carregarCorredores()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="margin:.2rem 0 1rem;font-size:.86rem">
+                        Cadastre o corredor com origem, destino, prazo de trânsito (SLA ponta-a-ponta) e a sequência de paradas.
+                        Isso alimenta o cálculo de ETA e a sugestão automática de rotas.
+                    </p>
+                    <div class="epi-motorista-form">
+                        <div class="manut-toolbar-campo"><label for="corNome">Nome do corredor</label>
+                            <input type="text" id="corNome" placeholder="Ex.: SP → Nordeste"></div>
+                        <div class="manut-toolbar-campo"><label for="corOrigem">Origem</label>
+                            <input type="text" id="corOrigem" placeholder="Cidade de origem"></div>
+                        <div class="manut-toolbar-campo"><label for="corDestino">Destino</label>
+                            <input type="text" id="corDestino" placeholder="Cidade de destino"></div>
+                        <div class="manut-toolbar-campo" style="min-width:140px"><label for="corSla">SLA (horas)</label>
+                            <input type="number" id="corSla" min="1" value="24"></div>
+                    </div>
+                    <div class="manut-toolbar-campo" style="margin-top:8px">
+                        <label for="corParadas">Paradas intermediárias (em ordem, separadas por vírgula)</label>
+                        <input type="text" id="corParadas" placeholder="Ex.: Curitiba, São Paulo, Vitória da Conquista, Recife">
+                    </div>
+                    <div id="mensagemCorredor" class="message"></div>
+                    <div class="manut-acoes">
+                        <button type="button" class="btn btn-primary" onclick="salvarCorredor()">🛣️ Salvar corredor</button>
+                    </div>
+                    <div id="listaCorredores"><p class="text-muted">Nenhum corredor carregado.</p></div>
+                </div>
+
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>🚚 Equipes de Entrega (last mile)</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarEquipesEntrega()">↻ Atualizar</button>
+                    </div>
+                    <div class="epi-motorista-form">
+                        <div class="manut-toolbar-campo"><label for="eqNome">Nome da equipe</label>
+                            <input type="text" id="eqNome" placeholder="Ex.: Equipe Recife"></div>
+                        <div class="manut-toolbar-campo"><label for="eqResponsavel">Responsável</label>
+                            <input type="text" id="eqResponsavel" placeholder="Nome do responsável"></div>
+                    </div>
+                    <div id="mensagemEquipe" class="message"></div>
+                    <div class="manut-acoes">
+                        <button type="button" class="btn btn-primary" onclick="salvarEquipeEntrega()">🚚 Salvar equipe</button>
+                    </div>
+                    <div id="listaEquipes"><p class="text-muted">Nenhuma equipe carregada.</p></div>
+                </div>
+
+                <div class="card" id="cardCadastroClientes">
                     <h2>Cadastro de Clientes</h2>
                     <form id="formCadastroCliente" class="form">
 
@@ -1246,6 +1445,16 @@
                             <div class="form-group">
                                 <label for="nomeCliente" id="labelNomeCliente">Nome *</label>
                                 <input type="text" id="nomeCliente" placeholder="Nome completo ou razão social" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="tipoEntregaPadrao">Tipo de entrega padrão</label>
+                                <select id="tipoEntregaPadrao">
+                                    <option value="patio">Pátio</option>
+                                    <option value="estabelecimento">Estabelecimento</option>
+                                </select>
                             </div>
                         </div>
 
@@ -1485,6 +1694,10 @@
                             <div class="form-group">
                                 <label for="capacidadeCegonha">Capacidade de Vagas *</label>
                                 <input type="number" id="capacidadeCegonha" placeholder="Ex: 4" min="1" required>
+                                <label class="capacidade-excecao-lbl">
+                                    <input type="checkbox" id="capacidadeExcecao" onchange="ajustarTetoCapacidade()">
+                                    Exceção de capacidade (permite acima do teto padrão de 11)
+                                </label>
                             </div>
                         </div>
 
@@ -1624,6 +1837,27 @@
                         <select id="cegonhaDestinoTransbordo">
                             <option value="">Selecione a cegonha...</option>
                         </select>
+                    </div>
+
+                    <!-- Reprogramação de ETA no transbordo (item 17) -->
+                    <div class="form-group" id="grupoReprogTransbordo" style="display:none">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="motivoTransbordo">Motivo do transbordo</label>
+                                <select id="motivoTransbordo">
+                                    <option value="planejado">Planejado</option>
+                                    <option value="emergencia">Emergência / quebra</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="novoEtaTransbordo">Novo ETA final (só se houver atraso)</label>
+                                <input type="datetime-local" id="novoEtaTransbordo">
+                            </div>
+                        </div>
+                        <p class="text-muted text-sm" style="margin:.2rem 0 0">
+                            Deixe o ETA em branco para <strong>preservar</strong> a promessa original.
+                            Preenchendo, o sistema recalcula e avisa o Comercial.
+                        </p>
                     </div>
 
                     <!-- Checklist verificado (entrega e transbordos) -->
