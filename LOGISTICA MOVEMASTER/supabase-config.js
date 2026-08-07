@@ -13,13 +13,14 @@ var perfilLogado = null;   // linha completa da tabela perfis (inclui motorista_
 
 // Mapa de permissões por perfil
 const PERMISSOES = {
-    admin:      ['comercial','orcamento','meusPedidos','painel','logistica','faturamento','cadastros','diretoria'],
+    admin:      ['comercial','orcamento','meusPedidos','painel','logistica','faturamento','cadastros','diretoria','manutencao'],
     comercial:  ['comercial','orcamento','meusPedidos','painel','cadastros'],
-    logistica:  ['painel','logistica'],
+    logistica:  ['painel','logistica','comercial','cadastros'],
     financeiro: ['faturamento'],
     motorista:  ['motorista'],
     fiscal:     ['fiscal'],
-    diretoria:  ['diretoria']
+    diretoria:  ['diretoria'],
+    manutencao: ['manutencao']
 };
 
 const NOMES_PERFIL = {
@@ -29,7 +30,8 @@ const NOMES_PERFIL = {
     motorista:  'Motorista',
     financeiro: 'Financeiro',
     fiscal:     'Fiscal (CTE)',
-    diretoria:  'Diretoria'
+    diretoria:  'Diretoria',
+    manutencao: 'Manutenção / Oficina'
 };
 
 const CORES_PERFIL = {
@@ -39,7 +41,8 @@ const CORES_PERFIL = {
     motorista:  'badge-motorista',
     financeiro: 'badge-financeiro',
     fiscal:     'badge-fiscal',
-    diretoria:  'badge-diretoria'
+    diretoria:  'badge-diretoria',
+    manutencao: 'badge-manutencao'
 };
 
 function inicializarSupabase() {
@@ -442,6 +445,16 @@ function aplicarPermissoes(perfil) {
         }
     });
 
+    // Reordena os botões visíveis conforme a ordem definida em PERMISSOES
+    abas.forEach(tab => {
+        const btn = document.querySelector(`.nav-btn[data-tab="${tab}"]`);
+        if (btn && btn.parentNode) btn.parentNode.appendChild(btn);
+    });
+
+    // Card de Cadastro de Clientes: visível para todos os perfis que têm a aba Cadastros
+    const cardCli = document.getElementById('cardCadastroClientes');
+    if (cardCli) cardCli.style.display = '';
+
     // Ativar primeira aba permitida
     document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -459,6 +472,8 @@ function aplicarPermissoes(perfil) {
             if (primeiraAba === 'diretoria' && typeof renderizarDiretoria === 'function') renderizarDiretoria();
             if (primeiraAba === 'painel'    && typeof carregarPainel === 'function')      carregarPainel();
             if (primeiraAba === 'logistica' && typeof carregarLogistica === 'function')   carregarLogistica();
+            if (primeiraAba === 'manutencao' && typeof carregarManutencao === 'function') carregarManutencao();
+            if (primeiraAba === 'faturamento' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
         }, 600);
     }
 
@@ -521,8 +536,49 @@ function mostrarTelaMotorista() {
                         <p>Envie a foto da placa para confirmar a coleta</p>
                         <button class="btn btn-primary">Enviar Foto</button>
                     </div>
+                    <div class="motorista-acao-card" onclick="abrirSolicitacaoEPI()">
+                        <span class="motorista-icon">🦺</span>
+                        <h3>Solicitar EPI / Uniforme</h3>
+                        <p>Peça reposição de item desgastado ou novo insumo</p>
+                        <button class="btn btn-primary">Solicitar</button>
+                    </div>
                 </div>
                 <div class="message" id="mensagemMotorista"></div>
+            </div>
+            <div class="card" id="cardExtratoMotorista">
+                <div class="painel-header-bar">
+                    <h2>📄 Meu extrato</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="carregarExtratoMotorista()">↻ Atualizar</button>
+                </div>
+                <div id="extratoMotoristaResumo" class="extrato-resumo"></div>
+                <div id="extratoMotoristaLista"><p class="text-muted">Carregando…</p></div>
+            </div>
+            <div class="card" id="cardSolicitacaoEPI" style="display:none">
+                <h2>🦺 Solicitar EPI / Uniforme</h2>
+                <div class="epi-motorista-form">
+                    <div class="manut-toolbar-campo">
+                        <label for="epiMotItem">Item</label>
+                        <select id="epiMotItem"></select>
+                    </div>
+                    <div class="manut-toolbar-campo">
+                        <label for="epiMotTamanho">Tamanho / especificação</label>
+                        <input type="text" id="epiMotTamanho" placeholder="Ex.: G, 42, manga longa...">
+                    </div>
+                    <div class="manut-toolbar-campo" style="min-width:150px">
+                        <label for="epiMotUrgencia">Urgência</label>
+                        <select id="epiMotUrgencia">
+                            <option value="normal">Normal</option>
+                            <option value="alta">Alta</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="message" id="mensagemEPIMotorista"></div>
+                <div class="manut-acoes">
+                    <button class="btn btn-primary" onclick="enviarSolicitacaoEPIMotorista()">Enviar solicitação</button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('cardSolicitacaoEPI').style.display='none'">Fechar</button>
+                </div>
+                <h3 style="margin-top:1.2rem">Minhas solicitações</h3>
+                <div id="listaMinhasEPI"><p class="text-muted">Carregando...</p></div>
             </div>
             <div class="card">
                 <h2>Meus Pedidos</h2>
@@ -532,6 +588,7 @@ function mostrarTelaMotorista() {
             </div>`;
         // Carregar pedidos do motorista
         setTimeout(() => carregarPedidosMotorista(), 300);
+        setTimeout(() => { if (typeof carregarExtratoMotorista === 'function') carregarExtratoMotorista(); }, 700);
         // Importante: existem 2 ".main-content" (telaAdmin e appPrincipal).
         // A tela do motorista precisa ir no main do appPrincipal, que é o visível.
         document.querySelector('#appPrincipal .main-content')?.appendChild(sec);
