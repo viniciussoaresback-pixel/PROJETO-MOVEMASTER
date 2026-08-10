@@ -338,6 +338,21 @@
                         <div id="dirRotas"></div>
                     </div>
                 </div>
+
+                <div class="dir-colunas">
+                    <div class="dir-bloco">
+                        <div class="dir-bloco-titulo-row">
+                            <h3 class="dir-bloco-titulo">🧑‍💼 Pedidos por responsável comercial</h3>
+                            <select id="dirComPeriodo" onchange="renderComerciais()">
+                                <option value="mes">Mês atual</option>
+                                <option value="mespassado">Mês passado</option>
+                                <option value="ano">Ano atual</option>
+                                <option value="tudo">Tudo</option>
+                            </select>
+                        </div>
+                        <div id="dirComerciais"></div>
+                    </div>
+                </div>
             </section>
 
             <section id="comercial" class="tab-content active">
@@ -508,7 +523,12 @@
                                 </div>
                                 <div class="form-group">
                                     <label for="responsavelComercial">Responsável Comercial *</label>
-                                    <input type="text" id="responsavelComercial" placeholder="Seu nome" required>
+                                    <select id="responsavelComercial" onchange="_toggleRespComOutro()" required>
+                                        <option value="">Selecione…</option>
+                                        <option value="__outro__">➕ Outro (digitar)</option>
+                                    </select>
+                                    <input type="text" id="responsavelComercialOutro" placeholder="Nome do responsável" style="display:none;margin-top:6px">
+                                    <input type="hidden" id="responsavelComercialLegacy" value="">
                                 </div>
                             </div>
                             <div class="form-row">
@@ -2056,6 +2076,44 @@
             };
         }
 
+        // ============================================================
+        // Detecção AUTOMÁTICA de novo deploy (não depende de mudar o SW)
+        // Compara a "assinatura" do script.js publicado; se mudou, avisa.
+        // ============================================================
+        (function () {
+            var assinaturaInicial = null;
+            var ARQUIVOS = ['script.js', 'styles.css', 'index.html'];
+            function pegarAssinatura() {
+                return Promise.all(ARQUIVOS.map(function (a) {
+                    return fetch(a, { method: 'HEAD', cache: 'no-store' })
+                        .then(function (r) { return r.headers.get('etag') || r.headers.get('last-modified') || ''; })
+                        .catch(function () { return ''; });
+                })).then(function (partes) { return partes.join('|'); });
+            }
+            function avisarNovoDeploy() {
+                var telaLogin = document.getElementById('telaLogin');
+                if (telaLogin && telaLogin.style.display !== 'none') { location.reload(); return; }
+                if (document.querySelector('.aviso-nova-versao')) return;
+                var aviso = document.createElement('div');
+                aviso.className = 'aviso-nova-versao';
+                aviso.innerHTML = '<span>✨ Nova versão disponível</span><button class="btn-atualizar-app">Atualizar</button>';
+                document.body.appendChild(aviso);
+                aviso.querySelector('.btn-atualizar-app').onclick = function () { location.reload(); };
+            }
+            function checar() {
+                pegarAssinatura().then(function (sig) {
+                    if (!sig) return;
+                    if (assinaturaInicial === null) { assinaturaInicial = sig; return; }
+                    if (sig !== assinaturaInicial) avisarNovoDeploy();
+                });
+            }
+            window.addEventListener('load', function () {
+                pegarAssinatura().then(function (sig) { assinaturaInicial = sig; });
+                setInterval(checar, 120000); // a cada 2 minutos
+                document.addEventListener('visibilitychange', function () { if (!document.hidden) checar(); });
+            });
+        })();
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
@@ -2125,16 +2183,24 @@
             }
         });
 
-        // Android/Chrome: botão nativo de instalar
+        // Android/Chrome: botão nativo de instalar (discreto, no canto)
         window.addEventListener('beforeinstallprompt', function (e) {
             e.preventDefault();
+            try { if (localStorage.getItem('mm_btn_instalar') === 'off') return; } catch (x) {}
             var botao = document.createElement('button');
             botao.className = 'btn-instalar-pwa';
-            botao.textContent = '📲 Instalar aplicativo';
+            botao.textContent = '📲 Instalar app';
+            botao.title = 'Clique para instalar · clique com o botão direito para dispensar';
             document.body.appendChild(botao);
             botao.onclick = function () {
                 botao.remove();
                 e.prompt();
+            };
+            // dispensar sem instalar (botão direito / toque longo)
+            botao.oncontextmenu = function (ev) {
+                ev.preventDefault();
+                botao.remove();
+                try { localStorage.setItem('mm_btn_instalar', 'off'); } catch (x) {}
             };
         });
     })();
