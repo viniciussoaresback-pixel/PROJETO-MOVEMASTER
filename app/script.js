@@ -454,7 +454,7 @@ function adicionarVeiculoExtra() {
                 <label>Valor Frete (R$)</label>
                 <div class="input-moeda-wrap">
                     <span class="input-moeda-prefixo">R$</span>
-                    <input type="text" class="veiculo-extra-valor" placeholder="Igual ao 1º" oninput="mascaraMoeda(this)">
+                    <input type="text" class="veiculo-extra-valor" placeholder="Igual ao 1º" oninput="mascaraMoeda(this); atualizarPreviewFrete()">
                 </div>
             </div>
         </div>
@@ -470,12 +470,14 @@ function adicionarVeiculoExtra() {
         </div>
     `;
     container.appendChild(div);
+    if (typeof atualizarPreviewFrete === "function") atualizarPreviewFrete();
     div.querySelector('.veiculo-extra-modelo').focus();
 }
 
 function removerVeiculoExtra(idx) {
     const div = document.getElementById(`veiculoExtra_${idx}`);
     if (div) div.remove();
+    if (typeof atualizarPreviewFrete === 'function') atualizarPreviewFrete();
 }
 
 function limparVeiculosExtras() {
@@ -593,24 +595,41 @@ async function salvarPedidoComercial(event) {
                 status: 'Pendente'
             };
 
+            // ===== Cálculo do frete conforme o tipo (por carro x frete cheio) =====
+            const _freteTipo = document.getElementById('freteTipo')?.value || 'cheio';
+            const _valorBase = Number(dadosParaSalvar.valor_frete) || 0;
+            const _qtdCarros = 1 + veiculosExtras.length;
+            let _valoresCarro; // valor de frete de cada carro (índice 0 = principal)
+            if (_freteTipo === 'cheio') {
+                // "frete cheio" = total da carga; divide entre os carros (total é a verdade)
+                const base = Math.floor((_valorBase / _qtdCarros) * 100) / 100;
+                _valoresCarro = Array(_qtdCarros).fill(base);
+                const resto = Math.round((_valorBase - base * _qtdCarros) * 100) / 100;
+                _valoresCarro[_qtdCarros - 1] = Math.round((base + resto) * 100) / 100; // última linha absorve o centavo
+            } else {
+                // "por carro" = valor unitário; cada carro usa o seu (ou o principal)
+                _valoresCarro = [_valorBase];
+                veiculosExtras.forEach(v => _valoresCarro.push(v.valorFrete !== null ? v.valorFrete : _valorBase));
+            }
+
             // Monta 1 pedido por veículo; se houver mais de 1, vincula por grupo_id
             let linhasParaInserir;
             if (veiculosExtras.length > 0) {
                 const grupoId = gerarGrupoId();
                 linhasParaInserir = [
-                    { ...dadosParaSalvar, grupo_id: grupoId },
-                    ...veiculosExtras.map(v => ({
+                    { ...dadosParaSalvar, valor_frete: _valoresCarro[0], grupo_id: grupoId },
+                    ...veiculosExtras.map((v, i) => ({
                         ...dadosParaSalvar,
                         modelo: v.modelo,
                         placa: v.placa,
-                        valor_frete: v.valorFrete !== null ? v.valorFrete : dadosParaSalvar.valor_frete,
+                        valor_frete: _valoresCarro[i + 1],
                         endereco_coleta:  v.enderecoColeta  || dadosParaSalvar.endereco_coleta,
                         endereco_entrega: v.enderecoEntrega || dadosParaSalvar.endereco_entrega,
                         grupo_id: grupoId
                     }))
                 ];
             } else {
-                linhasParaInserir = [dadosParaSalvar];
+                linhasParaInserir = [{ ...dadosParaSalvar, valor_frete: _valoresCarro[0] }];
             }
 
             const { error } = await supabase.from('pedidos').insert(linhasParaInserir);
@@ -8820,7 +8839,10 @@ async function montarSnapshotEspelho(pedidos) {
             cidadeOrigem: p.cidadeOrigem || '', ufOrigem: p.ufOrigem || '',
             cidadeDestino: p.cidadeDestino || '', ufDestino: p.ufDestino || '',
             enderecoColeta: p.enderecoColeta || '',
+            cnpjColeta: p.cnpjColeta || null,
             enderecoEntrega: p.enderecoEntrega || '',
+            cnpjEntrega: p.cnpjEntrega || null,
+            freteTipo: p.freteTipo || 'cheio',
             valorFrete: parseFloat(p.valorFrete) || 0
         };
     });
@@ -9011,9 +9033,9 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
             </td>
             <td>${p.modelo || '—'}<br><small style="color:#666">${p.placa || '—'}</small>${p.referencia ? `<br><small style="color:#f97316;font-weight:700">🔖 ${p.referencia}</small>` : ''}</td>
             <td style="font-size:0.82rem">${rota}</td>
-            <td style="font-size:0.82rem">${p.enderecoColeta || '—'}</td>
-            <td style="font-size:0.82rem">${p.enderecoEntrega || '—'}</td>
-            <td class="right"><strong>R$ ${valor}</strong></td>
+            <td style="font-size:0.82rem">${p.enderecoColeta || '—'}${p.cnpjColeta ? `<br><small style="color:#666">CNPJ: ${p.cnpjColeta}</small>` : ''}</td>
+            <td style="font-size:0.82rem">${p.enderecoEntrega || '—'}${p.cnpjEntrega ? `<br><small style="color:#666">CNPJ: ${p.cnpjEntrega}</small>` : ''}</td>
+            <td class="right"><strong>R$ ${valor}</strong><br><small style="color:#666">${p.freteTipo === 'carro' ? 'valor por carro' : 'parcela da carga'}</small></td>
         </tr>`;
     }).join('');
 
@@ -10865,4 +10887,114 @@ function mascaraCNPJcampo(input){
        .replace(/\.(\d{3})(\d)/, '.$1/$2')
        .replace(/(\d{4})(\d)/, '$1-$2');
   input.value = v;
+}
+
+// ============================================================
+// Autopreenchimento por CNPJ — API pública cnpj.ws
+// (gratuita, ~3 consultas/min por IP; sem token)
+// ============================================================
+async function consultarCNPJ(cnpjBruto){
+  const cnpj = (cnpjBruto || '').replace(/\D/g, '');
+  if (cnpj.length !== 14) return null;
+  const resp = await fetch('https://publica.cnpj.ws/cnpj/' + cnpj, { headers: { 'Accept': 'application/json' } });
+  if (!resp.ok) {
+    if (resp.status === 429) throw new Error('Muitas consultas seguidas — aguarde 1 minuto e tente de novo.');
+    if (resp.status === 404) throw new Error('CNPJ não encontrado.');
+    throw new Error('Não foi possível consultar o CNPJ agora.');
+  }
+  const d = await resp.json();
+  const est = d.estabelecimento || {};
+  return {
+    razaoSocial: d.razao_social || est.nome_fantasia || '',
+    logradouro: [est.tipo_logradouro, est.logradouro].filter(Boolean).join(' ').trim(),
+    numero: est.numero || '',
+    complemento: est.complemento || '',
+    bairro: est.bairro || '',
+    cidade: (est.cidade && est.cidade.nome) || '',
+    uf: (est.estado && est.estado.sigla) || '',
+    cep: est.cep || '',
+    email: est.email || '',
+    telefone: (est.ddd1 && est.telefone1) ? `(${est.ddd1}) ${est.telefone1}` : ''
+  };
+}
+function _setVal(id, val){ const el = document.getElementById(id); if (el && val) el.value = val; }
+function _fmtCEP(c){ const v=(c||'').replace(/\D/g,''); return v.length===8 ? v.replace(/(\d{5})(\d{3})/, '$1-$2') : (c||''); }
+
+// 1) Cadastro de cliente
+async function autoPreencherCNPJCliente(){
+  const bruto = document.getElementById('cnpjCliente')?.value || '';
+  if (bruto.replace(/\D/g,'').length !== 14) return;
+  if (typeof mostrarProcessando === 'function') mostrarProcessando();
+  try {
+    const dados = await consultarCNPJ(bruto);
+    if (!dados) return;
+    _setVal('nomeCliente', dados.razaoSocial);
+    _setVal('enderecoCliente', dados.logradouro);
+    _setVal('numeroCliente', dados.numero);
+    _setVal('bairroCliente', dados.bairro);
+    _setVal('cidadeCliente', dados.cidade);
+    _setVal('ufCliente', dados.uf);
+    _setVal('cepCliente', _fmtCEP(dados.cep));
+    if (!document.getElementById('emailCliente')?.value) _setVal('emailCliente', dados.email);
+    if (!document.getElementById('telefoneCliente')?.value) _setVal('telefoneCliente', dados.telefone);
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemCadastroCliente', '✅ Dados preenchidos pelo CNPJ. Confira e ajuste se precisar.', 'success');
+  } catch(e){
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemCadastroCliente', '⚠️ ' + (e.message || 'Falha ao consultar CNPJ') + ' Preencha manualmente.', 'error');
+  } finally {
+    if (typeof ocultarProcessando === 'function') ocultarProcessando();
+  }
+}
+
+// 2) CNPJ de coleta/entrega no lançamento comercial
+async function autoPreencherCNPJLocal(qual){ // qual = 'Coleta' | 'Entrega'
+  const bruto = document.getElementById('cnpj' + qual)?.value || '';
+  if (bruto.replace(/\D/g,'').length !== 14) return;
+  if (typeof mostrarProcessando === 'function') mostrarProcessando();
+  try {
+    const dados = await consultarCNPJ(bruto);
+    if (!dados) return;
+    const endereco = [dados.logradouro, dados.numero, dados.bairro].filter(Boolean).join(', ');
+    _setVal('endereco' + qual, endereco);
+    _setVal('cep' + qual, _fmtCEP(dados.cep));
+    if (qual === 'Coleta'){ _setVal('cidadeOrigem', dados.cidade); _setVal('ufOrigem', dados.uf); }
+    else { _setVal('cidadeDestino', dados.cidade); _setVal('ufDestino', dados.uf); }
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemComercial', `✅ Endereço de ${qual.toLowerCase()} preenchido pelo CNPJ.`, 'success');
+  } catch(e){
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemComercial', '⚠️ ' + (e.message || 'Falha ao consultar CNPJ') + ' Preencha manualmente.', 'error');
+  } finally {
+    if (typeof ocultarProcessando === 'function') ocultarProcessando();
+  }
+}
+
+// ============================================================
+// Preview ao vivo do cálculo de frete (por carro x cheio)
+// ============================================================
+function atualizarPreviewFrete(){
+  const el = document.getElementById('fretePreview');
+  if (!el) return;
+  const tipo = document.getElementById('freteTipo')?.value || 'cheio';
+  const valorBase = valorMoedaParaFloat(document.getElementById('valorFrete')?.value || '');
+  const linhasExtra = Array.from(document.querySelectorAll('.veiculo-extra-row'));
+  const qtd = 1 + linhasExtra.length;
+  const money = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
+  if (!valorBase || valorBase <= 0){ el.innerHTML = ''; return; }
+
+  if (tipo === 'cheio'){
+    const porCarro = valorBase / qtd;
+    el.innerHTML = `🧮 Frete cheio: <strong>${money(valorBase)}</strong> ÷ ${qtd} carro(s) = <strong>${money(porCarro)}</strong> por carro`;
+  } else {
+    // por carro: soma o valor de cada carro (principal + extras, cada um o seu ou o principal)
+    let total = valorBase;
+    let todosIguais = true;
+    linhasExtra.forEach(l => {
+      const s = l.querySelector('.veiculo-extra-valor')?.value.trim();
+      const v = s ? valorMoedaParaFloat(s) : valorBase;
+      total += v;
+      if (v !== valorBase) todosIguais = false;
+    });
+    el.innerHTML = todosIguais
+      ? `🧮 Por carro: <strong>${money(valorBase)}</strong> × ${qtd} carro(s) = <strong>${money(total)}</strong> no total`
+      : `🧮 Por carro (valores diferentes): total da carga = <strong>${money(total)}</strong>`;
+  }
 }
