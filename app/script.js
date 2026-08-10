@@ -3146,6 +3146,7 @@ function abrirEdicaoCliente(clienteId) {
         `<option value="${v}" ${c.tipo_cliente === v ? 'selected' : ''}>${l}</option>`).join('');
 
     const ehPJ = ['empresa','concessionaria','locadora'].includes(c.tipo_cliente);
+    const ehPF = ['garagista','particular'].includes(c.tipo_cliente);
 
     const modal = document.createElement('div');
     modal.id = 'modalEdicaoCliente';
@@ -3167,9 +3168,9 @@ function abrirEdicaoCliente(clienteId) {
             </div>
 
             <div class="form-row">
-                <div class="form-group" id="edGrupoCnpj" style="display:${ehPJ ? '' : 'none'}">
+                <div class="form-group" id="edGrupoCnpj" style="display:${(ehPJ || ehPF) ? '' : 'none'}">
                     <label>CNPJ</label>
-                    <input type="text" id="edCliCnpj" value="${c.cnpj||''}" maxlength="18" oninput="mascaraCNPJ(this)">
+                    <input type="text" id="edCliCnpj" value="${c.cnpj||''}" maxlength="18" oninput="mascaraCNPJ(this)" onblur="autoPreencherCNPJEdicao()">
                 </div>
                 <div class="form-group" id="edGrupoCpf" style="display:${ehPJ ? 'none' : ''}">
                     <label>CPF</label>
@@ -3248,8 +3249,9 @@ function abrirEdicaoCliente(clienteId) {
 
 function ajustarEdicaoCliente(tipo) {
     const ehPJ = ['empresa','concessionaria','locadora'].includes(tipo);
+    const ehPF = ['garagista','particular'].includes(tipo);
     const set = (id, mostrar) => { const el = document.getElementById(id); if (el) el.style.display = mostrar ? '' : 'none'; };
-    set('edGrupoCnpj', ehPJ);
+    set('edGrupoCnpj', ehPJ || ehPF);   // garagista/particular também podem ter CNPJ
     set('edGrupoIE', ehPJ);
     set('edGrupoCpf', !ehPJ);
 }
@@ -3265,11 +3267,12 @@ async function salvarEdicaoCliente(clienteId) {
 
     const tipo = document.getElementById('edCliTipo').value;
     const ehPJ = ['empresa','concessionaria','locadora'].includes(tipo);
+    const ehPF = ['garagista','particular'].includes(tipo);
 
     const dados = {
         nome,
         tipo_cliente: tipo,
-        cnpj: ehPJ ? (document.getElementById('edCliCnpj').value.trim() || null) : null,
+        cnpj: (ehPJ || ehPF) ? (document.getElementById('edCliCnpj').value.trim() || null) : null,
         cpf:  ehPJ ? null : (document.getElementById('edCliCpf').value.trim() || null),
         inscricao_estadual: ehPJ ? (document.getElementById('edCliIE').value.trim() || null) : null,
         telefone: document.getElementById('edCliTelefone').value.trim() || null,
@@ -10996,5 +10999,32 @@ function atualizarPreviewFrete(){
     el.innerHTML = todosIguais
       ? `🧮 Por carro: <strong>${money(valorBase)}</strong> × ${qtd} carro(s) = <strong>${money(total)}</strong> no total`
       : `🧮 Por carro (valores diferentes): total da carga = <strong>${money(total)}</strong>`;
+  }
+}
+
+// Autopreenchimento por CNPJ no modal de EDIÇÃO de cliente
+async function autoPreencherCNPJEdicao(){
+  const bruto = document.getElementById('edCliCnpj')?.value || '';
+  if (bruto.replace(/\D/g,'').length !== 14) return;
+  if (typeof mostrarProcessando === 'function') mostrarProcessando();
+  try {
+    const dados = await consultarCNPJ(bruto);
+    if (!dados) return;
+    _setVal('edCliNome', dados.razaoSocial);
+    _setVal('edCliEndereco', dados.logradouro);
+    _setVal('edCliNumero', dados.numero);
+    _setVal('edCliBairro', dados.bairro);
+    _setVal('edCliCidade', dados.cidade);
+    _setVal('edCliUf', dados.uf);
+    _setVal('edCliCep', _fmtCEP(dados.cep));
+    if (!document.getElementById('edCliEmail')?.value) _setVal('edCliEmail', dados.email);
+    if (!document.getElementById('edCliTelefone')?.value) _setVal('edCliTelefone', dados.telefone);
+    const msg = document.getElementById('mensagemEdicaoCliente');
+    if (msg){ msg.textContent = '✅ Dados atualizados pelo CNPJ. Confira e salve.'; msg.className = 'message show success'; }
+  } catch(e){
+    const msg = document.getElementById('mensagemEdicaoCliente');
+    if (msg){ msg.textContent = '⚠️ ' + (e.message || 'Falha ao consultar CNPJ'); msg.className = 'message show error'; }
+  } finally {
+    if (typeof ocultarProcessando === 'function') ocultarProcessando();
   }
 }
