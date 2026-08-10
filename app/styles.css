@@ -8228,3 +8228,78 @@ input:focus, select:focus, textarea:focus {
     animation: mm-spin .7s linear infinite;
 }
 @keyframes mm-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   AJUSTES DO TEMA CLARO — componentes dos novos módulos
+   (garante contraste/legibilidade no fundo branco)
+   ============================================================ */
+/* Botões */
+[data-tema="claro"] .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+[data-tema="claro"] .btn-danger:hover { filter: brightness(.92); background: var(--danger); }
+[data-tema="claro"] .btn-reverter { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
+
+/* Inputs e selects dos novos formulários */
+[data-tema="claro"] .manut-toolbar-campo select,
+[data-tema="claro"] .manut-toolbar-campo input,
+[data-tema="claro"] .epi-motorista-form input,
+[data-tema="claro"] .epi-motorista-form select,
+[data-tema="claro"] .epi-tamanho,
+[data-tema="claro"] .conf-input,
+[data-tema="claro"] .lastmile-linha select,
+[data-tema="claro"] .dir-bloco-titulo-row select,
+[data-tema="claro"] .manut-agendamento input,
+[data-tema="claro"] .manut-emergencia input {
+    background: var(--surface-1); color: var(--text-primary); border-color: var(--border);
+}
+
+/* Sub-abas de Cadastros */
+[data-tema="claro"] .cad-subtab-btn { background: var(--surface-1); border-color: var(--border); color: var(--text-secondary); }
+[data-tema="claro"] .cad-subtab-btn:hover { background: var(--surface-2); }
+[data-tema="claro"] .cad-subtab-btn.ativo { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Linhas/cards que usavam fundo translúcido claro (some no branco) */
+[data-tema="claro"] .checklist-bloco,
+[data-tema="claro"] .checklist-linha,
+[data-tema="claro"] .checklist-hist-linha,
+[data-tema="claro"] .corredor-linha,
+[data-tema="claro"] .reserva-linha,
+[data-tema="claro"] .confirma-linha,
+[data-tema="claro"] .lastmile-linha,
+[data-tema="claro"] .extrato-linha,
+[data-tema="claro"] .sugestao-card,
+[data-tema="claro"] .sug-pedido {
+    background: var(--surface-1); border-color: var(--border);
+}
+[data-tema="claro"] .checklist-linha { border-top-color: var(--border-soft); }
+[data-tema="claro"] .checklist-opcoes .opt { border-color: var(--border); }
+
+/* Tabelas dos novos painéis */
+[data-tema="claro"] .tabela-epi th, [data-tema="claro"] .tabela-epi td,
+[data-tema="claro"] .tabela-conf th, [data-tema="claro"] .tabela-conf td { border-bottom-color: var(--border-soft); }
+
+/* Extrato do motorista */
+[data-tema="claro"] .extrato-card { background: var(--success-soft); border-color: var(--success); }
+[data-tema="claro"] .extrato-num { color: var(--success); }
+
+/* Caixas de destaque — usar tints do tema claro */
+[data-tema="claro"] .reservas-box,
+[data-tema="claro"] .sugestoes-box { background: var(--accent-soft); border-color: var(--accent); }
+[data-tema="claro"] .confirmacao-box { background: var(--warning-soft); border-color: var(--warning); }
+[data-tema="claro"] .emergencia-banner,
+[data-tema="claro"] .emergencia-linha { background: var(--danger-soft); border-color: var(--danger); }
+[data-tema="claro"] .lastmile-box,
+[data-tema="claro"] .dir-conf-box { background: var(--success-soft); border-color: var(--success); }
+[data-tema="claro"] .dir-conf-box.dir-conf-alerta { background: var(--danger-soft); border-color: var(--danger); }
+
+/* Títulos/realces legíveis no claro */
+[data-tema="claro"] .reservas-titulo,
+[data-tema="claro"] .sugestoes-titulo,
+[data-tema="claro"] .corredor-seq,
+[data-tema="claro"] .reserva-timer,
+[data-tema="claro"] .sug-parada-ativa { color: var(--accent-hover); }
+[data-tema="claro"] .confirmacao-titulo { color: var(--warning); }
+[data-tema="claro"] .emergencia-banner-titulo,
+[data-tema="claro"] .emergencia-badge,
+[data-tema="claro"] .confirma-urgente { color: var(--danger); }
+[data-tema="claro"] .lastmile-titulo { color: var(--success); }
+[data-tema="claro"] .status-origem-inline { background: var(--surface-2); color: var(--text-secondary); }
