@@ -5264,20 +5264,23 @@ select optgroup {
 
 .btn-instalar-pwa {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 1rem;
+    right: 0.9rem;
+    bottom: 0.9rem;
     z-index: 9000;
-    background: var(--orange, #ff6a00);
-    color: #12120f;
-    border: none;
-    border-radius: 24px;
-    padding: 0.75rem 1.4rem;
-    font-size: 0.9rem;
-    font-weight: 800;
+    background: rgba(255, 106, 0, 0.12);
+    color: var(--orange, #ff6a00);
+    border: 1px solid rgba(255, 106, 0, 0.35);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(255, 106, 0, 0.4);
+    opacity: 0.7;
+    backdrop-filter: blur(4px);
+    box-shadow: none;
+    transition: opacity .2s;
 }
+.btn-instalar-pwa:hover { opacity: 1; }
 
 /* Respeita a área da barra de status/gestos quando instalado */
 @media (display-mode: standalone) {
@@ -8192,3 +8195,36 @@ input:focus, select:focus, textarea:focus {
 
 /* Carimbo de origem do lançamento */
 .status-origem-inline { font-size: .8rem; opacity: .85; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.06); }
+
+/* Sub-abas de Cadastros */
+.cad-subtabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.cad-subtab-btn {
+    padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: .9rem;
+    background: rgba(255,255,255,.05); color: inherit; border: 1px solid rgba(255,255,255,.12);
+}
+.cad-subtab-btn:hover { background: rgba(255,255,255,.1); }
+.cad-subtab-btn.ativo { background: #2563eb; color: #fff; border-color: #2563eb; font-weight: 600; }
+
+/* Cabeçalho do bloco da diretoria com seletor */
+.dir-bloco-titulo-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.dir-bloco-titulo-row select {
+    padding: 5px 10px; border-radius: 8px; font-size: .82rem;
+    background: rgba(255,255,255,.05); color: inherit; border: 1px solid rgba(255,255,255,.14);
+}
+
+/* Indicador global de processamento */
+#mm-processando {
+    position: fixed; top: 14px; right: 14px; z-index: 99999;
+    display: none; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px; font-size: .82rem; font-weight: 600;
+    background: rgba(20,20,25,.92); color: #e5e7eb;
+    border: 1px solid rgba(255,255,255,.14); box-shadow: 0 6px 20px rgba(0,0,0,.35);
+    backdrop-filter: blur(6px);
+}
+#mm-processando.ativo { display: flex; }
+.mm-proc-spin {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.25); border-top-color: #ff6a00;
+    animation: mm-spin .7s linear infinite;
+}
+@keyframes mm-spin { to { transform: rotate(360deg); } }
