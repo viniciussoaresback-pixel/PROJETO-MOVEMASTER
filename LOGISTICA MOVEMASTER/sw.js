@@ -1,14 +1,14 @@
 /* =====================================================================
-   MOVEMASTER — Service Worker
-   Estratégia: REDE PRIMEIRO, cache só como reserva.
-   Isso garante que o motorista sempre receba a versão mais nova do
+   MOVEMASTER ï¿½ Service Worker
+   Estratï¿½gia: REDE PRIMEIRO, cache sï¿½ como reserva.
+   Isso garante que o motorista sempre receba a versï¿½o mais nova do
    sistema quando tiver sinal, e ainda consiga abrir o app sem internet.
 
-   IMPORTANTE: nada do Supabase é armazenado em cache — dados de carga,
+   IMPORTANTE: nada do Supabase ï¿½ armazenado em cache ï¿½ dados de carga,
    login e uploads precisam ser sempre ao vivo.
    ===================================================================== */
 
-const VERSAO = 'movemaster-v4';
+const VERSAO = 'movemaster-v37';
 
 // Arquivos do "esqueleto" do app, guardados para funcionar offline
 const ARQUIVOS_BASE = [
@@ -22,27 +22,27 @@ const ARQUIVOS_BASE = [
   './icon-512.png'
 ];
 
-// Instalação: guarda o esqueleto do app
+// Instalaï¿½ï¿½o: guarda o esqueleto do app
 self.addEventListener('install', (evento) => {
   evento.waitUntil(
     caches.open(VERSAO)
       .then((cache) => cache.addAll(ARQUIVOS_BASE).catch(() => {
-        // se algum arquivo falhar, não impede a instalação
+        // se algum arquivo falhar, nï¿½o impede a instalaï¿½ï¿½o
         return Promise.resolve();
       }))
   );
-  // Não chamamos skipWaiting aqui: a página decide a hora de trocar,
-  // para não recarregar em cima do motorista preenchendo algo.
+  // Nï¿½o chamamos skipWaiting aqui: a pï¿½gina decide a hora de trocar,
+  // para nï¿½o recarregar em cima do motorista preenchendo algo.
 });
 
-// A página avisa quando pode assumir
+// A pï¿½gina avisa quando pode assumir
 self.addEventListener('message', (evento) => {
   if (evento.data && evento.data.tipo === 'ASSUMIR_AGORA') {
     self.skipWaiting();
   }
 });
 
-// Ativação: remove caches de versões antigas
+// Ativaï¿½ï¿½o: remove caches de versï¿½es antigas
 self.addEventListener('activate', (evento) => {
   evento.waitUntil(
     caches.keys()
@@ -57,7 +57,7 @@ self.addEventListener('fetch', (evento) => {
   const req = evento.request;
   const url = new URL(req.url);
 
-  // Só cuidamos de GET
+  // Sï¿½ cuidamos de GET
   if (req.method !== 'GET') return;
 
   // NUNCA interceptar Supabase (dados, login, storage) nem outras APIs:
@@ -79,8 +79,8 @@ self.addEventListener('fetch', (evento) => {
   );
 
   if (ehAppShell) {
-    // SEMPRE rede fresca (ignora o cache HTTP do navegador). Assim, o que você
-    // publica aparece na hora. O cache serve só de reserva quando está offline.
+    // SEMPRE rede fresca (ignora o cache HTTP do navegador). Assim, o que vocï¿½
+    // publica aparece na hora. O cache serve sï¿½ de reserva quando estï¿½ offline.
     evento.respondWith(
       fetch(req, { cache: 'no-store' })
         .then((resposta) => {
@@ -97,7 +97,7 @@ self.addEventListener('fetch', (evento) => {
     return;
   }
 
-  // Demais arquivos do app (ícones, manifest): rede primeiro, com cache de reserva
+  // Demais arquivos do app (ï¿½cones, manifest): rede primeiro, com cache de reserva
   evento.respondWith(
     fetch(req)
       .then((resposta) => {
@@ -112,11 +112,11 @@ self.addEventListener('fetch', (evento) => {
 });
 
 /* ---------------------------------------------------------------------
-   NOTIFICAÇÕES PUSH (preparado para uso futuro)
-   No iOS, só funcionam quando o app foi adicionado à Tela de Início.
+   NOTIFICAï¿½ï¿½ES PUSH (preparado para uso futuro)
+   No iOS, sï¿½ funcionam quando o app foi adicionado ï¿½ Tela de Inï¿½cio.
    --------------------------------------------------------------------- */
 self.addEventListener('push', (evento) => {
-  let dados = { titulo: 'Movemaster', corpo: 'Você tem uma novidade.' };
+  let dados = { titulo: 'Movemaster', corpo: 'Vocï¿½ tem uma novidade.' };
   try { dados = { ...dados, ...evento.data.json() }; } catch (e) {}
 
   evento.waitUntil(
