@@ -474,6 +474,7 @@ function aplicarPermissoes(perfil) {
             if (primeiraAba === 'logistica' && typeof carregarLogistica === 'function')   carregarLogistica();
             if (primeiraAba === 'manutencao' && typeof carregarManutencao === 'function') carregarManutencao();
             if (primeiraAba === 'faturamento' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
+            if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial();
         }, 600);
     }
 
