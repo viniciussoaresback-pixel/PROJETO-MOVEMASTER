@@ -497,7 +497,7 @@
                                             oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Coleta')">
                                         <input type="text" id="enderecoColeta" placeholder="Ex: Rua das Flores, 123" required>
                                     </div>
-                                    <input type="text" id="cnpjColeta" placeholder="CNPJ do local de coleta (opcional)" maxlength="18" oninput="mascaraCNPJcampo(this)" style="margin-top:6px">
+                                    <input type="text" id="cnpjColeta" placeholder="CNPJ do local de coleta (opcional)" maxlength="18" oninput="mascaraCNPJcampo(this)" onblur="autoPreencherCNPJLocal('Coleta')" style="margin-top:6px">
                                 </div>
                                 <div class="form-group endereco-grupo">
                                     <label for="enderecoEntrega">Endereço de Entrega *</label>
@@ -506,7 +506,7 @@
                                             oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Entrega')">
                                         <input type="text" id="enderecoEntrega" placeholder="Ex: Avenida Paulista, 456" required>
                                     </div>
-                                    <input type="text" id="cnpjEntrega" placeholder="CNPJ do local de entrega (opcional)" maxlength="18" oninput="mascaraCNPJcampo(this)" style="margin-top:6px">
+                                    <input type="text" id="cnpjEntrega" placeholder="CNPJ do local de entrega (opcional)" maxlength="18" oninput="mascaraCNPJcampo(this)" onblur="autoPreencherCNPJLocal('Entrega')" style="margin-top:6px">
                                 </div>
                             </div>
                         </div>
@@ -520,12 +520,13 @@
                                     <div class="input-moeda-wrap">
                                         <span class="input-moeda-prefixo">R$</span>
                                         <input type="text" id="valorFrete" placeholder="0,00"
-                                            oninput="mascaraMoeda(this)" required>
+                                            oninput="mascaraMoeda(this); atualizarPreviewFrete()" required>
                                     </div>
-                                    <select id="freteTipo" style="margin-top:6px">
+                                    <select id="freteTipo" style="margin-top:6px" onchange="atualizarPreviewFrete()">
                                         <option value="cheio">Frete cheio (total da carga)</option>
                                         <option value="carro">Por carro</option>
                                     </select>
+                                    <div id="fretePreview" class="frete-preview"></div>
                                 </div>
                                 <div class="form-group">
                                     <label for="responsavelComercial">Responsável Comercial *</label>
@@ -1488,7 +1489,7 @@
                         <div class="form-row">
                             <div class="form-group" id="grupoCnpj">
                                 <label for="cnpjCliente">CNPJ</label>
-                                <input type="text" id="cnpjCliente" placeholder="00.000.000/0000-00" maxlength="18">
+                                <input type="text" id="cnpjCliente" placeholder="00.000.000/0000-00" maxlength="18" oninput="mascaraCNPJcampo(this)" onblur="autoPreencherCNPJCliente()">
                             </div>
                             <div class="form-group" id="grupoCpf">
                                 <label for="cpfCliente">CPF</label>
