@@ -8303,3 +8303,8 @@ input:focus, select:focus, textarea:focus {
 [data-tema="claro"] .confirma-urgente { color: var(--danger); }
 [data-tema="claro"] .lastmile-titulo { color: var(--success); }
 [data-tema="claro"] .status-origem-inline { background: var(--surface-2); color: var(--text-secondary); }
+
+/* Preview do cálculo de frete */
+.frete-preview { margin-top: 6px; font-size: .82rem; opacity: .9; color: var(--accent, #ff6a00); }
+.frete-preview strong { color: inherit; }
+[data-tema="claro"] .frete-preview { color: var(--accent-hover); }
