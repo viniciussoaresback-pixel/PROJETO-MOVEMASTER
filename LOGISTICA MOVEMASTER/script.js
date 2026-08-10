@@ -109,8 +109,8 @@ function trocarAba(event) {
     if (tabAlvo === 'logistica') carregarLogistica();
     if (tabAlvo === 'manutencao' && typeof carregarManutencao === 'function') carregarManutencao();
     if (tabAlvo === 'faturamento' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
-    if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); }
-    if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); }
+    if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial(); }
+    if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
     if (tabAlvo === 'meusPedidos') {
         renderizarPedidosComercial();
@@ -192,10 +192,20 @@ function preencherSelectCidades(cidades, selectID) {
 // DADOS DO SUPABASE
 // ============================================
 
-async function carregarDadosDoSupabase() {
+async function carregarDadosDoSupabase(opts) {
     if (!supabase) return;
+    const somentePedidos = !!(opts && opts.somentePedidos);
+    if (typeof mostrarProcessando === 'function') mostrarProcessando();
     try {
-        const [resClientes, resMotoristas, resVeiculos, resPedidos] = await Promise.all([
+        let resClientes = { data: null }, resMotoristas = { data: null }, resVeiculos = { data: null }, resPedidos = { data: null };
+        if (somentePedidos) {
+            const [rp, rr] = await Promise.all([
+                supabase.from('pedidos').select('*').order('created_at', {ascending:false}),
+                supabase.from('rotas_planejadas').select('*').order('data_saida', { ascending: true })
+            ]);
+            resPedidos = rp; if (rr.data) rotasGlobais = rr.data;
+        } else {
+        [resClientes, resMotoristas, resVeiculos, resPedidos] = await Promise.all([
             supabase.from('clientes').select('*').order('nome'),
             supabase.from('motoristas').select('*').order('nome'),
             supabase.from('veiculos').select('*').order('placa'),
@@ -203,60 +213,35 @@ async function carregarDadosDoSupabase() {
         ]);
 
         // Rotas planejadas (tabela opcional — se não existir, segue sem quebrar)
-        try {
-            const { data: rotas } = await supabase.from('rotas_planejadas')
-                .select('*').order('data_saida', { ascending: true });
-            rotasGlobais = rotas || [];
-        } catch (e) { rotasGlobais = []; }
+        // Carrega TODAS as tabelas secundárias em paralelo (antes era em fila = lento)
+        const [
+          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn
+        ] = await Promise.all([
+          supabase.from('rotas_planejadas').select('*').order('data_saida', { ascending: true }),
+          supabase.from('agendamentos_manutencao').select('*').order('data_hora', { ascending: true }),
+          supabase.from('paradas_emergencia').select('*').order('created_at', { ascending: false }),
+          supabase.from('solicitacoes_epi').select('motorista_id,motorista_nome,status').eq('status','pendente'),
+          supabase.from('parametros_sistema').select('valor').eq('chave','reserva_timer_minutos').maybeSingle(),
+          supabase.from('corredores').select('*').order('nome'),
+          supabase.from('corredor_paradas').select('*').order('ordem'),
+          supabase.from('equipes_entrega').select('*').order('nome'),
+          supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false })
+        ].map(q => q.then(r => r).catch(() => ({ data: null }))));
 
-        // Folgas e lembretes (tabela opcional)
-        if (typeof carregarFolgas === 'function') await carregarFolgas();
+        rotasGlobais = resRotas.data || [];
+        agendamentosManutencaoGlobais = resAgs.data || [];
+        paradasEmergenciaGlobais = resEmg.data || [];
+        episPendentesGlobais = resEps.data || [];
+        if (resPar.data && resPar.data.valor) paramReservaTimerMin = parseInt(resPar.data.valor,10) || 120;
+        corredoresGlobais = resCors.data || [];
+        { const porCor = {}; (resParadas.data||[]).forEach(p => { (porCor[p.corredor_id] = porCor[p.corredor_id] || []).push(p); });
+          corredoresGlobais.forEach(c => { c._paradas = porCor[c.id] || []; }); }
+        equipesEntregaGlobais = resEq.data || [];
+        entregasLastMileGlobais = resEn.data || [];
 
-        // Agendamentos de manutenção (tabela opcional — Lote 4)
-        try {
-            const { data: ags } = await supabase.from('agendamentos_manutencao')
-                .select('*').order('data_hora', { ascending: true });
-            agendamentosManutencaoGlobais = ags || [];
-        } catch (e) { agendamentosManutencaoGlobais = []; }
-
-        // Paradas de emergência (tabela opcional — Lote 5)
-        try {
-            const { data: emg } = await supabase.from('paradas_emergencia')
-                .select('*').order('created_at', { ascending: false });
-            paradasEmergenciaGlobais = emg || [];
-        } catch (e) { paradasEmergenciaGlobais = []; }
-
-        // EPIs pendentes (para o indicador de conformidade — item 14)
-        try {
-            const { data: eps } = await supabase.from('solicitacoes_epi')
-                .select('motorista_id,motorista_nome,status').eq('status','pendente');
-            episPendentesGlobais = eps || [];
-        } catch (e) { episPendentesGlobais = []; }
-
-        // Parâmetro global do timer de reserva (item 1)
-        try {
-            const { data: par } = await supabase.from('parametros_sistema')
-                .select('valor').eq('chave','reserva_timer_minutos').single();
-            if (par && par.valor) paramReservaTimerMin = parseInt(par.valor,10) || 120;
-        } catch (e) {}
-
-        // Corredores + paradas (item 12 — usados na sugestão de rotas e no ETA)
-        try {
-            const { data: cors } = await supabase.from('corredores').select('*').order('nome');
-            corredoresGlobais = cors || [];
-            const { data: paradas } = await supabase.from('corredor_paradas').select('*').order('ordem');
-            const porCor = {};
-            (paradas||[]).forEach(p => { (porCor[p.corredor_id] = porCor[p.corredor_id] || []).push(p); });
-            corredoresGlobais.forEach(c => { c._paradas = porCor[c.id] || []; });
-        } catch (e) { corredoresGlobais = []; }
-
-        // Last mile — equipes e registros (itens 3-4)
-        try {
-            const { data: eq } = await supabase.from('equipes_entrega').select('*').order('nome');
-            equipesEntregaGlobais = eq || [];
-            const { data: en } = await supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false });
-            entregasLastMileGlobais = en || [];
-        } catch (e) { equipesEntregaGlobais = []; entregasLastMileGlobais = []; }
+        // Folgas (tabela opcional) — mantém sua própria função
+        if (typeof carregarFolgas === 'function') { try { await carregarFolgas(); } catch(e){} }
+        } // fim do modo completo
 
         if (resClientes.data)   clientesGlobais   = resClientes.data;
         if (resMotoristas.data) motoristasGlobais = resMotoristas.data;
@@ -334,6 +319,8 @@ async function carregarDadosDoSupabase() {
         if (typeof renderizarOcorrenciasComercial === 'function') renderizarOcorrenciasComercial();
     } catch (error) {
         console.error('Erro ao carregar dados:', error);
+    } finally {
+        if (typeof ocultarProcessando === 'function') ocultarProcessando();
     }
 }
 
@@ -548,7 +535,7 @@ async function salvarPedidoComercial(event) {
         enderecoColeta: document.getElementById('enderecoColeta').value,
         enderecoEntrega: document.getElementById('enderecoEntrega').value,
         valorFrete: valorMoedaParaFloat(document.getElementById('valorFrete').value),
-        responsavelComercial: document.getElementById('responsavelComercial').value,
+        responsavelComercial: _getResponsavelComercial(),
         referencia: document.getElementById('referenciaPedido')?.value.trim() || null,
         observacao: document.getElementById('observacaoPedido')?.value.trim() || null
     };
@@ -623,7 +610,7 @@ async function salvarPedidoComercial(event) {
             const { error } = await supabase.from('pedidos').insert(linhasParaInserir);
             if (error) throw error;
 
-            await carregarDadosDoSupabase();
+            await recarregarPedidos();
             const qtd = linhasParaInserir.length;
             exibirMensagem('mensagemComercial',
                 qtd > 1 ? `✅ ${qtd} pedidos salvos com sucesso (1 por veículo, mesmo grupo)!` : '✅ Pedido salvo com sucesso!',
@@ -1880,7 +1867,7 @@ async function confirmarAlocacao(event) {
                     observacao: `Alocado no veículo ${veiculoPlaca} com motorista ${motorista1}`
                 });
             }
-            await carregarDadosDoSupabase();
+            await recarregarPedidos();
             fecharModal('modalAlocacao');
             if (!modoEdicao) {
                 notificar({
@@ -7137,6 +7124,7 @@ function renderizarDiretoria() {
     };
 
     ranking(p => p.cliente, 'dirClientes', 'Nenhum pedido neste mês.');
+    if (typeof renderComerciais === 'function') renderComerciais();
 
     // Rotas mais rentáveis — layout próprio, com a ROTA INTEIRA descrita
     // e bem visível (não truncada como no ranking de clientes).
@@ -9934,7 +9922,7 @@ async function salvarReservaComercial(){
   const ufOrigem = document.getElementById('ufOrigem').value;
   const cidadeDestino = document.getElementById('cidadeDestino').value;
   const ufDestino = document.getElementById('ufDestino').value;
-  const responsavel = document.getElementById('responsavelComercial').value;
+  const responsavel = _getResponsavelComercial();
   const vagas = parseInt(document.getElementById('reservaVagas')?.value,10) || 1;
   const tipoEntrega = document.getElementById('tipoEntregaPedido')?.value || 'patio';
 
@@ -9968,7 +9956,7 @@ async function salvarReservaComercial(){
       titulo:`🕒 Nova reserva: ${vagas} vaga(s)`,
       mensagem:`${cliente} · ${cidadeOrigem}/${ufOrigem} → ${cidadeDestino}/${ufDestino} · expira em ${paramReservaTimerMin} min`
     });
-    await carregarDadosDoSupabase();
+    await recarregarPedidos();
     exibirMensagem('mensagemComercial', `✅ Reserva de ${vagas} vaga(s) criada. Confirme antes de expirar (${paramReservaTimerMin} min).`, 'success');
     document.getElementById('formComercial').reset();
     toggleModoReserva();
@@ -10114,7 +10102,7 @@ async function desalocarPedido(pedidoId){
     } catch(e){}
 
     if (typeof fecharModal === 'function') fecharModal('modalStatus');
-    await carregarDadosDoSupabase();
+    await recarregarPedidos();
     if (typeof carregarLogistica === 'function') carregarLogistica();
     if (typeof exibirMensagem === 'function')
       exibirMensagem('mensagemLogistica', `↩️ Pedido #${pedidoId} desalocado e devolvido à fila.`, 'success');
@@ -10670,4 +10658,200 @@ function renderizarConferenciaDiretoria(){
     ${rotas.length} rota(s) conferida(s) ·
     ${divergentes.length ? `<span class="conf-divergente">${divergentes.length} com divergência</span>` : '<span class="conf-ok">todas conferem</span>'}
   </div>`;
+}
+
+// ============================================================
+// Diretoria — pedidos por responsável comercial (qtd + período)
+// ============================================================
+function renderComerciais(){
+  const el = document.getElementById('dirComerciais');
+  if (!el) return;
+  const periodo = document.getElementById('dirComPeriodo')?.value || 'mes';
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const inicioMesPassado = new Date(hoje.getFullYear(), hoje.getMonth()-1, 1);
+  const fimMesPassado = new Date(hoje.getFullYear(), hoje.getMonth(), 0, 23, 59, 59);
+  const inicioAno = new Date(hoje.getFullYear(), 0, 1);
+  const dataDoPedido = p => new Date(p.dataSolicitacao || p.data_solicitacao || p.criadoEm || hoje);
+
+  const noPeriodo = (pedidosGlobais||[]).filter(p => {
+    if (p.status === 'Cancelado') return false;
+    const d = dataDoPedido(p);
+    if (periodo === 'mes')         return d >= inicioMes;
+    if (periodo === 'mespassado')  return d >= inicioMesPassado && d <= fimMesPassado;
+    if (periodo === 'ano')         return d >= inicioAno;
+    return true; // tudo
+  });
+
+  const _normResp = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+                          .toLowerCase().replace(/\s+/g,' ').trim();
+  const _tituloResp = s => (s||'').replace(/\s+/g,' ').trim()
+                          .replace(/\b\p{L}/gu, c => c.toUpperCase());
+  const mapa = {};
+  noPeriodo.forEach(p => {
+    const original = p.responsavelComercial || '(sem responsável)';
+    const chave = _normResp(original) || '(sem responsavel)';
+    if (!mapa[chave]) mapa[chave] = { carros: 0, total: 0, nome: _tituloResp(original) || '(sem responsável)' };
+    mapa[chave].carros++;
+    mapa[chave].total += parseFloat(p.valorFrete) || 0;
+  });
+  // ordena por QUANTIDADE de carros/pedidos
+  const lista = Object.entries(mapa).sort((a,b) => b[1].carros - a[1].carros).slice(0, 10);
+  const max = Math.max(...lista.map(l => l[1].carros), 1);
+
+  el.innerHTML = lista.length === 0
+    ? '<p class="text-muted text-sm">Nenhum pedido no período.</p>'
+    : lista.map(([chave, d]) => `
+        <div class="dir-barra-linha">
+          <span class="dir-barra-rot" title="${d.nome}">${d.nome}</span>
+          <div class="dir-barra-trilho">
+            <div class="dir-barra" style="width:${Math.max(2,(d.carros/max)*100)}%;background:#a78bfa"></div>
+          </div>
+          <span class="dir-barra-val">${d.carros} pedido(s)<small>${_dirMoeda ? _dirMoeda(d.total) : ''}</small></span>
+        </div>`).join('');
+}
+
+// ============================================================
+// Cadastros — sub-abas (abre só a seção escolhida) + restrição por perfil
+// ============================================================
+const _CAD_GRUPOS = [
+  { id:'clientes',   label:'👥 Clientes',   perfis:['comercial','logistica','admin'] },
+  { id:'veiculos',   label:'🚛 Veículos',   perfis:['logistica','admin'] },
+  { id:'motoristas', label:'🧑‍✈️ Motoristas', perfis:['logistica','admin'] },
+  { id:'corredores', label:'🛣️ Corredores', perfis:['logistica','admin'] },
+  { id:'equipes',    label:'🚚 Equipes',    perfis:['logistica','admin'] },
+  { id:'outros',     label:'⚙️ Outros',     perfis:['admin'] }
+];
+
+function _classificarCardCadastro(card){
+  const txt = (card.textContent || '').toLowerCase();
+  const html = card.innerHTML || '';
+  if (card.id === 'cardCadastroClientes' || txt.includes('cadastro de cliente') || html.includes('corpo_listaClientes')) return 'clientes';
+  if (txt.includes('corredores')) return 'corredores';
+  if (txt.includes('equipes de entrega')) return 'equipes';
+  if (txt.includes('cadastro de motorista') || html.includes('corpo_listaMotoristas')) return 'motoristas';
+  if (txt.includes('cadastro de veículo') || txt.includes('cadastro de veiculo') || html.includes('corpo_listaVeiculos') || html.includes('listaVeiculos')) return 'veiculos';
+  return 'outros';
+}
+
+function inicializarCadastrosSubabas(){
+  const sec = document.getElementById('cadastros');
+  if (!sec) return;
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : 'admin';
+
+  // 1) marca cada card com seu grupo
+  const cards = Array.from(sec.querySelectorAll(':scope > .card'));
+  cards.forEach(c => { c.dataset.cadsec = _classificarCardCadastro(c); });
+
+  // 2) grupos existentes e permitidos p/ o perfil
+  const gruposPresentes = _CAD_GRUPOS.filter(g =>
+    g.perfis.includes(perfil) && cards.some(c => c.dataset.cadsec === g.id));
+
+  // 3) (re)constrói a barra de sub-abas
+  let bar = sec.querySelector('.cad-subtabs');
+  if (bar) bar.remove();
+  bar = document.createElement('div');
+  bar.className = 'cad-subtabs';
+  bar.innerHTML = gruposPresentes.map((g,i) =>
+    `<button class="cad-subtab-btn${i===0?' ativo':''}" data-sec="${g.id}" onclick="mostrarCadastroSub('${g.id}')">${g.label}</button>`
+  ).join('');
+  sec.insertBefore(bar, sec.firstChild);
+
+  // 4) esconde cards de grupos não permitidos e abre o primeiro
+  cards.forEach(c => {
+    const permitido = gruposPresentes.some(g => g.id === c.dataset.cadsec);
+    if (!permitido) c.style.display = 'none';
+  });
+  if (gruposPresentes.length) mostrarCadastroSub(gruposPresentes[0].id);
+}
+
+function mostrarCadastroSub(sec){
+  const cont = document.getElementById('cadastros');
+  if (!cont) return;
+  cont.querySelectorAll(':scope > .card').forEach(c => {
+    c.style.display = (c.dataset.cadsec === sec) ? '' : 'none';
+  });
+  cont.querySelectorAll('.cad-subtab-btn').forEach(b => {
+    b.classList.toggle('ativo', b.dataset.sec === sec);
+  });
+}
+
+// ============================================================
+// Responsável comercial — menu de seleção com nomes já usados
+// ============================================================
+function _tituloResp2(s){ return (s||'').replace(/\s+/g,' ').trim().replace(/\b\p{L}/gu, c => c.toUpperCase()); }
+function _normResp2(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim(); }
+
+function popularResponsaveisComercial(){
+  const sel = document.getElementById('responsavelComercial');
+  if (!sel) return;
+  const atual = sel.value;
+  // nomes distintos já usados (dedup por normalização) + usuário logado
+  const mapa = {};
+  (pedidosGlobais||[]).forEach(p => {
+    const r = p.responsavelComercial; if (!r) return;
+    const k = _normResp2(r); if (!k) return;
+    if (!mapa[k]) mapa[k] = _tituloResp2(r);
+  });
+  const usuarioRaw = document.getElementById('usuarioLogado')?.textContent || '';
+  const usuario = /visualizando|admin/i.test(usuarioRaw) ? '' : usuarioRaw;
+  if (usuario){ const k=_normResp2(usuario); if(k && !mapa[k]) mapa[k]=_tituloResp2(usuario); }
+  const nomes = Object.values(mapa).sort((a,b)=>a.localeCompare(b));
+
+  sel.innerHTML = '<option value="">Selecione…</option>'
+    + nomes.map(n => `<option value="${n}">${n}</option>`).join('')
+    + '<option value="__outro__">➕ Outro (digitar)</option>';
+
+  // mantém seleção anterior, ou sugere o usuário logado
+  if (atual && atual !== '__outro__') sel.value = atual;
+  else if (usuario){ const alvo = _tituloResp2(usuario); if (nomes.includes(alvo)) sel.value = alvo; }
+  _toggleRespComOutro();
+}
+
+function _toggleRespComOutro(){
+  const sel = document.getElementById('responsavelComercial');
+  const outro = document.getElementById('responsavelComercialOutro');
+  if (!sel || !outro) return;
+  outro.style.display = (sel.value === '__outro__') ? '' : 'none';
+}
+
+function _getResponsavelComercial(){
+  const sel = document.getElementById('responsavelComercial');
+  if (!sel) return '';
+  if (sel.value === '__outro__'){
+    return _tituloResp2(document.getElementById('responsavelComercialOutro')?.value || '');
+  }
+  return sel.value || '';
+}
+
+// ============================================================
+// Indicador de "processando" — feedback para os cliques
+// ============================================================
+let _procTimer = null, _procAtivo = 0;
+function mostrarProcessando(){
+  _procAtivo++;
+  // só mostra se demorar mais de 250ms (evita piscar em ações rápidas)
+  if (_procTimer) return;
+  _procTimer = setTimeout(() => {
+    let el = document.getElementById('mm-processando');
+    if (!el){
+      el = document.createElement('div');
+      el.id = 'mm-processando';
+      el.innerHTML = '<div class="mm-proc-spin"></div><span>Processando…</span>';
+      document.body.appendChild(el);
+    }
+    el.classList.add('ativo');
+  }, 250);
+}
+function ocultarProcessando(){
+  _procAtivo = Math.max(0, _procAtivo - 1);
+  if (_procAtivo > 0) return;
+  if (_procTimer){ clearTimeout(_procTimer); _procTimer = null; }
+  const el = document.getElementById('mm-processando');
+  if (el) el.classList.remove('ativo');
+}
+
+// Recarga leve: só pedidos + rotas (usado nas ações frequentes)
+async function recarregarPedidos(){
+  return carregarDadosDoSupabase({ somentePedidos: true });
 }
