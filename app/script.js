@@ -261,8 +261,11 @@ async function carregarDadosDoSupabase(opts) {
                 cidadeDestino: p.cidade_destino,
                 ufDestino: p.uf_destino,
                 enderecoColeta: p.endereco_coleta,
+                cnpjColeta: p.cnpj_coleta || null,
+                cnpjEntrega: p.cnpj_entrega || null,
                 enderecoEntrega: p.endereco_entrega,
                 valorFrete: p.valor_frete,
+                freteTipo: p.frete_tipo || 'cheio',
                 responsavelComercial: p.responsavel_comercial,
                 referencia: p.referencia || null,
                 observacaoPedido: p.observacao_pedido || null,
@@ -575,9 +578,12 @@ async function salvarPedidoComercial(event) {
                 uf_destino: pedido.ufDestino,
                 cep_coleta: document.getElementById('cepColeta')?.value || null,
                 endereco_coleta: pedido.enderecoColeta,
+                cnpj_coleta: document.getElementById('cnpjColeta')?.value.trim() || null,
                 cep_entrega: document.getElementById('cepEntrega')?.value || null,
                 endereco_entrega: pedido.enderecoEntrega,
+                cnpj_entrega: document.getElementById('cnpjEntrega')?.value.trim() || null,
                 valor_frete: pedido.valorFrete,
+                frete_tipo: document.getElementById('freteTipo')?.value || 'cheio',
                 responsavel_comercial: pedido.responsavelComercial,
                 referencia: pedido.referencia,
                 observacao_pedido: pedido.observacao,
@@ -771,7 +777,7 @@ function renderizarOcupacao() {
             </td>
             <td data-label="Coleta prev." class="ocup-sub">${p.dataPrevColeta ? formatarDataHora(p.dataPrevColeta) : '—'}${badgePrazoEntrega(p) ? '<br>' + badgePrazoEntrega(p) : ''}</td>
             <td data-label="Status"><span class="status-pill-vivo" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${pulse}${p.status || 'Pendente'}</span></td>
-            <td data-label="Frete" style="text-align:right;font-weight:600;white-space:nowrap">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+            <td data-label="Frete" style="text-align:right;font-weight:600;white-space:nowrap">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}${p.freteTipo === 'carro' ? '<br><small style="font-weight:400;opacity:.7">por carro</small>' : '<br><small style="font-weight:400;opacity:.7">frete cheio</small>'}</td>
             <td data-label="Ações" class="ocup-acoes-cell">
                 ${acaoOuAguardando(p)}
                 <button class="btn-kanban-hist" onclick="abrirHistorico(${p.id})">Hist.</button>
@@ -3315,14 +3321,9 @@ function ajustarFormCliente(tipo) {
         if (grupoIE) grupoIE.style.display = '';           // IE é campo de PJ
     } else if (tiposPF.includes(tipo)) {
         labelNome.textContent = 'Nome Completo *';
-        grupoCnpj.style.display = 'none';
+        grupoCnpj.style.display = '';   // agora garagista/particular também podem ter CNPJ
         grupoCpf.style.display = '';
-        document.getElementById('cnpjCliente').value = '';
-        if (grupoIE) {
-            grupoIE.style.display = 'none';
-            const ie = document.getElementById('inscricaoEstadual');
-            if (ie) ie.value = '';
-        }
+        if (grupoIE) grupoIE.style.display = 'none';
     } else {
         labelNome.textContent = 'Nome *';
         grupoCnpj.style.display = '';
@@ -10854,4 +10855,14 @@ function ocultarProcessando(){
 // Recarga leve: só pedidos + rotas (usado nas ações frequentes)
 async function recarregarPedidos(){
   return carregarDadosDoSupabase({ somentePedidos: true });
+}
+
+// Máscara de CNPJ para campos avulsos (coleta/entrega)
+function mascaraCNPJcampo(input){
+  let v = input.value.replace(/\D/g, '').slice(0, 14);
+  v = v.replace(/^(\d{2})(\d)/, '$1.$2')
+       .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+       .replace(/\.(\d{3})(\d)/, '.$1/$2')
+       .replace(/(\d{4})(\d)/, '$1-$2');
+  input.value = v;
 }
