@@ -11461,24 +11461,35 @@ function _corredorPedidoLinha(p, c, paradasStr){
   const ehManual = String(p.corredorManualId || '') === String(c.id);
   const viaPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1 && _posNaSeq(paradasStr, p.cidadeOrigem) === -1;
   const selo = ehManual
-    ? '<span class="selo-encaixe selo-encaixe-manual" title="Pedido jogado manualmente neste corredor">📌 manual</span>'
-    : (viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Está no pátio de ${p.patioAtual}">🅿️ via pátio ${p.patioAtual}</span>` : (enc.selo || ''));
-  const rotaTag = semR ? '<span class="corredor-tag-semrota">sem rota</span>' : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`;
-  return `<div class="corredor-pedido-linha">
+    ? '<span class="selo-encaixe selo-encaixe-manual" title="Jogado manualmente neste corredor">📌 manual</span>'
+    : (viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Está no pátio de ${p.patioAtual}">🅿️ ${p.patioAtual.split('/')[0]}</span>` : (enc.selo || ''));
+  const rotaTag = semR
+    ? '<span class="corredor-tag-semrota">sem rota</span>'
+    : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`;
+  const frete = Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  return `<div class="cpl">
     <input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">
-    <span class="cpl-col cpl-id">#${p.id}</span>
-    <span class="cpl-col cpl-veic"><span class="cpl-rot">Veículo</span>🚗 ${p.modelo||'—'} <strong>${p.placa||''}</strong></span>
-    <span class="cpl-col cpl-rota"><span class="cpl-rot">Origem → Destino</span><span class="cpl-od"><span class="cpl-od-orig">${p.cidadeOrigem||'—'}</span><span class="cpl-seta">→</span><strong class="cpl-od-dest">${p.cidadeDestino||'—'}</strong></span></span>
-    <span class="cpl-col cpl-cli"><span class="cpl-rot">Cliente</span>${p.cliente||'—'}</span>
-    <span class="cpl-col cpl-frete"><span class="cpl-rot">Frete</span>R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
-    <span class="cpl-col cpl-status"><span class="cpl-rot">Situação</span><span class="status-pill-mini">${p.status||'Pendente'}</span> ${rotaTag}</span>
-    <span class="cpl-col cpl-selo">${selo}</span>
-    <span class="cpl-col cpl-acoes">
+    <div class="cpl-body">
+      <div class="cpl-l1">
+        <span class="cpl-id">#${p.id}</span>
+        <span class="cpl-veic">🚗 <strong>${p.placa||'—'}</strong> <span class="cpl-modelo">${p.modelo||''}</span></span>
+        <span class="cpl-od"><span class="cpl-od-orig">${p.cidadeOrigem||'—'}</span><span class="cpl-seta">→</span><strong class="cpl-od-dest">${p.cidadeDestino||'—'}</strong></span>
+        ${selo}
+      </div>
+      <div class="cpl-l2">
+        <span class="cpl-cli">${p.cliente||'—'}</span>
+        <span class="cpl-dot">•</span>
+        <span class="status-pill-mini">${p.status||'Pendente'}</span>
+        ${rotaTag}
+      </div>
+    </div>
+    <div class="cpl-frete">R$ ${frete}</div>
+    <div class="cpl-acoes">
       ${ehManual
         ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
         : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
-      <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
-    </span>
+      <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️</button>
+    </div>
   </div>`;
 }
 
