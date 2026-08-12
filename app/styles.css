@@ -8473,3 +8473,22 @@ input:focus, select:focus, textarea:focus {
   .cpl-l1 { gap: 8px; }
 }
 [data-tema="claro"] .cpl:hover { background: rgba(0,0,0,.03); }
+
+/* ===== Tabela de carros no corredor ===== */
+.corr-tabela { width: 100%; border-collapse: collapse; font-size: .84rem; margin-top: 4px; }
+.corr-tabela thead th { text-align: left; font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted, #9ca3af); font-weight: 700; padding: 4px 8px; border-bottom: 1px solid var(--border, rgba(255,255,255,.12)); white-space: nowrap; }
+.corr-tabela td { padding: 8px; border-bottom: 1px solid var(--border-soft, rgba(255,255,255,.05)); vertical-align: middle; }
+.corr-tr:hover { background: rgba(255,255,255,.03); }
+.corr-tabela .corr-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent, #ff6a00); }
+.ct-id { color: var(--text-muted, #9ca3af); font-weight: 700; white-space: nowrap; }
+.ct-placa strong { letter-spacing: .4px; font-size: .9rem; }
+.ct-modelo { color: var(--text-secondary, #a5a5ac); }
+.ct-rota { white-space: nowrap; font-size: .88rem; }
+.ct-rota strong { color: var(--text-primary); }
+.ct-rota .cpl-seta { color: var(--accent, #ff6a00); font-weight: 700; }
+.ct-cli { font-weight: 600; }
+.ct-frete { color: #4ade80; font-weight: 700; white-space: nowrap; }
+.ct-status { white-space: nowrap; }
+.ct-acoes { white-space: nowrap; text-align: right; }
+.ct-acoes .btn-kanban-patio { margin-left: 3px; }
+[data-tema="claro"] .corr-tr:hover { background: rgba(0,0,0,.03); }
