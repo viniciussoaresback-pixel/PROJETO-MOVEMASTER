@@ -6701,6 +6701,8 @@ tr.rec-linha-atrasada td { background: rgba(239,68,68,0.04); }
 .selo-encaixe-ok { background: rgba(74,222,128,0.14); color: #4ade80; border: 1px solid rgba(74,222,128,0.4); }
 .selo-encaixe-sai { background: rgba(96,165,250,0.14); color: #60a5fa; border: 1px solid rgba(96,165,250,0.4); }
 .selo-encaixe-fora { background: rgba(251,191,36,0.14); color: #fbbf24; border: 1px solid rgba(251,191,36,0.4); }
+.selo-encaixe-entra { background: rgba(167,139,250,0.16); color: #a78bfa; border: 1px solid rgba(167,139,250,0.45); }
+.selo-encaixe-patio { background: rgba(96,165,250,0.18); color: #60a5fa; border: 1px solid rgba(96,165,250,0.5); }
 
 /* Aviso sobre CTE existente no modal Sair do pátio */
 .aviso-cte-transbordo {
@@ -8308,3 +8310,48 @@ input:focus, select:focus, textarea:focus {
 .frete-preview { margin-top: 6px; font-size: .82rem; opacity: .9; color: var(--accent, #ff6a00); }
 .frete-preview strong { color: inherit; }
 [data-tema="claro"] .frete-preview { color: var(--accent-hover); }
+
+/* Contraste no tema claro — painel de acompanhamento (id/subtexto/badges) */
+[data-tema="claro"] .ocup-id,
+[data-tema="claro"] .ocup-sub,
+[data-tema="claro"] .ocup-resp { color: var(--text-secondary) !important; }
+[data-tema="claro"] .badge-ref { color: var(--text-secondary); border-color: var(--border); }
+
+/* Carteira de Demanda */
+.painel-subtabs { margin: 6px 0 14px; }
+.carteira-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.carteira-topo .ocup-busca { max-width: 360px; }
+.carteira-grupo { margin-bottom: 14px; border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 12px; overflow: hidden; }
+.carteira-grupo-tit { display: flex; align-items: center; gap: 10px; padding: 10px 14px; font-weight: 700; background: var(--surface-2, rgba(255,255,255,.05)); }
+.carteira-badge { font-size: .78rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--accent-soft, rgba(249,115,22,.15)); color: var(--accent, #ff6a00); }
+.carteira-linha { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 9px 14px; border-top: 1px solid var(--border-soft, rgba(255,255,255,.06)); font-size: .88rem; }
+.carteira-cli { flex: 1; min-width: 200px; }
+.carteira-valor { font-weight: 700; white-space: nowrap; margin-left: auto; }
+[data-tema="claro"] .carteira-grupo-tit { background: var(--surface-1); }
+
+/* Carteira — ação de rota (select + botão) */
+.carteira-acao { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.carteira-acao select { padding: 5px 9px; border-radius: 8px; font-size: .8rem; background: var(--surface-1, rgba(255,255,255,.05)); color: inherit; border: 1px solid var(--border, rgba(255,255,255,.14)); max-width: 220px; }
+[data-tema="claro"] .carteira-acao select { background: var(--surface-1); color: var(--text-primary); border-color: var(--border); }
+
+/* Painel de Corredores */
+.corredores-grid { display: flex; flex-direction: column; gap: 12px; }
+.corredor-card { border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 12px; overflow: hidden; }
+.corredor-card-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; cursor: pointer; background: var(--surface-2, rgba(255,255,255,.04)); }
+.corredor-card-cab:hover { background: var(--surface-1, rgba(255,255,255,.07)); }
+.corredor-card-nums { display: flex; align-items: center; gap: 8px; }
+.corredor-semrota { font-size: .74rem; font-weight: 700; color: #fbbf24; background: rgba(251,191,36,.14); padding: 2px 8px; border-radius: 999px; }
+.corredor-chevron { opacity: .6; font-size: .8rem; }
+.corredor-paradas-linha { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 8px 14px; font-size: .82rem; border-top: 1px solid var(--border-soft, rgba(255,255,255,.06)); }
+.corredor-parada { background: var(--accent-soft, rgba(249,115,22,.12)); color: var(--accent, #ff6a00); padding: 1px 8px; border-radius: 6px; font-weight: 600; }
+.corredor-pedidos { padding: 4px 14px 12px; }
+.corredor-pedido-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--border-soft, rgba(255,255,255,.06)); font-size: .86rem; }
+.status-pill-mini { font-size: .72rem; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.08); }
+.corredor-tag-semrota { font-size: .72rem; font-weight: 700; color: #fbbf24; margin-left: auto; }
+.corredor-tag-comrota { font-size: .72rem; color: #4ade80; margin-left: auto; }
+[data-tema="claro"] .corredor-card-cab { background: var(--surface-1); }
+[data-tema="claro"] .status-pill-mini { background: var(--surface-2); }
+
+/* Status "Pátio" (vira o status visível quando o carro está no pátio) */
+.status-pill-patio { background: rgba(96,165,250,0.16) !important; color: #60a5fa !important; border: 1px solid rgba(96,165,250,0.5) !important; font-weight: 700; }
+[data-tema="claro"] .status-pill-patio { color: #2563eb !important; }
