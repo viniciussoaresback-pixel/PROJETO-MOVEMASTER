@@ -10302,8 +10302,9 @@ function gerarSugestoesRota(){
       const partida = p.patioAtual || p.cidadeOrigem;
       const io = _posNaSeq(seq, partida);
       const id = _posNaSeq(seq, p.cidadeDestino);
+      const noPatioDoTronco = p.patioAtual && _posNaSeq(seq, p.patioAtual) !== -1;
       return (io !== -1 && id !== -1 && io < id)
-          || (io === -1 && id !== -1);
+          || (noPatioDoTronco && id === -1);
     });
     if (fits.length === 0) return;
 
@@ -11311,6 +11312,8 @@ function renderizarPainelCorredores(){
     </div>
     ${_carrosSemCorredorHTML(corredores, vivos)}`;
   if (podeVerSugestoes && typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
+  // inicializa os contadores de seleção de cada corredor aberto
+  (corredores||[]).forEach(c => _atualizarContadorCorredor(String(c.id)));
 }
 
 // Diagnóstico: carros que não se encaixaram em NENHUM corredor (mostra o que o sistema lê)
@@ -11320,7 +11323,8 @@ function _carrosSemCorredorHTML(corredores, vivos){
     const partida = p.patioAtual || p.cidadeOrigem;
     return seqs.some(seq => {
       const io = _posNaSeq(seq, partida), id = _posNaSeq(seq, p.cidadeDestino);
-      return (io !== -1 && id !== -1 && io < id) || (io === -1 && id !== -1);
+      const noPatioDoTronco = p.patioAtual && _posNaSeq(seq, p.patioAtual) !== -1;
+      return (io !== -1 && id !== -1 && io < id) || (noPatioDoTronco && id === -1);
     });
   };
   const orfaos = (vivos || []).filter(p => !encaixa(p) && !p.placaCegonha && !(p.rotaId||p.rota_id));
@@ -11356,14 +11360,13 @@ function _corredorCardHTML(c, vivos){
     const id = _posNaSeq(paradasStr, p.cidadeDestino);
     const noPatioDoTronco = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1;
     return (io !== -1 && id !== -1 && io < id)   // partida e destino no trajeto, na ordem
-        || (io === -1 && id !== -1)              // encaixe no caminho (destino no trajeto)
         || (noPatioDoTronco && id === -1);       // no pátio do tronco, destino é ramal (transborda no hub)
   });
   if (busca) compat = compat.filter(p =>
     `${p.cliente||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.placa||''} #${p.id}`.toLowerCase().includes(busca));
 
   const semRota = compat.filter(p => !(p.rotaId || p.rota_id) && !p.placaCegonha).length;
-  _corredorCache[String(c.id)] = { nome: c.nome, seq: paradasStr, itens: compat.filter(p => !(p.rotaId || p.rota_id) && !p.placaCegonha) };
+  _corredorCache[String(c.id)] = { nome: c.nome, seq: paradasStr, itens: compat };
   const podeCriar = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
   const aberto = _corredoresAbertos.has(String(c.id));
   const paradasHTML = paradasStr.map((cid,i) =>
@@ -11378,7 +11381,6 @@ function _corredorCardHTML(c, vivos){
       <div class="corredor-card-nums">
         <span class="carteira-badge">${compat.length} carro(s)</span>
         ${semRota > 0 ? `<span class="corredor-semrota">${semRota} sem rota</span>` : ''}
-        ${(podeCriar && semRota > 0) ? `<button class="btn btn-sm btn-primary" onclick="criarRotaDoCorredor('${c.id}')" title="Cria a rota deste corredor já com os ${semRota} carro(s) sem rota">🛣️ Criar rota</button>` : ''}
         <span class="corredor-chevron" onclick="toggleCorredorCard('${c.id}')" style="cursor:pointer">${aberto ? '▲' : '▼'}</span>
       </div>
     </div>
@@ -11415,6 +11417,15 @@ function _corredorCardHTML(c, vivos){
             }).join('');
             return selDiv + `<div class="corredor-tronco-nota">🚛 Todos seguem juntos de <strong>${paradasStr[0]||''}</strong> até <strong>${divKey}</strong> (${compat.length} carro(s)). Em ${divKey}, a carga se divide:</div>` + blocos;
           })()}
+      ${(podeCriar && compat.length > 0) ? `
+      <div class="corredor-selbar">
+        <span id="corrCont_${c.id}" class="corredor-cont"></span>
+        <span class="corredor-selbtns">
+          <button class="btn btn-sm btn-secondary" onclick="_selecTodosCorredor('${c.id}', true)">Todos</button>
+          <button class="btn btn-sm btn-secondary" onclick="_selecTodosCorredor('${c.id}', false)">Limpar</button>
+          <button class="btn btn-sm btn-primary" onclick="criarRotaDoCorredorSelec('${c.id}')">🛣️ Criar rota com selecionados</button>
+        </span>
+      </div>` : ''}
     </div>` : ''}
   </div>`;
 }
@@ -11425,6 +11436,7 @@ function _corredorPedidoLinha(p, c, paradasStr){
   const ehManual = String(p.corredorManualId || '') === String(c.id);
   const viaPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1 && _posNaSeq(paradasStr, p.cidadeOrigem) === -1;
   return `<div class="corredor-pedido-linha">
+    <input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">
     <span class="carteira-cli">#${p.id} · <strong>${p.cliente||'—'}</strong></span>
     <span>🚗 ${p.modelo||''} ${p.placa||''}</span>
     <span class="text-muted">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span>
@@ -11521,4 +11533,50 @@ function _divisaoPadrao(compat, paradasStr){
   let melhor = null, max = 0;
   Object.entries(cont).forEach(([d,n]) => { if (n > max){ max = n; melhor = d; } });
   return melhor || paradasStr[paradasStr.length-1] || '';
+}
+
+// ============================================================
+// Seleção de carros no corredor + criar rota com os selecionados
+// ============================================================
+function _checksCorredor(corredorId){
+  return Array.from(document.querySelectorAll(`.corr-check[data-corr="${corredorId}"]`));
+}
+function _atualizarContadorCorredor(corredorId){
+  const cont = document.getElementById('corrCont_' + corredorId);
+  if (!cont) return;
+  const marcados = _checksCorredor(corredorId).filter(c => c.checked).length;
+  const cap = 11; // referência da cegonha (guincho pode ser menos) — só aviso
+  const excede = marcados > cap;
+  cont.innerHTML = `<strong class="${excede ? 'cont-excede' : ''}">${marcados}</strong> carro(s) selecionado(s)` +
+    (excede ? ` <span class="cont-excede">⚠️ acima de ${cap} (capacidade da cegonha) — pode criar mesmo assim</span>` : '');
+}
+function _selecTodosCorredor(corredorId, valor){
+  _checksCorredor(corredorId).forEach(c => { c.checked = valor; });
+  _atualizarContadorCorredor(corredorId);
+}
+async function criarRotaDoCorredorSelec(corredorId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('criar rota')) return;
+  const dados = _corredorCache[String(corredorId)];
+  if (!dados || !supabase) return;
+  const ids = _checksCorredor(corredorId).filter(c => c.checked).map(c => parseInt(c.value));
+  if (ids.length === 0){ alert('Selecione ao menos um carro.'); return; }
+  const aviso = ids.length > 11 ? `\n\n⚠️ Você selecionou ${ids.length} carros, acima de 11 (capacidade da cegonha). Se for guincho ou carga maior, tudo bem.` : '';
+  if (!confirm(`Criar a rota "${dados.nome}" com ${ids.length} carro(s) selecionado(s)?${aviso}`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
+      nome: dados.nome, corredor_id: parseInt(corredorId) || null,
+      paradas: dados.seq || [], status: 'planejada', criado_por: usuario
+    }).select();
+    if (e1) throw e1;
+    const rotaId = nova && nova[0] && nova[0].id;
+    if (!rotaId) throw new Error('Falha ao criar a rota.');
+    const { error: e2 } = await supabase.from('pedidos').update({ rota_id: rotaId }).in('id', ids);
+    if (e2) throw e2;
+    await recarregarPedidos();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      `✅ Rota "${dados.nome}" criada com ${ids.length} carro(s). Defina a cegonha/guincho na Gestão Logística.`, 'success');
+  } catch(e){ alert('Erro ao criar rota: ' + (e.message || e)); }
 }
