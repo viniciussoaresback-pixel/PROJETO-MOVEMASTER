@@ -10283,17 +10283,22 @@ function gerarSugestoesRota(){
 
   // pedidos pendentes, não-reserva, sem cegonha
   const pendentes = (pedidosGlobais||[]).filter(p =>
-    p.status === 'Pendente' && !p.isReserva && !p.placaCegonha);
+    !p.isReserva && !p.placaCegonha && !(p.rotaId || p.rota_id) &&
+    !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
   if (pendentes.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
 
   const sugestoes = [];
   corredores.forEach(cor => {
     const seq = (cor._paradas||[]).length >= 2 ? cor._paradas.map(p=>p.cidade) : [cor.origem, cor.destino];
-    // pedidos que "cabem" no corredor: origem e destino na sequência, na ordem certa
+    // pedidos que "cabem" no corredor: parte do PÁTIO (se houver) ou da origem;
+    // aceita origem→destino na ordem, ou encaixe no caminho (destino no trajeto).
     const fits = pendentes.filter(p => {
-      const io = _posNaSeq(seq, p.cidadeOrigem);
+      const partida = p.patioAtual || p.cidadeOrigem;
+      const io = _posNaSeq(seq, partida);
       const id = _posNaSeq(seq, p.cidadeDestino);
-      return io !== -1 && id !== -1 && io < id;
+      return (io !== -1 && id !== -1 && io < id)
+          || (io === -1 && id !== -1)
+          || (io !== -1 && id === -1 && io < seq.length - 1);
     });
     if (fits.length === 0) return;
 
