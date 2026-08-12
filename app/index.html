@@ -702,6 +702,10 @@
                             </div>
                             <input type="text" id="filtroPedidosTexto" placeholder="🔍 Buscar..." 
                                 class="filtro-input" oninput="renderizarPedidosComercial()">
+                            <input type="text" id="filtroPedidosOrigem" placeholder="📍 Origem..." 
+                                class="filtro-input" oninput="renderizarPedidosComercial()">
+                            <input type="text" id="filtroPedidosDestino" placeholder="🏁 Destino..." 
+                                class="filtro-input" oninput="renderizarPedidosComercial()">
                             <button class="btn btn-secondary btn-sm" onclick="toggleResumoRotas()">🗺️ Rotas</button>
                             <button class="btn btn-secondary btn-sm" onclick="exportarPedidosPDF()">📄 PDF</button>
                             <button class="btn btn-secondary btn-sm" onclick="exportarPedidosExcel()">📊 Excel</button>
@@ -809,6 +813,8 @@
                             <button class="ocup-chip" data-filtro="Entregue" onclick="filtrarOcupacao('Entregue', this)">Entregues</button>
                         </div>
                         <input type="text" id="ocupBusca" class="ocup-busca" placeholder="🔍 Buscar cliente, placa, cegonha, cidade origem/destino..." oninput="renderizarOcupacao()">
+                        <input type="text" id="ocupOrigem" class="ocup-busca ocup-busca-od" placeholder="📍 Origem..." oninput="renderizarOcupacao()">
+                        <input type="text" id="ocupDestino" class="ocup-busca ocup-busca-od" placeholder="🏁 Destino..." oninput="renderizarOcupacao()">
                     </div>
 
                     <!-- Tabela -->
