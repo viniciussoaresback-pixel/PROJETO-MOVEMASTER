@@ -739,6 +739,7 @@ function badgePrazoEntrega(p) {
 function renderizarOcupacao() {
     const corpo = document.getElementById('ocupTabelaCorpo');
     if (!corpo) return;
+    if (typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
 
     // Contagens dos cards de resumo
     const cont = { total: 0, Pendente: 0, 'Em Rota': 0, Entregue: 0 };
@@ -759,7 +760,7 @@ function renderizarOcupacao() {
     let lista = pedidosGlobais.filter(p => grupoOcupacao(p.status || 'Pendente') !== 'Cancelado');
     if (_ocupFiltroStatus) lista = lista.filter(p => grupoOcupacao(p.status || 'Pendente') === _ocupFiltroStatus);
     if (busca) lista = lista.filter(p =>
-        `${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.placaCegonha||''} ${p.motorista1||''} ${p.referencia||''} #${p.id}`.toLowerCase().includes(busca)
+        `${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.placaCegonha||''} ${p.motorista1||''} ${p.referencia||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} #${p.id}`.toLowerCase().includes(busca)
     );
 
     // Ordena: pendentes primeiro, depois em rota, depois entregues; dentro por coleta
@@ -795,7 +796,9 @@ function renderizarOcupacao() {
                 <div class="ocup-sub">🚛 ${cegonhaLinha}</div>
             </td>
             <td data-label="Coleta prev." class="ocup-sub">${p.dataPrevColeta ? formatarDataHora(p.dataPrevColeta) : '—'}${badgePrazoEntrega(p) ? '<br>' + badgePrazoEntrega(p) : ''}</td>
-            <td data-label="Status"><span class="status-pill-vivo" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${pulse}${p.status || 'Pendente'}</span></td>
+            <td data-label="Status">${p.patioAtual && !['Entregue','Cancelado'].includes(p.status)
+                ? `<span class="status-pill-vivo status-pill-patio" title="Status interno: ${p.status || 'Pendente'} · no pátio de ${p.patioAtual}">🅿️ Pátio ${p.patioAtual.split('/')[0]}</span>`
+                : `<span class="status-pill-vivo" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${pulse}${p.status || 'Pendente'}</span>`}</td>
             <td data-label="Frete" style="text-align:right;font-weight:600;white-space:nowrap">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}${p.freteTipo === 'carro' ? '<br><small style="font-weight:400;opacity:.7">por carro</small>' : '<br><small style="font-weight:400;opacity:.7">frete cheio</small>'}</td>
             <td data-label="Ações" class="ocup-acoes-cell">
                 ${acaoOuAguardando(p)}
@@ -3870,9 +3873,14 @@ async function _registrarTrechosTransbordo(pedidoObj, d) {
         }
 
         // Abre a próxima perna (transbordo → destino final)
+        // No transbordo caminhão→caminhão, já atribui o motorista padrão da cegonha B,
+        // para o rateio do faturamento sair completo (motorista A/cegonha A + motorista B/cegonha B).
+        const motoristaCegonhaB = d.tipoTransbordo === 'caminhao'
+            ? ((veiculosGlobais || []).find(v => v.placa === d.cegonhaDestino)?.motorista_padrao || '')
+            : '';
         trechos.push({
             origem: cidadeTransb, destino: destinoFinal,
-            motorista: '', // pátio: A DEFINIR · caminhão: motorista da nova cegonha entra depois
+            motorista: motoristaCegonhaB, // cegonha B: motorista padrão; pátio: A DEFINIR
             placa_cegonha: d.tipoTransbordo === 'caminhao' ? (d.cegonhaDestino || '') : '',
             km: 0
         });
@@ -4577,7 +4585,10 @@ async function confirmarSairPatio() {
 function acaoOuAguardando(p) {
     const cfg = FLUXO_STATUS[p.status || 'Pendente'];
     if (!cfg || !cfg.proximos || cfg.proximos.length === 0) return '';
-    const dono = (cfg.perfis || []).filter(x => x !== 'admin')[0] || 'logistica';
+    let dono = (cfg.perfis || []).filter(x => x !== 'admin')[0] || 'logistica';
+    // Item: pedido criado pela logística não precisa de aprovação do comercial —
+    // a própria logística conduz (ela já está no controle).
+    if (p.origemLancamento === 'logistica' && dono === 'comercial') dono = 'logistica';
     const viewer = (typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
     const podeAgir = viewer === 'admin' || viewer === dono;
     const seloEspera = `<span class="selo-aguardando selo-aguardando-${dono}">⏳ Aguardando ${dono === 'comercial' ? 'comercial' : 'logística'}</span>`;
@@ -4665,6 +4676,10 @@ function renderizarPedidosComercial() {
     if (filtroTexto) pedidos = pedidos.filter(p =>
         (p.cliente || '').toLowerCase().includes(filtroTexto) ||
         (p.placa || '').toLowerCase().includes(filtroTexto) ||
+        (p.cidadeOrigem || '').toLowerCase().includes(filtroTexto) ||
+        (p.cidadeDestino || '').toLowerCase().includes(filtroTexto) ||
+        (p.ufOrigem || '').toLowerCase().includes(filtroTexto) ||
+        (p.ufDestino || '').toLowerCase().includes(filtroTexto) ||
         String(p.id).includes(filtroTexto)
     );
 
@@ -6645,7 +6660,10 @@ function renderizarRotasComercial() {
 
     cont.innerHTML = rotas.map(r => {
         const vinculados = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : [])
-            .filter(p => String(p.rotaPlanejadaId || p.rota_planejada_id) === String(r.id)).length;
+            .filter(p => (
+                String(p.rotaId || p.rota_id) === String(r.id) ||
+                (r.placa_cegonha && p.placaCegonha === r.placa_cegonha)
+            ) && !['Entregue','Cancelado'].includes(p.status)).length;
         // Capacidade: vem do CADASTRO do veículo (fonte da verdade); só cai no
         // r.capacidade se o veículo não tiver, e 8 é último recurso.
         const veic = (typeof veiculosGlobais !== 'undefined' ? veiculosGlobais : [])
@@ -7507,6 +7525,15 @@ function _classificarEncaixePedido(pedido, paradas) {
         // Origem casa mas o destino é FORA da rota (transbordo pra outra cegonha)
         return { tipo: 'transbordo', selo: `<span class="selo-encaixe selo-encaixe-sai" title="Destino ${pedido.cidadeDestino} é fora da rota — vai fazer transbordo">🔀 Transbordo (destino ${pedido.cidadeDestino})</span>` };
     }
+    // Origem fora das paradas cadastradas, mas o DESTINO é uma parada da rota →
+    // o carro "pega carona" no caminho (ex.: Imbaú → Maringá numa rota Curitiba → Maringá).
+    if (iOrigem < 0 && iDestino >= 0) {
+        return { tipo: 'encaixe', selo: `<span class="selo-encaixe selo-encaixe-entra" title="Origem ${pedido.cidadeOrigem} não é uma parada cadastrada, mas o destino ${paradas[iDestino].split('/')[0]} está no trajeto — encaixe no caminho">➕ Encaixe até ${paradas[iDestino].split('/')[0]}</span>` };
+    }
+    // Origem é uma parada, mas o destino é fora do trajeto → encaixe parcial (segue/transborda)
+    if (iOrigem >= 0 && iDestino < 0) {
+        return { tipo: 'encaixe', selo: `<span class="selo-encaixe selo-encaixe-entra" title="Coleta em ${paradas[iOrigem].split('/')[0]} (no trajeto), mas o destino ${pedido.cidadeDestino} é fora — precisará seguir/transbordar">➕ Coleta em ${paradas[iOrigem].split('/')[0]}</span>` };
+    }
     // Nem origem nem destino batem
     return { tipo: 'fora', selo: '<span class="selo-encaixe selo-encaixe-fora" title="Origem/destino não batem com nenhuma parada da rota">⚠️ Fora da rota</span>' };
 }
@@ -7577,6 +7604,7 @@ function renderizarRotas() {
                 ${typeof etaRotaHTML === 'function' ? etaRotaHTML(r) : ''}
                 ${typeof fechamentoRotaHTML === 'function' ? fechamentoRotaHTML(r) : ''}
                 ${r.valor_previsto ? ` · <span class="rota-valor">💰 ${Number(r.valor_previsto).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span>` : ''}
+                ${r.criado_por ? ` · <span class="rota-criador" title="Quem planejou esta rota">👤 criada por ${r.criado_por}</span>` : ''}
             </div>
 
             <div class="cegonha-rota-linha" style="margin:0.5rem 0">${paradasHTML}</div>
@@ -7992,8 +8020,8 @@ async function mudarStatusRota(rotaId, novoStatus) {
 // ============================================
 
 const PATIOS_FIXOS = [
-    'Maringá/PR', 'Cascavel/PR', 'São José dos Pinhais/PR',
-    'Balneário Camboriú/SC', 'São José/SC', 'Gravataí/RS', 'São Paulo/SP'
+    'Cascavel/PR', 'Curitiba/PR', 'Maringá/PR', 'São José dos Pinhais/PR',
+    'Gravataí/RS', 'São José/SC', 'Balneário Camboriú/SC', 'São Bernardo do Campo/SP'
 ];
 
 // Quanto tempo o carro está no pátio, em texto ("3d 5h" / "6h" / "—")
@@ -8222,6 +8250,8 @@ async function salvarPatioManual(pedidoId) {
         await carregarDadosDoSupabase();
         renderizarPainelPatios();
         if (typeof carregarPainel === 'function') carregarPainel();
+        if (typeof renderizarCarteiraDemanda === 'function') renderizarCarteiraDemanda();
+        if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
         exibirMensagem('mensagemLogistica', `✅ ${texto} (pedido #${pedidoId})`, 'success');
     } catch (e) {
         msgEl.textContent = 'Erro ao salvar: ' + e.message;
@@ -10006,7 +10036,7 @@ function renderizarReservasAtivas(){
   const wrap = document.getElementById('reservasAtivasWrap');
   if (!wrap) return;
   const ativas = _reservasAtivas();
-  if (ativas.length === 0){ wrap.innerHTML = ''; return; }
+  if (ativas.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
   const agora = Date.now();
   // agrupa por grupo_id (ou id isolado)
   const grupos = {};
@@ -10238,20 +10268,23 @@ function _norm(txt){
 
 // posição de uma cidade na sequência do corredor (-1 se não estiver)
 function _posNaSeq(seq, cidade){
-  const alvo = _norm(cidade);
-  return seq.findIndex(s => _norm(s) === alvo);
+  // compara só a parte da cidade, ignorando "/UF" (ex.: "Curitiba/PR" = "Curitiba")
+  const soCidade = v => _norm((v || '').toString().split('/')[0]);
+  const alvo = soCidade(cidade);
+  if (!alvo) return -1;
+  return seq.findIndex(s => soCidade(s) === alvo);
 }
 
 function gerarSugestoesRota(){
   const wrap = document.getElementById('sugestoesRotaWrap');
   if (!wrap) return;
   const corredores = (corredoresGlobais||[]).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
-  if (corredores.length === 0){ wrap.innerHTML = ''; return; }
+  if (corredores.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
 
   // pedidos pendentes, não-reserva, sem cegonha
   const pendentes = (pedidosGlobais||[]).filter(p =>
     p.status === 'Pendente' && !p.isReserva && !p.placaCegonha);
-  if (pendentes.length === 0){ wrap.innerHTML = ''; return; }
+  if (pendentes.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
 
   const sugestoes = [];
   corredores.forEach(cor => {
@@ -10281,7 +10314,8 @@ function gerarSugestoesRota(){
     flush();
   });
 
-  if (sugestoes.length === 0){ wrap.innerHTML = ''; return; }
+  if (sugestoes.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
+  _sugestoesCache = sugestoes;
 
   wrap.innerHTML = `<div class="sugestoes-box">
     <div class="sugestoes-titulo">🧭 Sugestões de rota por corredor (${sugestoes.length}) — para validação da Logística</div>
@@ -10305,9 +10339,18 @@ function gerarSugestoesRota(){
         <div class="sug-paradas">${paradasComPedido}</div>
         <div class="sug-pedidos">${s.itens.map(p =>
           `<span class="sug-pedido">#${p.id} ${p.cliente} (${p.cidadeOrigem}→${p.cidadeDestino})</span>`).join('')}</div>
+        ${(typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar()) ? `<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="criarRotaDaSugestao(${idx})">🛣️ Criar rota e alocar ${s.itens.length} carro(s)</button>` : ''}
       </div>`;
     }).join('')}
   </div>`;
+  _espelharSugPainel();
+}
+
+// Espelha as sugestões de rota também no Painel de Acompanhamento
+function _espelharSugPainel(){
+  const a = document.getElementById('sugestoesRotaWrap');
+  const b = document.getElementById('sugestoesRotaPainel');
+  if (a && b) b.innerHTML = a.innerHTML;
 }
 
 // ============================================================
@@ -10349,8 +10392,8 @@ function _horasAteColeta(p){
 function renderizarConfirmacaoComercial(){
   const wrap = document.getElementById('confirmacaoComercialWrap');
   if (!wrap) return;
-  const aguardando = (pedidosGlobais||[]).filter(p => p.status === 'Aguardando Confirmação');
-  if (aguardando.length === 0){ wrap.innerHTML = ''; return; }
+  const aguardando = (pedidosGlobais||[]).filter(p => p.status === 'Aguardando Confirmação' && p.origemLancamento !== 'logistica');
+  if (aguardando.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
   wrap.innerHTML = `<div class="confirmacao-box">
     <div class="confirmacao-titulo">✅ Intenções aguardando sua confirmação (${aguardando.length})</div>
     ${aguardando.map(p => {
@@ -10480,7 +10523,7 @@ function renderizarLastMile(){
   const wrap = document.getElementById('lastMileWrap');
   if (!wrap) return;
   const fila = _pedidosLastMile();
-  if (fila.length === 0){ wrap.innerHTML = ''; return; }
+  if (fila.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
   const opcoesEquipe = (equipesEntregaGlobais||[]).map(e => `<option value="${e.id}">${e.nome}${e.responsavel?' ('+e.responsavel+')':''}</option>`).join('');
   wrap.innerHTML = `<div class="lastmile-box">
     <div class="lastmile-titulo">🚚 Last mile — definir entrega final (${fila.length})</div>
@@ -10620,7 +10663,7 @@ function renderizarConferenciaFaturamento(){
   const wrap = document.getElementById('conferenciaFatWrap');
   if (!wrap) return;
   const rotas = _rotasComFaturamento();
-  if (rotas.length === 0){ wrap.innerHTML = ''; return; }
+  if (rotas.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
   wrap.innerHTML = `<div class="card">
     <div class="painel-header-bar"><h2>🧾 Conferência de Faturamento (previsto × emitido)</h2>
       <button class="btn btn-secondary btn-sm" onclick="renderizarConferenciaFaturamento()">↻ Atualizar</button></div>
@@ -11026,5 +11069,352 @@ async function autoPreencherCNPJEdicao(){
     if (msg){ msg.textContent = '⚠️ ' + (e.message || 'Falha ao consultar CNPJ'); msg.className = 'message show error'; }
   } finally {
     if (typeof ocultarProcessando === 'function') ocultarProcessando();
+  }
+}
+
+// Cache das sugestões e criação de rota já alocando os carros sugeridos
+let _sugestoesCache = [];
+async function criarRotaDaSugestao(idx){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('criar rota')) return;
+  const s = _sugestoesCache[idx];
+  if (!s || !supabase) return;
+  const seqCidades = (s.seq || []).filter(Boolean);
+  if (!confirm(`Criar rota "${s.cor.nome}" e alocar ${s.itens.length} carro(s) sugerido(s)?`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    // 1) cria a rota planejada a partir do corredor
+    const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
+      nome: s.cor.nome,
+      corredor_id: s.cor.id || null,
+      paradas: seqCidades,
+      status: 'planejada',
+      criado_por: usuario
+    }).select();
+    if (e1) throw e1;
+    const rotaId = nova && nova[0] && nova[0].id;
+    if (!rotaId) throw new Error('Falha ao criar a rota.');
+
+    // 2) vincula os pedidos sugeridos à rota (mesma coluna do vincular manual)
+    const ids = s.itens.map(p => parseInt(p.id));
+    const { error: e2 } = await supabase.from('pedidos').update({ rota_id: rotaId }).in('id', ids);
+    if (e2) throw e2;
+
+    await recarregarPedidos();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      `✅ Rota "${s.cor.nome}" criada com ${ids.length} carro(s). Agora é só definir a cegonha na aba Gestão Logística.`, 'success');
+  } catch(e){
+    alert('Erro ao criar rota: ' + (e.message || e));
+  }
+}
+
+// ============================================================
+// Carteira de Demanda — pedidos sem rota, agrupados por origem
+// (aba interna do Painel de Acompanhamento; logística e comercial)
+// ============================================================
+function mostrarViewPainel(view, btn){
+  const painel = document.getElementById('painel');
+  const carteira = document.getElementById('painelViewCarteira');
+  const corredores = document.getElementById('painelViewCorredores');
+  if (!painel) return;
+  const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .table-container, #sugestoesRotaPainel');
+  const ehExtra = (view === 'carteira' || view === 'corredores');
+  esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
+  if (carteira) carteira.style.display = (view === 'carteira') ? '' : 'none';
+  if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
+  if (view === 'carteira') renderizarCarteiraDemanda();
+  if (view === 'corredores') renderizarPainelCorredores();
+  document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
+  if (btn) btn.classList.add('ativo');
+}
+
+function renderizarCarteiraDemanda(){
+  const cont = document.getElementById('painelViewCarteira');
+  if (!cont) return;
+  // monta a casca uma vez (mantém o foco da busca)
+  if (!document.getElementById('carteiraBusca')){
+    cont.innerHTML = `
+      <div class="carteira-topo">
+        <input type="text" id="carteiraBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, cidade, placa..." oninput="_renderCarteiraGrupos()">
+        <span id="carteiraTotal" class="text-muted"></span>
+      </div>
+      <div id="carteiraGrupos"></div>`;
+  }
+  _renderCarteiraGrupos();
+}
+
+function _renderCarteiraGrupos(){
+  const alvo = document.getElementById('carteiraGrupos');
+  if (!alvo) return;
+  const busca = (document.getElementById('carteiraBusca')?.value || '').toLowerCase().trim();
+  let lista = (pedidosGlobais || []).filter(p =>
+    !(p.rotaId || p.rota_id) && !p.placaCegonha && !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
+  if (busca) lista = lista.filter(p =>
+    `${p.cliente||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} ${p.placa||''} #${p.id}`
+      .toLowerCase().includes(busca));
+
+  const total = document.getElementById('carteiraTotal');
+  if (total) total.textContent = `${lista.length} carro(s) sem rota`;
+
+  // agrupa por origem de coleta
+  const grupos = {};
+  lista.forEach(p => { const k = `${p.cidadeOrigem || '—'}/${p.ufOrigem || ''}`; (grupos[k] = grupos[k] || []).push(p); });
+  const chaves = Object.keys(grupos).sort((a,b) => grupos[b].length - grupos[a].length);
+
+  if (chaves.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum pedido sem rota. 👌</p>'; return; }
+
+  _carteiraCache = grupos;
+  _carteiraChaves = chaves;
+  const podeCriar = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
+  const ativas = (rotasGlobais || []).filter(r => {
+    const s = String(r.status || '').toLowerCase().trim();
+    return s !== 'concluida' && s !== 'concluída' && s !== 'cancelada';
+  });
+  const opcoesRotas = ativas.map(r => `<option value="${r.id}">➡️ ${r.nome || ('Rota #'+r.id)}${r.placa_cegonha ? ' · '+r.placa_cegonha : ''}</option>`).join('');
+
+  alvo.innerHTML = chaves.map((k, i) => {
+    const itens = grupos[k];
+    return `<div class="carteira-grupo">
+      <div class="carteira-grupo-tit">📍 ${k} <span class="carteira-badge">${itens.length} carro(s)</span>
+        ${podeCriar ? `<span class="carteira-acao">
+          <select id="carteiraSel_${i}">
+            <option value="nova">➕ Criar nova rota</option>
+            ${opcoesRotas}
+          </select>
+          <button class="btn btn-sm btn-primary" onclick="aplicarCarteiraRota(${i})">Aplicar</button>
+        </span>` : ''}
+      </div>
+      ${itens.map(p => `
+        <div class="carteira-linha">
+          <span class="carteira-cli">#${p.id} · <strong>${p.cliente || '—'}</strong></span>
+          <span>🚗 ${p.modelo || ''} ${p.placa || ''}</span>
+          <span class="text-muted">→ ${p.cidadeDestino || ''}/${p.ufDestino || ''}</span>
+          <span class="carteira-valor">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+          <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+let _carteiraCache = {};
+let _carteiraChaves = [];
+
+function aplicarCarteiraRota(i){
+  const chave = _carteiraChaves[i];
+  const val = document.getElementById('carteiraSel_' + i)?.value || 'nova';
+  if (val === 'nova') return criarRotaCarteira(chave);
+  return adicionarCarteiraNaRota(chave, val);
+}
+
+// Vincula os carros do grupo a uma rota planejada JÁ EXISTENTE
+async function adicionarCarteiraNaRota(chaveOrigem, rotaId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('vincular à rota')) return;
+  const itens = _carteiraCache[chaveOrigem];
+  const rota = (rotasGlobais || []).find(r => String(r.id) === String(rotaId));
+  if (!itens || !itens.length || !rota || !supabase) return;
+  if (!confirm(`Adicionar os ${itens.length} carro(s) de ${chaveOrigem} à rota "${rota.nome || '#'+rota.id}"${rota.placa_cegonha ? ' (cegonha '+rota.placa_cegonha+')' : ''}?`)) return;
+  try {
+    const ids = itens.map(p => parseInt(p.id));
+    const update = { rota_id: parseInt(rotaId) };
+    // se a rota já tem cegonha, os carros entram como intenção agendada nela
+    if (rota.placa_cegonha){ update.placa_cegonha = rota.placa_cegonha; update.status = 'Intenção Agendada'; }
+    const { error } = await supabase.from('pedidos').update(update).in('id', ids);
+    if (error) throw error;
+    await recarregarPedidos();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    renderizarCarteiraDemanda();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      `✅ ${ids.length} carro(s) de ${chaveOrigem} adicionados à rota "${rota.nome || '#'+rota.id}".`, 'success');
+  } catch(e){
+    alert('Erro ao adicionar à rota: ' + (e.message || e));
+  }
+}
+
+async function criarRotaCarteira(chaveOrigem){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('criar rota')) return;
+  const itens = _carteiraCache[chaveOrigem];
+  if (!itens || itens.length === 0 || !supabase) return;
+  if (!confirm(`Criar uma rota com os ${itens.length} carro(s) de ${chaveOrigem}?\n\nDepois é só definir a cegonha na Gestão Logística.`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  // paradas = origem + destinos distintos (na ordem em que aparecem)
+  const paradas = [];
+  const push = c => { if (c && !paradas.some(x => x.toLowerCase() === c.toLowerCase())) paradas.push(c); };
+  push((itens[0].cidadeOrigem || '').trim());
+  itens.forEach(p => push((p.cidadeDestino || '').trim()));
+  try {
+    const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
+      nome: `${chaveOrigem} → demanda`,
+      paradas, status: 'planejada', criado_por: usuario
+    }).select();
+    if (e1) throw e1;
+    const rotaId = nova && nova[0] && nova[0].id;
+    if (!rotaId) throw new Error('Falha ao criar a rota.');
+    const ids = itens.map(p => parseInt(p.id));
+    const { error: e2 } = await supabase.from('pedidos').update({ rota_id: rotaId }).in('id', ids);
+    if (e2) throw e2;
+    await recarregarPedidos();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    renderizarCarteiraDemanda();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      `✅ Rota criada com ${ids.length} carro(s) de ${chaveOrigem}. Defina a cegonha na Gestão Logística.`, 'success');
+  } catch(e){
+    alert('Erro ao criar rota: ' + (e.message || e));
+  }
+}
+
+// ============================================================
+// Painel de Corredores — cada corredor com seus pedidos compatíveis
+// (espelha a lógica da planilha: faixas por corredor)
+// ============================================================
+let _corredoresAbertos = new Set();
+
+function renderizarPainelCorredores(){
+  const cont = document.getElementById('painelViewCorredores');
+  if (!cont) return;
+  const corredores = (corredoresGlobais || []).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
+
+  if (corredores.length === 0){
+    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum corredor cadastrado ainda. Cadastre em <strong>Cadastros → Corredores</strong> (ex.: Curitiba → Imbaú → Apucarana → Maringá).</p>';
+    return;
+  }
+
+  // pedidos "vivos" (não entregues/cancelados) sem cegonha ainda
+  const vivos = (pedidosGlobais || []).filter(p => !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
+
+  cont.innerHTML = `
+    <div class="carteira-topo">
+      <input type="text" id="corredorBusca" class="ocup-busca" placeholder="🔍 Filtrar por cidade, cliente, placa..." oninput="renderizarPainelCorredores()" value="${(document.getElementById('corredorBusca')?.value||'').replace(/"/g,'&quot;')}">
+      <span class="text-muted">${corredores.length} corredor(es)</span>
+    </div>
+    <div class="corredores-grid">
+      ${corredores.map(c => _corredorCardHTML(c, vivos)).join('')}
+    </div>
+    ${_carrosSemCorredorHTML(corredores, vivos)}`;
+}
+
+// Diagnóstico: carros que não se encaixaram em NENHUM corredor (mostra o que o sistema lê)
+function _carrosSemCorredorHTML(corredores, vivos){
+  const seqs = corredores.map(c => ((c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino]).filter(Boolean));
+  const encaixa = p => {
+    const partida = p.patioAtual || p.cidadeOrigem;
+    return seqs.some(seq => {
+      const io = _posNaSeq(seq, partida), id = _posNaSeq(seq, p.cidadeDestino);
+      return (io !== -1 && id !== -1 && io < id) || (io === -1 && id !== -1) || (io !== -1 && id === -1 && io < seq.length - 1);
+    });
+  };
+  const orfaos = (vivos || []).filter(p => !encaixa(p) && !p.placaCegonha && !(p.rotaId||p.rota_id));
+  if (orfaos.length === 0) return '';
+  return `<div class="corredor-card" style="margin-top:14px">
+    <div class="corredor-card-cab" onclick="toggleCorredorCard('__orfaos__')" style="cursor:pointer">
+      <div><strong>🔍 Carros fora de qualquer corredor</strong> <span class="text-muted" style="margin-left:6px">(diagnóstico)</span></div>
+      <div class="corredor-card-nums"><span class="corredor-semrota">${orfaos.length}</span><span class="corredor-chevron">${_corredoresAbertos.has('__orfaos__')?'▲':'▼'}</span></div>
+    </div>
+    ${_corredoresAbertos.has('__orfaos__') ? `<div class="corredor-pedidos">
+      <p class="text-muted text-sm" style="padding:.3rem 0">O sistema tenta encaixar por <strong>pátio</strong> (se houver) ou <strong>origem</strong> → <strong>destino</strong>. Se a cidade não está nas paradas de nenhum corredor, o carro cai aqui. Confira a grafia.</p>
+      ${orfaos.map(p => `<div class="corredor-pedido-linha">
+        <span class="carteira-cli">#${p.id} · <strong>${p.cliente||'—'}</strong></span>
+        <span>partida: <strong>${p.patioAtual ? '🅿️ '+p.patioAtual : (p.cidadeOrigem||'—')}</strong></span>
+        <span class="text-muted">→ destino: <strong>${p.cidadeDestino||'—'}</strong></span>
+        <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="Informar pátio">🅿️</button>
+      </div>`).join('')}
+    </div>` : ''}
+  </div>`;
+}
+
+function _corredorCardHTML(c, vivos){
+  const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
+  const paradasStr = seq.filter(Boolean);
+  const busca = (document.getElementById('corredorBusca')?.value || '').toLowerCase().trim();
+
+  // pedidos compatíveis: parte do PÁTIO ATUAL (se houver) ou da origem do pedido;
+  // entra se partida→destino couber no corredor (ordem certa) ou for encaixe no caminho.
+  let compat = vivos.filter(p => {
+    const partida = p.patioAtual || p.cidadeOrigem; // pátio manda quando existe
+    const io = _posNaSeq(paradasStr, partida);
+    const id = _posNaSeq(paradasStr, p.cidadeDestino);
+    return (io !== -1 && id !== -1 && io < id)   // partida e destino no trajeto, na ordem
+        || (io === -1 && id !== -1)              // encaixe no caminho (destino no trajeto)
+        || (io !== -1 && id === -1 && io < paradasStr.length - 1); // parte de uma parada, destino fora
+  });
+  if (busca) compat = compat.filter(p =>
+    `${p.cliente||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.placa||''} #${p.id}`.toLowerCase().includes(busca));
+
+  const semRota = compat.filter(p => !(p.rotaId || p.rota_id) && !p.placaCegonha).length;
+  _corredorCache[String(c.id)] = { nome: c.nome, seq: paradasStr, itens: compat.filter(p => !(p.rotaId || p.rota_id) && !p.placaCegonha) };
+  const podeCriar = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
+  const aberto = _corredoresAbertos.has(String(c.id));
+  const paradasHTML = paradasStr.map((cid,i) =>
+    `<span class="corredor-parada">${i+1}. ${cid}</span>`).join('<span class="rota-seta">→</span>');
+
+  return `<div class="corredor-card">
+    <div class="corredor-card-cab">
+      <div onclick="toggleCorredorCard('${c.id}')" style="cursor:pointer;flex:1">
+        <strong>🛣️ ${c.nome}</strong>
+        <span class="text-muted" style="margin-left:8px">SLA ${c.sla_horas || '?'}h</span>
+      </div>
+      <div class="corredor-card-nums">
+        <span class="carteira-badge">${compat.length} carro(s)</span>
+        ${semRota > 0 ? `<span class="corredor-semrota">${semRota} sem rota</span>` : ''}
+        ${(podeCriar && semRota > 0) ? `<button class="btn btn-sm btn-primary" onclick="criarRotaDoCorredor('${c.id}')" title="Cria a rota deste corredor já com os ${semRota} carro(s) sem rota">🛣️ Criar rota</button>` : ''}
+        <span class="corredor-chevron" onclick="toggleCorredorCard('${c.id}')" style="cursor:pointer">${aberto ? '▲' : '▼'}</span>
+      </div>
+    </div>
+    <div class="corredor-paradas-linha">${paradasHTML}</div>
+    ${aberto ? `<div class="corredor-pedidos">
+      ${compat.length === 0 ? '<p class="text-muted text-sm" style="padding:.5rem 0">Nenhum pedido compatível no momento.</p>'
+        : compat.map(p => {
+          const enc = _classificarEncaixePedido(p, paradasStr);
+          const semR = !(p.rotaId || p.rota_id) && !p.placaCegonha;
+          const viaPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1 && _posNaSeq(paradasStr, p.cidadeOrigem) === -1;
+          return `<div class="corredor-pedido-linha">
+            <span class="carteira-cli">#${p.id} · <strong>${p.cliente||'—'}</strong></span>
+            <span>🚗 ${p.modelo||''} ${p.placa||''}</span>
+            <span class="text-muted">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span>
+            ${viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Entra no corredor porque está no pátio de ${p.patioAtual}">🅿️ via pátio ${p.patioAtual}</span>` : (enc.selo || '')}
+            <span class="status-pill-mini" title="Status">${p.status||'Pendente'}</span>
+            ${semR ? '<span class="corredor-tag-semrota">sem rota</span>' : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`}
+            <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
+          </div>`;
+        }).join('')}
+    </div>` : ''}
+  </div>`;
+}
+
+function toggleCorredorCard(id){
+  const k = String(id);
+  if (_corredoresAbertos.has(k)) _corredoresAbertos.delete(k);
+  else _corredoresAbertos.add(k);
+  renderizarPainelCorredores();
+}
+
+// Cria a rota de um corredor já com os carros sem rota compatíveis
+let _corredorCache = {};
+async function criarRotaDoCorredor(corredorId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('criar rota')) return;
+  const dados = _corredorCache[String(corredorId)];
+  if (!dados || !dados.itens || dados.itens.length === 0 || !supabase) return;
+  if (!confirm(`Criar a rota "${dados.nome}" e alocar ${dados.itens.length} carro(s) sem rota deste corredor?`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
+      nome: dados.nome,
+      corredor_id: parseInt(corredorId) || null,
+      paradas: dados.seq || [],
+      status: 'planejada',
+      criado_por: usuario
+    }).select();
+    if (e1) throw e1;
+    const rotaId = nova && nova[0] && nova[0].id;
+    if (!rotaId) throw new Error('Falha ao criar a rota.');
+    const ids = dados.itens.map(p => parseInt(p.id));
+    const { error: e2 } = await supabase.from('pedidos').update({ rota_id: rotaId }).in('id', ids);
+    if (e2) throw e2;
+    await recarregarPedidos();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      `✅ Rota "${dados.nome}" criada com ${ids.length} carro(s). Defina a cegonha na Gestão Logística.`, 'success');
+  } catch(e){
+    alert('Erro ao criar rota: ' + (e.message || e));
   }
 }
