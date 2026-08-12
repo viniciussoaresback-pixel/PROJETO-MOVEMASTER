@@ -8371,3 +8371,11 @@ input:focus, select:focus, textarea:focus {
 .corredor-drop.drop-fora .corredor-drop-tit { color: #f87171; }
 [data-tema="claro"] .corredor-div-sel select { background: var(--surface-1); color: var(--text-primary); }
 [data-tema="claro"] .corredor-tronco-nota { background: rgba(37,99,235,.08); }
+
+/* Corredor — barra de seleção de carros para criar rota */
+.corr-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent, #ff6a00); flex-shrink: 0; }
+.corredor-selbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2, rgba(255,255,255,.05)); border: 1px solid var(--border, rgba(255,255,255,.12)); }
+.corredor-cont { font-size: .88rem; }
+.corredor-selbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.cont-excede { color: #fbbf24; font-weight: 700; }
+[data-tema="claro"] .corredor-selbar { background: var(--surface-1); }
