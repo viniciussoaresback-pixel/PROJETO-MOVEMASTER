@@ -8933,6 +8933,23 @@ async function registrarEspelhoFiscal({ placaCegonha, pedidos, totalFrete, usuar
         catch (err) { return false; }
     });
 
+    // Evita duplicata: se TODOS os carros desta carga já têm CTe emitido em
+    // espelhos anteriores, não cria um novo registro (já foram faturados).
+    const idsAtuais = pedidos.map(p => p.id);
+    const idsJaEmitidos = new Set();
+    (existentes || []).forEach(e => {
+        if (e.cte_emitido !== true) return;
+        try {
+            const ex = JSON.parse(e.dados_extras || '{}');
+            (ex.pedidos_ids || []).forEach(id => idsJaEmitidos.add(id));
+        } catch (err) { /* ignora */ }
+    });
+    const faltaEmitir = idsAtuais.filter(id => !idsJaEmitidos.has(id));
+    if (faltaEmitir.length === 0) {
+        console.info('Espelho não recriado: todos os carros desta cegonha já têm CTe emitido.');
+        return; // não duplica
+    }
+
     if (aberto) {
         // Ao atualizar (mais um carro embarcou), o snapshot é refeito
         // mas o NÚMERO DO DOCUMENTO original é preservado.
@@ -11355,7 +11372,6 @@ function _carrosSemCorredorHTML(corredores, vivos){
 }
 
 function _corredorCardHTML(c, vivos, ci){
-  const corIdx = ((ci || 0) % 6) + 1;
   const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
   const paradasStr = seq.filter(Boolean);
   const busca = (document.getElementById('corredorBusca')?.value || '').toLowerCase().trim();
@@ -11381,7 +11397,7 @@ function _corredorCardHTML(c, vivos, ci){
   const paradasHTML = paradasStr.map((cid,i) =>
     `<span class="corredor-parada">${i+1}. ${cid}</span>`).join('<span class="rota-seta">→</span>');
 
-  return `<div class="corredor-card cor-corredor-${corIdx}">
+  return `<div class="corredor-card">
     <div class="corredor-card-cab">
       <div onclick="toggleCorredorCard('${c.id}')" style="cursor:pointer;flex:1">
         <strong>🛣️ ${c.nome}</strong>
@@ -11452,7 +11468,7 @@ function _corredorPedidoLinha(p, c, paradasStr){
     <input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">
     <span class="cpl-col cpl-id">#${p.id}</span>
     <span class="cpl-col cpl-veic"><span class="cpl-rot">Veículo</span>🚗 ${p.modelo||'—'} <strong>${p.placa||''}</strong></span>
-    <span class="cpl-col cpl-rota"><span class="cpl-rot">Origem → Destino</span>${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></span>
+    <span class="cpl-col cpl-rota"><span class="cpl-rot">Origem → Destino</span><span class="cpl-od"><span class="cpl-od-orig">${p.cidadeOrigem||'—'}</span><span class="cpl-seta">→</span><strong class="cpl-od-dest">${p.cidadeDestino||'—'}</strong></span></span>
     <span class="cpl-col cpl-cli"><span class="cpl-rot">Cliente</span>${p.cliente||'—'}</span>
     <span class="cpl-col cpl-frete"><span class="cpl-rot">Frete</span>R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
     <span class="cpl-col cpl-status"><span class="cpl-rot">Situação</span><span class="status-pill-mini">${p.status||'Pendente'}</span> ${rotaTag}</span>
