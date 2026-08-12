@@ -504,10 +504,13 @@ function entrarComoAdmin(perfil) {
     const btnVoltar = document.getElementById('btnVoltarAdmin');
     if (btnVoltar) btnVoltar.style.display = '';
 
+    // Passa a se comportar REALMENTE como o perfil escolhido (respeita as restrições).
+    perfilAtual = perfil;
     aplicarPermissoes(perfil);
 }
 
 function voltarParaAdmin() {
+    perfilAtual = 'admin'; // restaura o raio-x do admin
     const btnVoltar = document.getElementById('btnVoltarAdmin');
     if (btnVoltar) btnVoltar.style.display = 'none';
     mostrarTelaAdmin(usuarioAtual?.email || '', '');
@@ -753,6 +756,7 @@ async function carregarDadosFiscal() {
                     <button class="btn ${emitido ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="toggleCteEmitido('${pdf.id}', ${emitido})">
                         ${emitido ? '↩️ Desmarcar' : '✅ Marcar emitido'}
                     </button>
+                    ${!emitido ? `<button class="btn btn-danger btn-sm" onclick="excluirEspelhoCarga('${pdf.id}')" title="Excluir este espelho (ex.: duplicado)">🗑️ Excluir</button>` : ''}
                 </td>
             </tr>`;
         }).join('');
@@ -763,6 +767,26 @@ async function carregarDadosFiscal() {
 }
 
 // Marca / desmarca a emissão do CTE de um espelho de carga
+async function excluirEspelhoCarga(pdfId) {
+    if (!supabase || !pdfId) return;
+    // Segurança: só permite excluir espelho NÃO emitido
+    try {
+        const { data } = await supabase.from('ocorrencias')
+            .select('cte_emitido, espelho_cegonha, descricao').eq('id', pdfId).maybeSingle();
+        if (data?.cte_emitido === true) {
+            alert('Este espelho já tem CTe emitido e não pode ser excluído. Se precisar, use "Desmarcar" primeiro.');
+            return;
+        }
+        const alvo = data?.espelho_cegonha || 'esta cegonha';
+        if (!confirm(`Excluir o espelho de carga de ${alvo}?\n\nUse isto para remover registros duplicados ou criados por engano. Não afeta os pedidos nem o faturamento já emitido.`)) return;
+        const { error } = await supabase.from('ocorrencias').delete().eq('id', pdfId);
+        if (error) throw error;
+        if (typeof carregarDadosFiscal === 'function') carregarDadosFiscal();
+    } catch (e) {
+        alert('Erro ao excluir espelho: ' + (e.message || e));
+    }
+}
+
 async function toggleCteEmitido(pdfId, jaEmitido) {
     if (!supabase) return;
     const novoValor = !jaEmitido;
@@ -1573,12 +1597,12 @@ function abrirConfirmarReceita(pedidoId) {
             <h2>💰 Confirmar Receita</h2>
             <div class="status-resumo-info" style="margin-bottom:1rem">
                 <span><strong>#${pedido.id}</strong> — ${pedido.cliente || ''}</span>
-                <span>${pedido.cidade_origem}/${pedido.uf_origem} → ${pedido.cidade_destino}/${pedido.uf_destino}</span>
-                <span style="color:#4ade80;font-weight:700">R$ ${Number(pedido.valor_frete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+                <span>${pedido.cidadeOrigem || ''}/${pedido.ufOrigem || ''} → ${pedido.cidadeDestino || ''}/${pedido.ufDestino || ''}</span>
+                <span style="color:#4ade80;font-weight:700">R$ ${Number(pedido.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
             </div>
             <div class="form-group">
                 <label>Valor Confirmado (R$) *</label>
-                <input type="number" id="receitaValor" value="${pedido.valor_frete || ''}" step="0.01" min="0">
+                <input type="number" id="receitaValor" value="${pedido.valorFrete || ''}" step="0.01" min="0">
             </div>
             <div class="form-group">
                 <label>Observação</label>
