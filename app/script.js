@@ -11437,10 +11437,15 @@ function _corredorCardHTML(c, vivos, ci){
               else { label = `📍 Descem em ${d}`; cls = 'drop-desce'; }
               return `<div class="corredor-drop ${cls}">
                 <div class="corredor-drop-tit">${label} <span class="carteira-badge">${itens.length} carro(s)</span></div>
-                ${itens.map(p => _corredorPedidoLinha(p, c, paradasStr)).join('')}
+                <table class="corr-tabela">
+                  <thead><tr>
+                    <th></th><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Ações</th>
+                  </tr></thead>
+                  <tbody>${itens.map(p => _corredorPedidoLinha(p, c, paradasStr)).join('')}</tbody>
+                </table>
               </div>`;
             }).join('');
-            return selDiv + `<div class="corredor-tronco-nota">🚛 Todos seguem juntos de <strong>${paradasStr[0]||''}</strong> até <strong>${divKey}</strong> (${compat.length} carro(s)). Em ${divKey}, a carga se divide:</div>` + blocos;
+            return selDiv + blocos;
           })()}
       ${(podeCriar && compat.length > 0) ? `
       <div class="corredor-selbar">
@@ -11456,41 +11461,28 @@ function _corredorCardHTML(c, vivos, ci){
 }
 
 function _corredorPedidoLinha(p, c, paradasStr){
-  const enc = _classificarEncaixePedido(p, paradasStr);
   const semR = !(p.rotaId || p.rota_id) && !p.placaCegonha;
   const ehManual = String(p.corredorManualId || '') === String(c.id);
-  const viaPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1 && _posNaSeq(paradasStr, p.cidadeOrigem) === -1;
-  const selo = ehManual
-    ? '<span class="selo-encaixe selo-encaixe-manual" title="Jogado manualmente neste corredor">📌 manual</span>'
-    : (viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Está no pátio de ${p.patioAtual}">🅿️ ${p.patioAtual.split('/')[0]}</span>` : (enc.selo || ''));
   const rotaTag = semR
     ? '<span class="corredor-tag-semrota">sem rota</span>'
     : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`;
   const frete = Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
-  return `<div class="cpl">
-    <input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">
-    <div class="cpl-body">
-      <div class="cpl-l1">
-        <span class="cpl-id">#${p.id}</span>
-        <span class="cpl-veic">🚗 <strong>${p.placa||'—'}</strong> <span class="cpl-modelo">${p.modelo||''}</span></span>
-        <span class="cpl-od"><span class="cpl-od-orig">${p.cidadeOrigem||'—'}</span><span class="cpl-seta">→</span><strong class="cpl-od-dest">${p.cidadeDestino||'—'}</strong></span>
-        ${selo}
-      </div>
-      <div class="cpl-l2">
-        <span class="cpl-cli">${p.cliente||'—'}</span>
-        <span class="cpl-dot">•</span>
-        <span class="status-pill-mini">${p.status||'Pendente'}</span>
-        ${rotaTag}
-      </div>
-    </div>
-    <div class="cpl-frete">R$ ${frete}</div>
-    <div class="cpl-acoes">
+  return `<tr class="corr-tr">
+    <td><input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')"></td>
+    <td class="ct-id">#${p.id}</td>
+    <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+    <td class="ct-modelo">${p.modelo||'—'}</td>
+    <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+    <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+    <td class="ct-frete">R$ ${frete}</td>
+    <td class="ct-status"><span class="status-pill-mini">${p.status||'Pendente'}</span> ${rotaTag}</td>
+    <td class="ct-acoes">
       ${ehManual
         ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
         : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
       <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️</button>
-    </div>
-  </div>`;
+    </td>
+  </tr>`;
 }
 
 function toggleCorredorCard(id){
