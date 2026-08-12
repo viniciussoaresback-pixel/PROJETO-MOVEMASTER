@@ -761,11 +761,15 @@ function renderizarOcupacao() {
 
     // Filtro + busca
     const busca = (document.getElementById('ocupBusca')?.value || '').trim().toLowerCase();
+    const fOrigem = (document.getElementById('ocupOrigem')?.value || '').trim().toLowerCase();
+    const fDestino = (document.getElementById('ocupDestino')?.value || '').trim().toLowerCase();
     let lista = pedidosGlobais.filter(p => grupoOcupacao(p.status || 'Pendente') !== 'Cancelado');
     if (_ocupFiltroStatus) lista = lista.filter(p => grupoOcupacao(p.status || 'Pendente') === _ocupFiltroStatus);
     if (busca) lista = lista.filter(p =>
         `${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.placaCegonha||''} ${p.motorista1||''} ${p.referencia||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} #${p.id}`.toLowerCase().includes(busca)
     );
+    if (fOrigem) lista = lista.filter(p => `${p.cidadeOrigem||''} ${p.ufOrigem||''}`.toLowerCase().includes(fOrigem));
+    if (fDestino) lista = lista.filter(p => `${p.cidadeDestino||''} ${p.ufDestino||''}`.toLowerCase().includes(fDestino));
 
     // Ordena: pendentes primeiro, depois em rota, depois entregues; dentro por coleta
     const ordemGrupo = { 'Pendente': 0, 'Em Rota': 1, 'Entregue': 2 };
@@ -4663,6 +4667,8 @@ function renderizarPedidosComercial() {
 
     // Popular dropdown de rotas
     popularFiltroRotas();
+    const filtroOrigem = (document.getElementById('filtroPedidosOrigem')?.value || '').toLowerCase();
+    const filtroDestino = (document.getElementById('filtroPedidosDestino')?.value || '').toLowerCase();
 
     const cores = {
         'Pendente': '#fbbf24', 'Intenção Agendada': '#60a5fa',
@@ -4672,6 +4678,8 @@ function renderizarPedidosComercial() {
 
     let pedidos = [...pedidosGlobais].sort((a, b) => b.id - a.id);
 
+    if (filtroOrigem) pedidos = pedidos.filter(p => `${p.cidadeOrigem||''} ${p.ufOrigem||''}`.toLowerCase().includes(filtroOrigem));
+    if (filtroDestino) pedidos = pedidos.filter(p => `${p.cidadeDestino||''} ${p.ufDestino||''}`.toLowerCase().includes(filtroDestino));
     if (filtroStatus) pedidos = pedidos.filter(p => p.status === filtroStatus);
     if (filtroRota) pedidos = pedidos.filter(p => {
         const r = `${p.cidadeOrigem||''}/${p.ufOrigem||''} → ${p.cidadeDestino||''}/${p.ufDestino||''}`;
@@ -11308,7 +11316,7 @@ function renderizarPainelCorredores(){
       <span class="text-muted">${corredores.length} corredor(es)</span>
     </div>
     <div class="corredores-grid">
-      ${corredores.map(c => _corredorCardHTML(c, vivos)).join('')}
+      ${corredores.map((c,ci) => _corredorCardHTML(c, vivos, ci)).join('')}
     </div>
     ${_carrosSemCorredorHTML(corredores, vivos)}`;
   if (podeVerSugestoes && typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
@@ -11346,7 +11354,8 @@ function _carrosSemCorredorHTML(corredores, vivos){
   </div>`;
 }
 
-function _corredorCardHTML(c, vivos){
+function _corredorCardHTML(c, vivos, ci){
+  const corIdx = ((ci || 0) % 6) + 1;
   const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
   const paradasStr = seq.filter(Boolean);
   const busca = (document.getElementById('corredorBusca')?.value || '').toLowerCase().trim();
@@ -11372,7 +11381,7 @@ function _corredorCardHTML(c, vivos){
   const paradasHTML = paradasStr.map((cid,i) =>
     `<span class="corredor-parada">${i+1}. ${cid}</span>`).join('<span class="rota-seta">→</span>');
 
-  return `<div class="corredor-card">
+  return `<div class="corredor-card cor-corredor-${corIdx}">
     <div class="corredor-card-cab">
       <div onclick="toggleCorredorCard('${c.id}')" style="cursor:pointer;flex:1">
         <strong>🛣️ ${c.nome}</strong>
@@ -11435,18 +11444,25 @@ function _corredorPedidoLinha(p, c, paradasStr){
   const semR = !(p.rotaId || p.rota_id) && !p.placaCegonha;
   const ehManual = String(p.corredorManualId || '') === String(c.id);
   const viaPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1 && _posNaSeq(paradasStr, p.cidadeOrigem) === -1;
+  const selo = ehManual
+    ? '<span class="selo-encaixe selo-encaixe-manual" title="Pedido jogado manualmente neste corredor">📌 manual</span>'
+    : (viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Está no pátio de ${p.patioAtual}">🅿️ via pátio ${p.patioAtual}</span>` : (enc.selo || ''));
+  const rotaTag = semR ? '<span class="corredor-tag-semrota">sem rota</span>' : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`;
   return `<div class="corredor-pedido-linha">
     <input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">
-    <span class="carteira-cli">#${p.id} · <strong>${p.cliente||'—'}</strong></span>
-    <span>🚗 ${p.modelo||''} ${p.placa||''}</span>
-    <span class="text-muted">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span>
-    ${ehManual ? '<span class="selo-encaixe selo-encaixe-manual" title="Pedido jogado manualmente neste corredor">📌 manual</span>' : (viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Entra no corredor porque está no pátio de ${p.patioAtual}">🅿️ via pátio ${p.patioAtual}</span>` : (enc.selo || ''))}
-    <span class="status-pill-mini" title="Status">${p.status||'Pendente'}</span>
-    ${semR ? '<span class="corredor-tag-semrota">sem rota</span>' : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`}
-    ${ehManual
-      ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
-      : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
-    <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
+    <span class="cpl-col cpl-id">#${p.id}</span>
+    <span class="cpl-col cpl-veic"><span class="cpl-rot">Veículo</span>🚗 ${p.modelo||'—'} <strong>${p.placa||''}</strong></span>
+    <span class="cpl-col cpl-rota"><span class="cpl-rot">Origem → Destino</span>${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></span>
+    <span class="cpl-col cpl-cli"><span class="cpl-rot">Cliente</span>${p.cliente||'—'}</span>
+    <span class="cpl-col cpl-frete"><span class="cpl-rot">Frete</span>R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+    <span class="cpl-col cpl-status"><span class="cpl-rot">Situação</span><span class="status-pill-mini">${p.status||'Pendente'}</span> ${rotaTag}</span>
+    <span class="cpl-col cpl-selo">${selo}</span>
+    <span class="cpl-col cpl-acoes">
+      ${ehManual
+        ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
+        : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
+      <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
+    </span>
   </div>`;
 }
 
