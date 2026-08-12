@@ -11122,7 +11122,7 @@ function mostrarViewPainel(view, btn){
   const carteira = document.getElementById('painelViewCarteira');
   const corredores = document.getElementById('painelViewCorredores');
   if (!painel) return;
-  const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .table-container, #sugestoesRotaPainel');
+  const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
   const ehExtra = (view === 'carteira' || view === 'corredores');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (carteira) carteira.style.display = (view === 'carteira') ? '' : 'none';
@@ -11286,7 +11286,9 @@ function renderizarPainelCorredores(){
   // pedidos "vivos" (não entregues/cancelados) sem cegonha ainda
   const vivos = (pedidosGlobais || []).filter(p => !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
 
+  const podeVerSugestoes = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
   cont.innerHTML = `
+    ${podeVerSugestoes ? '<div id="sugestoesRotaWrap" class="sugestoes-wrap"></div>' : ''}
     <div class="carteira-topo">
       <input type="text" id="corredorBusca" class="ocup-busca" placeholder="🔍 Filtrar por cidade, cliente, placa..." oninput="renderizarPainelCorredores()" value="${(document.getElementById('corredorBusca')?.value||'').replace(/"/g,'&quot;')}">
       <span class="text-muted">${corredores.length} corredor(es)</span>
@@ -11295,6 +11297,7 @@ function renderizarPainelCorredores(){
       ${corredores.map(c => _corredorCardHTML(c, vivos)).join('')}
     </div>
     ${_carrosSemCorredorHTML(corredores, vivos)}`;
+  if (podeVerSugestoes && typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
 }
 
 // Diagnóstico: carros que não se encaixaram em NENHUM corredor (mostra o que o sistema lê)
