@@ -10278,6 +10278,8 @@ function _posNaSeq(seq, cidade){
 function gerarSugestoesRota(){
   const wrap = document.getElementById('sugestoesRotaWrap');
   if (!wrap) return;
+  // Sugestão é ferramenta da logística — nunca renderiza para outros perfis.
+  if (typeof podeAlocarOuTransbordar === 'function' && !podeAlocarOuTransbordar()){ wrap.innerHTML = ''; return; }
   const corredores = (corredoresGlobais||[]).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
   if (corredores.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
 
@@ -10667,13 +10669,20 @@ function _rotasComFaturamento(){
 function renderizarConferenciaFaturamento(){
   const wrap = document.getElementById('conferenciaFatWrap');
   if (!wrap) return;
-  const rotas = _rotasComFaturamento();
-  if (rotas.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
+  const todas = _rotasComFaturamento();
+  const rotas = todas.filter(r => r.valor_emitido == null); // só as pendentes de conferência
+  const jaConferidas = todas.length - rotas.length;
+  if (rotas.length === 0){
+    wrap.innerHTML = jaConferidas > 0
+      ? `<div class="card"><h2>🧾 Conferência de Faturamento</h2><p class="text-muted" style="margin-top:.4rem">✅ Tudo conferido — nenhuma rota pendente. (${jaConferidas} já conferida(s))</p></div>`
+      : '';
+    return;
+  }
   wrap.innerHTML = `<div class="card">
     <div class="painel-header-bar"><h2>🧾 Conferência de Faturamento (previsto × emitido)</h2>
       <button class="btn btn-secondary btn-sm" onclick="renderizarConferenciaFaturamento()">↻ Atualizar</button></div>
     <p class="text-muted" style="margin:.2rem 0 1rem;font-size:.86rem">
-      Confira antes/depois da emissão externa de NFe/CTe. O sistema só compara e sinaliza — não emite nada.</p>
+      Confira antes/depois da emissão externa de NFe/CTe. O sistema só compara e sinaliza — não emite nada.${jaConferidas > 0 ? ` · <strong>${jaConferidas}</strong> já conferida(s) saíram da lista.` : ''}</p>
     <table class="tabela-conf">
       <thead><tr><th>Rota</th><th>Previsto</th><th>Emitido (NFe/CTe)</th><th>Status</th><th></th></tr></thead>
       <tbody>
