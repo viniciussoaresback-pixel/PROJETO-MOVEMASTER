@@ -761,6 +761,14 @@
                         <h2>Painel de Acompanhamento</h2>
                         <button class="btn btn-secondary" id="btnCarregarPainel">↻ Atualizar</button>
                     </div>
+                    <div id="sugestoesRotaPainel" class="sugestoes-wrap"></div>
+                    <div class="cad-subtabs painel-subtabs">
+                        <button class="cad-subtab-btn ativo" onclick="mostrarViewPainel('acomp',this)">📋 Acompanhamento</button>
+                        <button class="cad-subtab-btn" onclick="mostrarViewPainel('carteira',this)">🗂️ Carteira de Demanda</button>
+                        <button class="cad-subtab-btn" onclick="mostrarViewPainel('corredores',this)">🛣️ Corredores</button>
+                    </div>
+                    <div id="painelViewCarteira" style="display:none"></div>
+                    <div id="painelViewCorredores" style="display:none"></div>
                     <!-- Cards de resumo -->
                     <div class="ocup-resumo">
                         <div class="ocup-resumo-card ativo" data-filtro="" onclick="filtrarOcupacao('', this)">
@@ -801,7 +809,7 @@
                             <button class="ocup-chip" data-filtro="Em Rota" onclick="filtrarOcupacao('Em Rota', this)">Em trânsito</button>
                             <button class="ocup-chip" data-filtro="Entregue" onclick="filtrarOcupacao('Entregue', this)">Entregues</button>
                         </div>
-                        <input type="text" id="ocupBusca" class="ocup-busca" placeholder="🔍 Buscar cliente, placa, cegonha..." oninput="renderizarOcupacao()">
+                        <input type="text" id="ocupBusca" class="ocup-busca" placeholder="🔍 Buscar cliente, placa, cegonha, cidade origem/destino..." oninput="renderizarOcupacao()">
                     </div>
 
                     <!-- Tabela -->
