@@ -281,6 +281,7 @@ async function carregarDadosDoSupabase(opts) {
                 cidadeTransbordo: p.cidade_transbordo || null,
                 transbordoEm: p.transbordo_em || null,
                 patioAtual: p.patio_atual || null,
+                corredorManualId: p.corredor_manual_id || null,
                 patioDesde: p.patio_desde || null,
                 grupoId: p.grupo_id || null,
                 rotaId: p.rota_id || null,
@@ -739,6 +740,9 @@ function badgePrazoEntrega(p) {
 function renderizarOcupacao() {
     const corpo = document.getElementById('ocupTabelaCorpo');
     if (!corpo) return;
+    // Sub-aba Corredores é só da logística
+    const btnCorr = document.querySelector('.painel-subtabs .cad-subtab-btn[onclick*="corredores"]');
+    if (btnCorr) btnCorr.style.display = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar()) ? '' : 'none';
     if (typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
 
     // Contagens dos cards de resumo
@@ -10299,8 +10303,7 @@ function gerarSugestoesRota(){
       const io = _posNaSeq(seq, partida);
       const id = _posNaSeq(seq, p.cidadeDestino);
       return (io !== -1 && id !== -1 && io < id)
-          || (io === -1 && id !== -1)
-          || (io !== -1 && id === -1 && io < seq.length - 1);
+          || (io === -1 && id !== -1);
     });
     if (fits.length === 0) return;
 
@@ -11204,6 +11207,7 @@ function _renderCarteiraGrupos(){
           <span>🚗 ${p.modelo || ''} ${p.placa || ''}</span>
           <span class="text-muted">→ ${p.cidadeDestino || ''}/${p.ufDestino || ''}</span>
           <span class="carteira-valor">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+          <button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>
           <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
         </div>`).join('')}
     </div>`;
@@ -11316,7 +11320,7 @@ function _carrosSemCorredorHTML(corredores, vivos){
     const partida = p.patioAtual || p.cidadeOrigem;
     return seqs.some(seq => {
       const io = _posNaSeq(seq, partida), id = _posNaSeq(seq, p.cidadeDestino);
-      return (io !== -1 && id !== -1 && io < id) || (io === -1 && id !== -1) || (io !== -1 && id === -1 && io < seq.length - 1);
+      return (io !== -1 && id !== -1 && io < id) || (io === -1 && id !== -1);
     });
   };
   const orfaos = (vivos || []).filter(p => !encaixa(p) && !p.placaCegonha && !(p.rotaId||p.rota_id));
@@ -11346,12 +11350,14 @@ function _corredorCardHTML(c, vivos){
   // pedidos compatíveis: parte do PÁTIO ATUAL (se houver) ou da origem do pedido;
   // entra se partida→destino couber no corredor (ordem certa) ou for encaixe no caminho.
   let compat = vivos.filter(p => {
+    if (String(p.corredorManualId || '') === String(c.id)) return true; // jogado manualmente aqui
     const partida = p.patioAtual || p.cidadeOrigem; // pátio manda quando existe
     const io = _posNaSeq(paradasStr, partida);
     const id = _posNaSeq(paradasStr, p.cidadeDestino);
+    const noPatioDoTronco = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1;
     return (io !== -1 && id !== -1 && io < id)   // partida e destino no trajeto, na ordem
         || (io === -1 && id !== -1)              // encaixe no caminho (destino no trajeto)
-        || (io !== -1 && id === -1 && io < paradasStr.length - 1); // parte de uma parada, destino fora
+        || (noPatioDoTronco && id === -1);       // no pátio do tronco, destino é ramal (transborda no hub)
   });
   if (busca) compat = compat.filter(p =>
     `${p.cliente||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.placa||''} #${p.id}`.toLowerCase().includes(busca));
@@ -11379,21 +11385,56 @@ function _corredorCardHTML(c, vivos){
     <div class="corredor-paradas-linha">${paradasHTML}</div>
     ${aberto ? `<div class="corredor-pedidos">
       ${compat.length === 0 ? '<p class="text-muted text-sm" style="padding:.5rem 0">Nenhum pedido compatível no momento.</p>'
-        : compat.map(p => {
-          const enc = _classificarEncaixePedido(p, paradasStr);
-          const semR = !(p.rotaId || p.rota_id) && !p.placaCegonha;
-          const viaPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1 && _posNaSeq(paradasStr, p.cidadeOrigem) === -1;
-          return `<div class="corredor-pedido-linha">
-            <span class="carteira-cli">#${p.id} · <strong>${p.cliente||'—'}</strong></span>
-            <span>🚗 ${p.modelo||''} ${p.placa||''}</span>
-            <span class="text-muted">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span>
-            ${viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Entra no corredor porque está no pátio de ${p.patioAtual}">🅿️ via pátio ${p.patioAtual}</span>` : (enc.selo || '')}
-            <span class="status-pill-mini" title="Status">${p.status||'Pendente'}</span>
-            ${semR ? '<span class="corredor-tag-semrota">sem rota</span>' : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`}
-            <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
-          </div>`;
-        }).join('')}
+        : (function(){
+            // ponto de divisão (hub) — padrão: destino mais comum; senão última parada
+            const divKey = _corredorDivisao[String(c.id)] || _divisaoPadrao(compat, paradasStr);
+            const divPos = _posNaSeq(paradasStr, divKey);
+            const selDiv = `<div class="corredor-div-sel">🔀 Ponto de divisão (hub):
+              <select onchange="_setDivisao('${c.id}', this.value)">
+                ${paradasStr.map(cid => `<option value="${cid.replace(/"/g,'&quot;')}" ${_norm(cid)===_norm(divKey)?'selected':''}>${cid}</option>`).join('')}
+              </select>
+              <span class="text-muted" style="font-size:.76rem">— até aqui vão juntos; depois transbordam</span></div>`;
+
+            const grupos = {};
+            compat.forEach(p => { const d = p.cidadeDestino || '—'; (grupos[d] = grupos[d] || []).push(p); });
+            const chaves = Object.keys(grupos).sort((a,b) => {
+              const pa = _posNaSeq(paradasStr, a), pb = _posNaSeq(paradasStr, b);
+              return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+            });
+            const blocos = chaves.map(d => {
+              const itens = grupos[d];
+              const pos = _posNaSeq(paradasStr, d);
+              let label, cls;
+              if (pos === -1) { label = `🔀 Transbordam em ${divKey} → ${d} (ramal)`; cls = 'drop-transb'; }
+              else if (pos > divPos) { label = `🔀 Transbordam em ${divKey} → ${d}`; cls = 'drop-transb'; }
+              else { label = `📍 Descem em ${d}`; cls = 'drop-desce'; }
+              return `<div class="corredor-drop ${cls}">
+                <div class="corredor-drop-tit">${label} <span class="carteira-badge">${itens.length} carro(s)</span></div>
+                ${itens.map(p => _corredorPedidoLinha(p, c, paradasStr)).join('')}
+              </div>`;
+            }).join('');
+            return selDiv + `<div class="corredor-tronco-nota">🚛 Todos seguem juntos de <strong>${paradasStr[0]||''}</strong> até <strong>${divKey}</strong> (${compat.length} carro(s)). Em ${divKey}, a carga se divide:</div>` + blocos;
+          })()}
     </div>` : ''}
+  </div>`;
+}
+
+function _corredorPedidoLinha(p, c, paradasStr){
+  const enc = _classificarEncaixePedido(p, paradasStr);
+  const semR = !(p.rotaId || p.rota_id) && !p.placaCegonha;
+  const ehManual = String(p.corredorManualId || '') === String(c.id);
+  const viaPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1 && _posNaSeq(paradasStr, p.cidadeOrigem) === -1;
+  return `<div class="corredor-pedido-linha">
+    <span class="carteira-cli">#${p.id} · <strong>${p.cliente||'—'}</strong></span>
+    <span>🚗 ${p.modelo||''} ${p.placa||''}</span>
+    <span class="text-muted">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span>
+    ${ehManual ? '<span class="selo-encaixe selo-encaixe-manual" title="Pedido jogado manualmente neste corredor">📌 manual</span>' : (viaPatio ? `<span class="selo-encaixe selo-encaixe-patio" title="Entra no corredor porque está no pátio de ${p.patioAtual}">🅿️ via pátio ${p.patioAtual}</span>` : (enc.selo || ''))}
+    <span class="status-pill-mini" title="Status">${p.status||'Pendente'}</span>
+    ${semR ? '<span class="corredor-tag-semrota">sem rota</span>' : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`}
+    ${ehManual
+      ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
+      : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
+    <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
   </div>`;
 }
 
@@ -11434,4 +11475,50 @@ async function criarRotaDoCorredor(corredorId){
   } catch(e){
     alert('Erro ao criar rota: ' + (e.message || e));
   }
+}
+
+// ============================================================
+// Jogar/tirar um pedido manualmente de um corredor
+// ============================================================
+function abrirJogarCorredor(pedidoId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('mover para um corredor')) return;
+  const corredores = (corredoresGlobais || []).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
+  if (corredores.length === 0){ alert('Nenhum corredor cadastrado.'); return; }
+  const opcoes = corredores.map((c,i) => `${i+1}. ${c.nome}`).join('\n');
+  const escolha = prompt(`Jogar o pedido #${pedidoId} em qual corredor?\n\n${opcoes}\n\nDigite o número:`);
+  if (!escolha) return;
+  const idx = parseInt(escolha) - 1;
+  const cor = corredores[idx];
+  if (!cor){ alert('Opção inválida.'); return; }
+  _setCorredorManual(pedidoId, cor.id);
+}
+function tirarDoCorredorManual(pedidoId){
+  _setCorredorManual(pedidoId, null);
+}
+async function _setCorredorManual(pedidoId, corredorId){
+  try {
+    const { error } = await supabase.from('pedidos').update({ corredor_manual_id: corredorId }).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+    if (p) p.corredorManualId = corredorId;
+    if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+    if (typeof renderizarCarteiraDemanda === 'function') renderizarCarteiraDemanda();
+  } catch(e){ alert('Erro ao mover para o corredor: ' + (e.message||e)); }
+}
+
+// ============================================================
+// Ponto de divisão (hub) do corredor — didático tronco+ramificações
+// ============================================================
+let _corredorDivisao = {}; // corredorId -> cidade do hub (escolha em memória)
+function _setDivisao(corredorId, cidade){
+  _corredorDivisao[String(corredorId)] = cidade;
+  if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+}
+// padrão do hub: o destino mais comum entre os carros; senão a última parada
+function _divisaoPadrao(compat, paradasStr){
+  const cont = {};
+  (compat||[]).forEach(p => { const d = p.cidadeDestino; if (d && _posNaSeq(paradasStr, d) !== -1) cont[d] = (cont[d]||0)+1; });
+  let melhor = null, max = 0;
+  Object.entries(cont).forEach(([d,n]) => { if (n > max){ max = n; melhor = d; } });
+  return melhor || paradasStr[paradasStr.length-1] || '';
 }
