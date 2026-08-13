@@ -746,12 +746,8 @@ function badgePrazoEntrega(p) {
 function renderizarOcupacao() {
     const corpo = document.getElementById('ocupTabelaCorpo');
     if (!corpo) return;
-    // Sub-abas Corredores e Avançar são só da logística
-    const soLog = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
-    const btnCorr = document.querySelector('.painel-subtabs .cad-subtab-btn[onclick*="corredores"]');
-    if (btnCorr) btnCorr.style.display = soLog ? '' : 'none';
-    const btnAv = document.querySelector('.painel-subtabs .cad-subtab-btn[onclick*="avancar"]');
-    if (btnAv) btnAv.style.display = soLog ? '' : 'none';
+    // Corredores e Avançar Pedidos ficam visíveis para todos (comercial acompanha).
+    // As AÇÕES continuam restritas à logística (criar rota, jogar no corredor, etc.).
     if (typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
 
     // Contagens dos cards de resumo
@@ -7672,6 +7668,7 @@ function renderizarRotas() {
             </div>
 
             <div class="rota-acoes">
+                ${(r.status === 'planejada' || r.status === 'em_andamento') ? `<button class="btn btn-secondary btn-sm" onclick="abrirInserirCarroRota(${r.id})" title="Adicionar qualquer carro disponível a esta rota">➕ Inserir carro</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-secondary btn-sm" onclick="abrirEditarRota(${r.id})" title="Alterar dados antes de iniciar a viagem">✏️ Editar</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-primary btn-sm" onclick="mudarStatusRota(${r.id}, 'em_andamento')">▶️ Iniciar viagem</button>` : ''}
                 ${r.status === 'em_andamento' ? `<button class="btn btn-primary btn-sm" onclick="mudarStatusRota(${r.id}, 'concluida')">✔ Concluir</button>` : ''}
@@ -11511,12 +11508,13 @@ function _corredorCardHTML(c, vivos, ci){
 function _corredorPedidoLinha(p, c, paradasStr){
   const semR = !(p.rotaId || p.rota_id) && !p.placaCegonha;
   const ehManual = String(p.corredorManualId || '') === String(c.id);
+  const podeAgir = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
   const rotaTag = semR
     ? '<span class="corredor-tag-semrota">sem rota</span>'
     : `<span class="corredor-tag-comrota">🚛 ${p.placaCegonha||'em rota'}</span>`;
   const frete = Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
   return `<tr class="corr-tr">
-    <td><input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')"></td>
+    <td>${podeAgir ? `<input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">` : ''}</td>
     <td class="ct-id">#${p.id}</td>
     <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
     <td class="ct-modelo">${p.modelo||'—'}</td>
@@ -11525,11 +11523,12 @@ function _corredorPedidoLinha(p, c, paradasStr){
     <td class="ct-frete">R$ ${frete}</td>
     <td class="ct-status">${_statusPill(p.status)} ${rotaTag}</td>
     <td class="ct-acoes">
+      ${podeAgir ? `
       <button class="btn-kanban-patio" onclick="abrirModalStatus(${p.id})" title="Avançar status">▶</button>
       ${ehManual
         ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
         : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
-      <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️</button>
+      <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️</button>` : '<span class="text-muted">—</span>'}
     </td>
   </tr>`;
 }
@@ -11680,14 +11679,11 @@ function _statusPill(status){
 function renderizarAvancarPedidos(){
   const cont = document.getElementById('painelViewAvancar');
   if (!cont) return;
-  const viewer = (typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
-  // pedidos que têm próximo status e que o perfil atual pode conduzir
+  const podeAgir = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
+  // Todos veem a lista (para acompanhar); só logística/admin tem o botão de avançar.
   const vivos = (pedidosGlobais || []).filter(p => {
     const cfg = FLUXO_STATUS[p.status || 'Pendente'];
-    if (!cfg || !cfg.proximos || cfg.proximos.length === 0) return false;
-    let dono = (cfg.perfis || []).filter(x => x !== 'admin')[0] || 'logistica';
-    if (p.origemLancamento === 'logistica' && dono === 'comercial') dono = 'logistica';
-    return viewer === 'admin' || viewer === dono || PERFIS_LOGISTICA.includes(viewer);
+    return cfg && cfg.proximos && cfg.proximos.length > 0 && !['Entregue','Cancelado'].includes(p.status||'Pendente');
   });
 
   const busca = (document.getElementById('avancarBusca')?.value || '').toLowerCase().trim();
@@ -11721,7 +11717,7 @@ function renderizarAvancarPedidos(){
             <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
             <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
             <td class="ct-modelo">${p.placaCegonha || '—'}</td>
-            <td class="ct-acoes"><button class="btn btn-primary btn-sm" onclick="abrirModalStatus(${p.id})">▶ Avançar</button></td>
+            <td class="ct-acoes">${podeAgir ? `<button class="btn btn-primary btn-sm" onclick="abrirModalStatus(${p.id})">▶ Avançar</button>` : '<span class="text-muted">acompanhando</span>'}</td>
           </tr>`).join('')}</tbody>
         </table>
       </div>`;
@@ -11835,4 +11831,59 @@ async function marcarCobranca(pedidoId, novo){
     p.cobrancaStatus = alvo;
     renderizarCobranca();
   } catch(e){ alert('Erro ao atualizar cobrança: ' + (e.message||e)); }
+}
+
+// ============================================================
+// Inserir qualquer carro disponível numa rota (frete de última hora)
+// ============================================================
+function abrirInserirCarroRota(rotaId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('inserir carro na rota')) return;
+  const rota = (rotasGlobais||[]).find(r => String(r.id) === String(rotaId));
+  if (!rota) return;
+  const old = document.getElementById('modalInserirCarro');
+  if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalInserirCarro';
+  div.className = 'modal-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:640px;width:92%;max-height:82vh;overflow:auto;border-radius:14px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h2 style="margin:0">➕ Inserir carro na rota "${rota.nome||('#'+rota.id)}"</h2>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalInserirCarro').remove()">✕</button>
+      </div>
+      <p class="text-muted" style="font-size:.84rem;margin:.2rem 0 .8rem">Adicione qualquer carro disponível (sem cegonha e sem rota), mesmo que não case com o caminho. Útil para frete de última hora.</p>
+      <input type="text" id="inserirCarroBusca" class="ocup-busca" placeholder="🔍 Buscar cliente, placa, cidade..." oninput="_renderInserirCarroLista(${rotaId})" style="width:100%;margin-bottom:10px">
+      <div id="inserirCarroLista"></div>
+    </div>`;
+  document.body.appendChild(div);
+  _renderInserirCarroLista(rotaId);
+}
+
+function _renderInserirCarroLista(rotaId){
+  const alvo = document.getElementById('inserirCarroLista');
+  if (!alvo) return;
+  const busca = (document.getElementById('inserirCarroBusca')?.value || '').toLowerCase().trim();
+  let disp = (pedidosGlobais||[]).filter(p =>
+    !p.placaCegonha && !(p.rotaId || p.rota_id) && !['Entregue','Cancelado'].includes(p.status||'Pendente'));
+  if (busca) disp = disp.filter(p =>
+    `${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`.toLowerCase().includes(busca));
+  disp.sort((a,b)=>b.id-a.id);
+  if (disp.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum carro disponível.</p>'; return; }
+  alvo.innerHTML = `<table class="corr-tabela">
+    <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th></th></tr></thead>
+    <tbody>${disp.slice(0,50).map(p => `<tr class="corr-tr">
+      <td class="ct-id">#${p.id}</td>
+      <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+      <td class="ct-modelo">${p.modelo||'—'}</td>
+      <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+      <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+      <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td class="ct-acoes"><button class="btn btn-primary btn-sm" onclick="_inserirCarroNaRota(${p.id}, ${rotaId})">+ Adicionar</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function _inserirCarroNaRota(pedidoId, rotaId){
+  await vincularPedidoRota(pedidoId, rotaId);
+  _renderInserirCarroLista(rotaId); // atualiza a lista do modal (o carro sai dela)
 }
