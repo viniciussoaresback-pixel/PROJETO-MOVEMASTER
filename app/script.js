@@ -112,6 +112,7 @@ function trocarAba(event) {
     if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial(); }
     if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
+    if (tabAlvo === 'equipes' && typeof renderizarEquipesPainel === 'function') renderizarEquipesPainel();
     if (tabAlvo === 'cobranca' && typeof renderizarCobranca === 'function') renderizarCobranca();
     if (tabAlvo === 'meusPedidos') {
         renderizarPedidosComercial();
@@ -294,6 +295,10 @@ async function carregarDadosDoSupabase(opts) {
                 tipoEntrega: p.tipo_entrega || 'patio',
                 fluxoEntrega: p.fluxo_entrega || null,
                 equipeEntregaId: p.equipe_entrega_id || null,
+                coletaEquipeEm: p.coleta_equipe_em || null,
+                coletaEquipePor: p.coleta_equipe_por || null,
+                entregaEquipeEm: p.entrega_equipe_em || null,
+                entregaEquipePor: p.entrega_equipe_por || null,
                 origemLancamento: p.origem_lancamento || null,
                 criadoPorNome: p.criado_por_nome || null,
                 isReserva: p.is_reserva === true,
@@ -7649,6 +7654,7 @@ function renderizarRotas() {
                         <div class="rota-pedido-item">
                             <span>#${p.id} · <strong>${p.cliente || ''}</strong> · ${p.modelo || ''} ${p.placa || ''} ${selCTEDoPedido(p.id)}</span>
                             <span class="rota-pedido-rota">${p.cidadeOrigem}/${p.ufOrigem} → ${p.cidadeDestino}/${p.ufDestino} ${encaixe.selo}</span>
+                            ${r.status === 'em_andamento' ? `<button class="btn-kanban-patio" onclick="chegouNoDestino(${p.id})" title="Registrar chegada no destino">📍 Chegou</button>` : ''}
                             <button class="btn-kanban-cancelar" onclick="desvincularPedidoRota(${p.id})" title="Tirar desta rota">✕</button>
                         </div>`;
                     }).join('')}
@@ -7680,6 +7686,7 @@ function renderizarRotas() {
 
 // ---------- Criar rota ----------
 let _paradasNovaRota = [];
+let _rotaCegonhaSel = '';
 
 // _rotaEditandoId: quando != null, o modal está em modo edição
 let _rotaEditandoId = null;
@@ -7757,7 +7764,7 @@ function _abrirModalRota(rota) {
                 <div class="form-group">
                     <label>Cegonha *</label>
                     <input type="text" id="rotaCegonhaBusca" placeholder="🔎 Buscar por placa, modelo ou transportador..." oninput="filtrarCegonhasRota()">
-                    <select id="rotaCegonha" size="5" style="margin-top:0.5rem"></select>
+                    <select id="rotaCegonha" size="5" style="margin-top:0.5rem" onchange="_rotaCegonhaSel = this.value"></select>
                 </div>
             </div>
 
@@ -7795,13 +7802,16 @@ function _abrirModalRota(rota) {
         </div>`;
     document.body.appendChild(modal);
     renderizarParadasRota();
+    // Pré-seleciona a cegonha atual: descobre o tipo dela, filtra e seleciona
+    _rotaCegonhaSel = rota?.placa_cegonha || '';
     filtrarCegonhasRota(tipoInicial);
-    // Pré-seleciona a cegonha atual, se estiver na lista filtrada
     if (rota?.placa_cegonha) {
-        setTimeout(() => {
-            const sel = document.getElementById('rotaCegonha');
-            if (sel) sel.value = rota.placa_cegonha;
-        }, 0);
+        const sel = document.getElementById('rotaCegonha');
+        // se a cegonha não está na lista do tipo atual, tenta o outro tipo
+        if (sel && !Array.from(sel.options).some(o => o.value === rota.placa_cegonha)) {
+            filtrarCegonhasRota(tipoInicial === 'frota' ? 'terceiro' : 'frota');
+        }
+        if (sel) sel.value = rota.placa_cegonha;
     }
 }
 
@@ -7898,7 +7908,7 @@ async function salvarNovaRota() {
 
     const dados = {
         nome: document.getElementById('rotaNome').value.trim() || null,
-        placa_cegonha: document.getElementById('rotaCegonha').value || null,
+        placa_cegonha: (document.getElementById('rotaCegonha').value || _rotaCegonhaSel) || null,
         data_saida: document.getElementById('rotaData').value || null,
         corredor_id: corredorId ? parseInt(corredorId) : null,
         hora_saida_prevista: horaPrev,
@@ -10529,15 +10539,18 @@ async function salvarEquipeEntrega(){
   const msgEl = document.getElementById('mensagemEquipe');
   const nome = document.getElementById('eqNome')?.value.trim();
   const responsavel = document.getElementById('eqResponsavel')?.value.trim() || null;
+  const cidade_base = document.getElementById('eqCidadeBase')?.value.trim() || null;
+  const uf_base = (document.getElementById('eqUfBase')?.value.trim() || '').toUpperCase() || null;
+  const membros = document.getElementById('eqMembros')?.value.trim() || null;
   if (!nome){ msgEl.textContent='Informe o nome da equipe.'; msgEl.className='message show error'; return; }
   msgEl.textContent='Salvando...'; msgEl.className='message show';
   try {
     const { data, error } = await supabase.from('equipes_entrega')
-      .insert({ nome, responsavel, ativo:true }).select();
+      .insert({ nome, responsavel, cidade_base, uf_base, membros, ativo:true }).select();
     if (error) throw error;
     if (data && data[0]) equipesEntregaGlobais.push(data[0]);
     msgEl.textContent='Equipe salva.'; msgEl.className='message show success';
-    document.getElementById('eqNome').value=''; document.getElementById('eqResponsavel').value='';
+    ['eqNome','eqResponsavel','eqCidadeBase','eqUfBase','eqMembros'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
     renderizarEquipesEntrega();
   } catch(e){ msgEl.textContent='Erro: '+(e.message||e); msgEl.className='message show error'; }
 }
@@ -10549,7 +10562,8 @@ function renderizarEquipesEntrega(){
   cont.innerHTML = equipesEntregaGlobais.map(e => `
     <div class="corredor-linha">
       <div class="corredor-info"><strong>${e.nome}</strong>
-        <span class="text-muted">${e.responsavel ? 'Resp.: '+e.responsavel : ''}</span></div>
+        ${e.cidade_base ? `<span class="carteira-badge">📍 ${e.cidade_base}${e.uf_base?'/'+e.uf_base:''}</span>` : '<span class="corredor-tag-semrota">sem cidade base</span>'}
+        <span class="text-muted">${e.responsavel ? '· Resp.: '+e.responsavel : ''}${e.membros ? ' · 👥 '+e.membros : ''}</span></div>
       <button class="btn btn-sm btn-secondary" onclick="excluirEquipeEntrega(${e.id})">🗑️ Excluir</button>
     </div>`).join('');
 }
@@ -11944,4 +11958,229 @@ async function _inserirCarroNaRota(pedidoId, rotaId){
     _renderInserirCarroLista(rotaId);
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ ${obs}`, 'success');
   } catch(e){ alert('Erro ao inserir/mover: ' + (e.message||e)); }
+}
+
+// ============================================================
+// EQUIPES DE COLETA & ENTREGA (last mile das duas pontas)
+// ============================================================
+
+// Carro chegou no destino: pergunta COMO foi a entrega final (didático).
+function chegouNoDestino(pedidoId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('marcar chegada no destino')) return;
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p) return;
+  const cidade = p.cidadeDestino ? `${p.cidadeDestino}${p.ufDestino ? '/'+p.ufDestino : ''}` : null;
+  if (!cidade){ alert('Este carro não tem cidade de destino definida.'); return; }
+  const old = document.getElementById('modalChegada'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalChegada';
+  div.className = 'modal-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:480px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">📍 Chegada em ${cidade}</h2>
+      <p class="text-muted" style="font-size:.86rem;margin:.2rem 0 1.2rem">Carro #${p.id} · ${p.modelo||''} ${p.placa||''}. Como foi a entrega final?</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-primary" style="text-align:left;padding:14px" onclick="_chegadaMotorista(${p.id})">
+          ✅ <strong>Entregue pelo motorista</strong><br><span style="font-size:.8rem;opacity:.85">O motorista da cegonha entregou direto no cliente. Finaliza o pedido.</span>
+        </button>
+        <button class="btn btn-secondary" style="text-align:left;padding:14px" onclick="_chegadaPatio(${p.id})">
+          🅿️ <strong>Foi para o pátio (equipe entrega)</strong><br><span style="font-size:.8rem;opacity:.85">Descarrega no pátio de ${p.cidadeDestino} e a equipe local entrega depois.</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalChegada').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+// Entrega direta pelo motorista → Entregue na hora
+async function _chegadaMotorista(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p || !supabase) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error } = await supabase.from('pedidos').update({
+      status: 'Entregue', fluxo_entrega: 'direta'
+    }).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    try { await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: 'Entregue',
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: `✅ Entregue pelo motorista direto no cliente (${p.cidadeDestino||''}).`
+    }); } catch(_){}
+    document.getElementById('modalChegada')?.remove();
+    await carregarDadosDoSupabase();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ #${pedidoId} entregue pelo motorista.`, 'success');
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// Vai para o pátio de destino → cai na fila da equipe local
+async function _chegadaPatio(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p || !supabase) return;
+  const cidade = `${p.cidadeDestino}${p.ufDestino ? '/'+p.ufDestino : ''}`;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error } = await supabase.from('pedidos').update({
+      patio_atual: cidade, patio_desde: new Date().toISOString(),
+      placa_cegonha: null, rota_id: null, status: 'Em Transporte'
+    }).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    try { await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: 'Em Transporte',
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: `📍 Chegou em ${cidade} — descarregado no pátio para entrega pela equipe local.`
+    }); } catch(_){}
+    document.getElementById('modalChegada')?.remove();
+    await carregarDadosDoSupabase();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    if (typeof renderizarEquipesPainel === 'function') renderizarEquipesPainel();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `📍 #${pedidoId} no pátio de ${p.cidadeDestino} para a equipe entregar.`, 'success');
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// Normaliza cidade (ignora /UF)
+function _cidadeIgual(a, b){
+  const norm = s => (s||'').toString().split('/')[0].trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return a && b && norm(a) === norm(b);
+}
+
+// Carros "a coletar" por uma equipe: coleta na cidade base, ainda não no pátio nem coletados
+function _aColetarDaEquipe(eq){
+  return (pedidosGlobais||[]).filter(p =>
+    !['Entregue','Cancelado'].includes(p.status||'Pendente') &&
+    !p.coletaEquipeEm && !p.patioAtual &&
+    _cidadeIgual(p.cidadeOrigem, eq.cidade_base));
+}
+
+// Carros "a entregar" por uma equipe: destino na cidade base, já no pátio da cidade, não entregues
+function _aEntregarDaEquipe(eq){
+  return (pedidosGlobais||[]).filter(p =>
+    p.status !== 'Cancelado' && !p.entregaEquipeEm &&
+    _cidadeIgual(p.cidadeDestino, eq.cidade_base) &&
+    p.patioAtual && _cidadeIgual(p.patioAtual, eq.cidade_base));
+}
+
+// Feitas: coletadas ou entregues por esta equipe
+function _feitasDaEquipe(eq){
+  return (pedidosGlobais||[]).filter(p =>
+    (p.coletaEquipeEm && _cidadeIgual(p.cidadeOrigem, eq.cidade_base)) ||
+    (p.entregaEquipeEm && _cidadeIgual(p.cidadeDestino, eq.cidade_base)));
+}
+
+let _equipeAba = {}; // id -> 'coletar'|'entregar'|'feitas'
+
+function renderizarEquipesPainel(){
+  const cont = document.getElementById('equipesPainelWrap');
+  if (!cont) return;
+  const equipes = (equipesEntregaGlobais||[]).filter(e => e.ativo !== false);
+  if (equipes.length === 0){
+    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhuma equipe cadastrada. Cadastre em <strong>Cadastros → Equipes</strong>, definindo a cidade base.</p>';
+    return;
+  }
+  const podeAgir = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
+  cont.innerHTML = equipes.map(eq => {
+    const semCidade = !eq.cidade_base;
+    const coletar = semCidade ? [] : _aColetarDaEquipe(eq);
+    const entregar = semCidade ? [] : _aEntregarDaEquipe(eq);
+    const feitas = semCidade ? [] : _feitasDaEquipe(eq);
+    const aba = _equipeAba[eq.id] || 'coletar';
+    const membros = (eq.membros||'').split(',').map(s=>s.trim()).filter(Boolean);
+
+    const linha = (p, tipo) => {
+      const selMembro = membros.length
+        ? `<select id="mb_${tipo}_${p.id}" class="eq-membro-sel">${membros.map(m=>`<option value="${m}">${m}</option>`).join('')}</select>`
+        : '';
+      let btn = '';
+      if (podeAgir && tipo === 'coletar') btn = `<button class="btn btn-sm btn-primary" onclick="marcarColetaEquipe(${p.id}, ${eq.id})">✓ Coletado (no pátio)</button>`;
+      if (podeAgir && tipo === 'entregar') btn = `<button class="btn btn-sm btn-primary" onclick="marcarEntregaEquipe(${p.id}, ${eq.id})">✓ Entregue</button>`;
+      const info = tipo === 'feitas'
+        ? `<span class="text-muted">${p.entregaEquipeEm ? '📤 entregue por '+(p.entregaEquipePor||'—') : '📥 coletado por '+(p.coletaEquipePor||'—')}</span>`
+        : '';
+      return `<tr class="corr-tr">
+        <td class="ct-id">#${p.id}</td>
+        <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${selCTEDoPedido(p.id)}</td>
+        <td class="ct-modelo">${p.modelo||'—'}</td>
+        <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+        <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+        <td class="ct-acoes">${info}${selMembro} ${btn}</td>
+      </tr>`;
+    };
+
+    const tabela = (itens, tipo, vazio) => itens.length === 0
+      ? `<p class="text-muted" style="padding:.6rem 0">${vazio}</p>`
+      : `<table class="corr-tabela"><thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th></th></tr></thead><tbody>${itens.map(p=>linha(p,tipo)).join('')}</tbody></table>`;
+
+    return `<div class="corredor-card" style="margin-bottom:16px">
+      <div class="corredor-card-cab">
+        <div>
+          <strong>🧑‍🔧 ${eq.nome}</strong>
+          ${eq.cidade_base ? `<span class="carteira-badge">📍 ${eq.cidade_base}${eq.uf_base?'/'+eq.uf_base:''}</span>` : '<span class="corredor-tag-semrota">defina a cidade base em Cadastros</span>'}
+          ${eq.responsavel ? `<span class="text-muted" style="font-size:.8rem"> · resp. ${eq.responsavel}</span>` : ''}
+        </div>
+        <div style="font-size:.82rem" class="text-muted">📥 ${coletar.length} a coletar · 📤 ${entregar.length} a entregar</div>
+      </div>
+      <div class="corredor-pedidos">
+        <div class="equipe-abas">
+          <button class="ocup-chip ${aba==='coletar'?'active':''}" onclick="_setEquipeAba(${eq.id},'coletar')">📥 A coletar (${coletar.length})</button>
+          <button class="ocup-chip ${aba==='entregar'?'active':''}" onclick="_setEquipeAba(${eq.id},'entregar')">📤 A entregar (${entregar.length})</button>
+          <button class="ocup-chip ${aba==='feitas'?'active':''}" onclick="_setEquipeAba(${eq.id},'feitas')">✅ Feitas (${feitas.length})</button>
+        </div>
+        ${semCidade ? '<p class="text-muted" style="padding:.6rem 0">⚠️ Defina a <strong>cidade base</strong> desta equipe em Cadastros para o direcionamento automático funcionar.</p>' :
+          aba==='coletar' ? tabela(coletar,'coletar','Nenhum carro a coletar nesta cidade agora.') :
+          aba==='entregar' ? tabela(entregar,'entregar','Nenhum carro no pátio para entregar agora.') :
+          tabela(feitas,'feitas','Nada concluído ainda.')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _setEquipeAba(id, aba){ _equipeAba[id] = aba; renderizarEquipesPainel(); }
+
+async function marcarColetaEquipe(pedidoId, equipeId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('marcar coleta')) return;
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  const eq = (equipesEntregaGlobais||[]).find(e => String(e.id) === String(equipeId));
+  if (!p || !eq || !supabase) return;
+  const membro = document.getElementById(`mb_coletar_${pedidoId}`)?.value || null;
+  const cidade = `${eq.cidade_base}${eq.uf_base?'/'+eq.uf_base:''}`;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error } = await supabase.from('pedidos').update({
+      coleta_equipe_em: new Date().toISOString(), coleta_equipe_por: membro, coleta_equipe_id: parseInt(equipeId),
+      patio_atual: cidade, patio_desde: new Date().toISOString()  // trouxe pro pátio
+    }).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    try { await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: p.status,
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: `📥 Coletado pela equipe ${eq.nome}${membro?' ('+membro+')':''} — levado ao pátio de ${eq.cidade_base}.`
+    }); } catch(_){}
+    await carregarDadosDoSupabase();
+    renderizarEquipesPainel();
+  } catch(e){ alert('Erro ao marcar coleta: '+(e.message||e)); }
+}
+
+async function marcarEntregaEquipe(pedidoId, equipeId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('marcar entrega')) return;
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  const eq = (equipesEntregaGlobais||[]).find(e => String(e.id) === String(equipeId));
+  if (!p || !eq || !supabase) return;
+  const membro = document.getElementById(`mb_entregar_${pedidoId}`)?.value || null;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error } = await supabase.from('pedidos').update({
+      entrega_equipe_em: new Date().toISOString(), entrega_equipe_por: membro, entrega_equipe_id: parseInt(equipeId),
+      status: 'Entregue', patio_atual: null, patio_desde: null
+    }).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    try { await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: 'Entregue',
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: `📤 Entregue pela equipe ${eq.nome}${membro?' ('+membro+')':''} — do pátio ao cliente.`
+    }); } catch(_){}
+    await carregarDadosDoSupabase();
+    renderizarEquipesPainel();
+  } catch(e){ alert('Erro ao marcar entrega: '+(e.message||e)); }
 }
