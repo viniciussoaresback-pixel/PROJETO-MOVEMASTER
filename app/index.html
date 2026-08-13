@@ -294,6 +294,7 @@
                     <button class="nav-btn" data-tab="cobranca">💰 Cobrança</button>
                     <button class="nav-btn" data-tab="painel">Painel de Acompanhamento</button>
                     <button class="nav-btn" data-tab="logistica">Gestão Logística</button>
+                    <button class="nav-btn" data-tab="equipes">🧑‍🔧 Equipes</button>
                     <button class="nav-btn" data-tab="faturamento">Faturamento</button>
                     <button class="nav-btn" data-tab="cadastros">Cadastros</button>
                     <button class="nav-btn" data-tab="manutencao">🔧 Manutenção</button>
@@ -1438,6 +1439,17 @@
                 </div>
             </section>
 
+            <section id="equipes" class="tab-content">
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>🧑‍🔧 Equipes — Coletas &amp; Entregas</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarEquipesPainel()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Cada equipe atende sua cidade. <strong>A coletar</strong>: carros com coleta na cidade (marque quando trouxerem ao pátio). <strong>A entregar</strong>: carros que chegaram no pátio da cidade destino. Direcionamento automático pela cidade base.</p>
+                    <div id="equipesPainelWrap"></div>
+                </div>
+            </section>
+
             <!-- TAB 5: Cadastros -->
             <section id="cadastros" class="tab-content">
                 <div class="card">
@@ -1480,6 +1492,12 @@
                             <input type="text" id="eqNome" placeholder="Ex.: Equipe Recife"></div>
                         <div class="manut-toolbar-campo"><label for="eqResponsavel">Responsável</label>
                             <input type="text" id="eqResponsavel" placeholder="Nome do responsável"></div>
+                        <div class="manut-toolbar-campo"><label for="eqCidadeBase">Cidade base</label>
+                            <input type="text" id="eqCidadeBase" placeholder="Ex.: Cascavel"></div>
+                        <div class="manut-toolbar-campo"><label for="eqUfBase">UF</label>
+                            <input type="text" id="eqUfBase" placeholder="PR" maxlength="2" style="text-transform:uppercase"></div>
+                        <div class="manut-toolbar-campo" style="flex:1 1 100%"><label for="eqMembros">Membros (separados por vírgula)</label>
+                            <input type="text" id="eqMembros" placeholder="Ex.: João, Pedro, Maria"></div>
                     </div>
                     <div id="mensagemEquipe" class="message"></div>
                     <div class="manut-acoes">
