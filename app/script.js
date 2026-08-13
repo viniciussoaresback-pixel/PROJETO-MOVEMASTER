@@ -112,6 +112,7 @@ function trocarAba(event) {
     if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial(); }
     if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
+    if (tabAlvo === 'cobranca' && typeof renderizarCobranca === 'function') renderizarCobranca();
     if (tabAlvo === 'meusPedidos') {
         renderizarPedidosComercial();
         if (typeof renderizarRotasComercial === 'function') renderizarRotasComercial();
@@ -282,6 +283,11 @@ async function carregarDadosDoSupabase(opts) {
                 transbordoEm: p.transbordo_em || null,
                 patioAtual: p.patio_atual || null,
                 corredorManualId: p.corredor_manual_id || null,
+                cobrancaStatus: p.cobranca_status || 'a_cobrar',
+                cobrancaForma: p.cobranca_forma || null,
+                cobradoEm: p.cobrado_em || null,
+                pagoEm: p.pago_em || null,
+                pagtoConfirmadoEm: p.pagto_confirmado_em || null,
                 patioDesde: p.patio_desde || null,
                 grupoId: p.grupo_id || null,
                 rotaId: p.rota_id || null,
@@ -740,9 +746,12 @@ function badgePrazoEntrega(p) {
 function renderizarOcupacao() {
     const corpo = document.getElementById('ocupTabelaCorpo');
     if (!corpo) return;
-    // Sub-aba Corredores é só da logística
+    // Sub-abas Corredores e Avançar são só da logística
+    const soLog = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
     const btnCorr = document.querySelector('.painel-subtabs .cad-subtab-btn[onclick*="corredores"]');
-    if (btnCorr) btnCorr.style.display = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar()) ? '' : 'none';
+    if (btnCorr) btnCorr.style.display = soLog ? '' : 'none';
+    const btnAv = document.querySelector('.painel-subtabs .cad-subtab-btn[onclick*="avancar"]');
+    if (btnAv) btnAv.style.display = soLog ? '' : 'none';
     if (typeof gerarSugestoesRota === 'function') gerarSugestoesRota();
 
     // Contagens dos cards de resumo
@@ -2317,11 +2326,15 @@ async function marcarReceita(pedidoId, confirmar) {
     const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
     try {
         const upd = confirmar
-            ? { receita_confirmada: true, receita_confirmada_em: new Date().toISOString(), receita_confirmada_por: usuarioNome, receita_observacao: obs }
+            ? { receita_confirmada: true, receita_confirmada_em: new Date().toISOString(), receita_confirmada_por: usuarioNome, receita_observacao: obs,
+                cobranca_status: 'confirmado', pagto_confirmado_em: new Date().toISOString(), pagto_confirmado_por: usuarioNome }
             : { receita_confirmada: false, receita_confirmada_em: null, receita_confirmada_por: null, receita_observacao: null };
         const { error } = await supabase.from('pedidos').update(upd).eq('id', pedidoId);
         if (error) throw error;
+        const _p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+        if (_p && confirmar) _p.cobrancaStatus = 'confirmado';
         renderizarReceitas();
+        if (typeof renderizarCobranca === 'function') renderizarCobranca();
     } catch (e) {
         alert('Não consegui atualizar: ' + (e.message || e));
     }
@@ -3787,6 +3800,9 @@ async function _aplicarStatusEmPedidoLote(pedidoObj, d) {
             atualizacao.placa_cegonha = null;
             atualizacao.motorista_1 = null; atualizacao.motorista_2 = null;
             atualizacao.percent_motorista_1 = null; atualizacao.percent_motorista_2 = null;
+            // Perna 1 concluída: sai do corredor/rota antigos e renasce no pátio (perna 2)
+            atualizacao.rota_id = null;
+            atualizacao.corredor_manual_id = null;
         } else {
             atualizacao.cidade_transbordo = `Cegonha ${d.cegonhaDestino}`;
             atualizacao.transbordo_em = new Date().toISOString();
@@ -4044,6 +4060,9 @@ async function confirmarMudancaStatus() {
                 atualizacao.motorista_2 = null;
                 atualizacao.percent_motorista_1 = null;
                 atualizacao.percent_motorista_2 = null;
+                // Perna 1 concluída: sai do corredor/rota antigos e renasce no pátio (perna 2)
+                atualizacao.rota_id = null;
+                atualizacao.corredor_manual_id = null;
             } else {
                 // Caminhão → Caminhão: passa direto para a nova cegonha, sem pátio
                 atualizacao.cidade_transbordo = `Cegonha ${cegonhaDestino}`;
@@ -11159,14 +11178,17 @@ function mostrarViewPainel(view, btn){
   const painel = document.getElementById('painel');
   const carteira = document.getElementById('painelViewCarteira');
   const corredores = document.getElementById('painelViewCorredores');
+  const avancar = document.getElementById('painelViewAvancar');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'carteira' || view === 'corredores');
+  const ehExtra = (view === 'carteira' || view === 'corredores' || view === 'avancar');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (carteira) carteira.style.display = (view === 'carteira') ? '' : 'none';
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
+  if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
   if (view === 'carteira') renderizarCarteiraDemanda();
   if (view === 'corredores') renderizarPainelCorredores();
+  if (view === 'avancar') renderizarAvancarPedidos();
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
 }
@@ -11177,6 +11199,7 @@ function renderizarCarteiraDemanda(){
   // monta a casca uma vez (mantém o foco da busca)
   if (!document.getElementById('carteiraBusca')){
     cont.innerHTML = `
+      <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">📥 <strong>Caixa de entrada</strong> — pedidos que ainda <strong>não entraram em nenhum corredor</strong> nem rota. Daqui você usa ➡️ para jogar num corredor (ou 🅿️ para informar o pátio). Assim que entram num corredor, saem daqui.</p>
       <div class="carteira-topo">
         <input type="text" id="carteiraBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, cidade, placa..." oninput="_renderCarteiraGrupos()">
         <span id="carteiraTotal" class="text-muted"></span>
@@ -11191,53 +11214,61 @@ function _renderCarteiraGrupos(){
   if (!alvo) return;
   const busca = (document.getElementById('carteiraBusca')?.value || '').toLowerCase().trim();
   let lista = (pedidosGlobais || []).filter(p =>
-    !(p.rotaId || p.rota_id) && !p.placaCegonha && !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
+    !(p.rotaId || p.rota_id) && !p.placaCegonha &&
+    !['Entregue','Cancelado'].includes(p.status || 'Pendente') &&
+    !_pedidoEmAlgumCorredor(p));  // inbox = o que ainda não entrou em corredor nenhum
   if (busca) lista = lista.filter(p =>
     `${p.cliente||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} ${p.placa||''} #${p.id}`
       .toLowerCase().includes(busca));
 
   const total = document.getElementById('carteiraTotal');
-  if (total) total.textContent = `${lista.length} carro(s) sem rota`;
+  if (total) total.textContent = `${lista.length} pedido(s) sem corredor`;
 
   // agrupa por origem de coleta
   const grupos = {};
   lista.forEach(p => { const k = `${p.cidadeOrigem || '—'}/${p.ufOrigem || ''}`; (grupos[k] = grupos[k] || []).push(p); });
   const chaves = Object.keys(grupos).sort((a,b) => grupos[b].length - grupos[a].length);
 
-  if (chaves.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum pedido sem rota. 👌</p>'; return; }
+  if (chaves.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum pedido solto — tudo já está num corredor ou rota. 👌</p>'; return; }
 
   _carteiraCache = grupos;
   _carteiraChaves = chaves;
-  const podeCriar = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
-  const ativas = (rotasGlobais || []).filter(r => {
-    const s = String(r.status || '').toLowerCase().trim();
-    return s !== 'concluida' && s !== 'concluída' && s !== 'cancelada';
-  });
-  const opcoesRotas = ativas.map(r => `<option value="${r.id}">➡️ ${r.nome || ('Rota #'+r.id)}${r.placa_cegonha ? ' · '+r.placa_cegonha : ''}</option>`).join('');
 
   alvo.innerHTML = chaves.map((k, i) => {
     const itens = grupos[k];
     return `<div class="carteira-grupo">
-      <div class="carteira-grupo-tit">📍 ${k} <span class="carteira-badge">${itens.length} carro(s)</span>
-        ${podeCriar ? `<span class="carteira-acao">
-          <select id="carteiraSel_${i}">
-            <option value="nova">➕ Criar nova rota</option>
-            ${opcoesRotas}
-          </select>
-          <button class="btn btn-sm btn-primary" onclick="aplicarCarteiraRota(${i})">Aplicar</button>
-        </span>` : ''}
-      </div>
-      ${itens.map(p => `
-        <div class="carteira-linha">
-          <span class="carteira-cli">#${p.id} · <strong>${p.cliente || '—'}</strong></span>
-          <span>🚗 ${p.modelo || ''} ${p.placa || ''}</span>
-          <span class="text-muted">→ ${p.cidadeDestino || ''}/${p.ufDestino || ''}</span>
-          <span class="carteira-valor">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
-          <button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>
-          <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
-        </div>`).join('')}
+      <div class="carteira-grupo-tit">📍 ${k} <span class="carteira-badge">${itens.length} pedido(s)</span></div>
+      <table class="corr-tabela">
+        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>${itens.map(p => `<tr class="corr-tr">
+          <td class="ct-id">#${p.id}</td>
+          <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+          <td class="ct-modelo">${p.modelo||'—'}</td>
+          <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+          <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+          <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+          <td class="ct-status">${_statusPill(p.status)}</td>
+          <td class="ct-acoes">
+            <button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>
+            <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>
     </div>`;
   }).join('');
+}
+
+// Verifica se um pedido já se encaixa em ALGUM corredor (automático ou manual)
+function _pedidoEmAlgumCorredor(p){
+  if (p.corredorManualId) return true;
+  const seqs = (corredoresGlobais || []).map(c =>
+    ((c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino]).filter(Boolean));
+  const partida = p.patioAtual || p.cidadeOrigem;
+  return seqs.some(seq => {
+    const io = _posNaSeq(seq, partida), id = _posNaSeq(seq, p.cidadeDestino);
+    const noPatio = p.patioAtual && _posNaSeq(seq, p.patioAtual) !== -1;
+    return (io !== -1 && id !== -1 && io < id) || (noPatio && id === -1);
+  });
 }
 
 let _carteiraCache = {};
@@ -11323,7 +11354,12 @@ function renderizarPainelCorredores(){
   }
 
   // pedidos "vivos" (não entregues/cancelados) sem cegonha ainda
-  const vivos = (pedidosGlobais || []).filter(p => !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
+  // No corredor só aparecem carros que ainda PRECISAM ser roteirizados.
+  // Assim que entram numa carga (cegonha) ou rota, saem do corredor.
+  const vivos = (pedidosGlobais || []).filter(p =>
+    !['Entregue','Cancelado'].includes(p.status || 'Pendente')
+    && !p.placaCegonha
+    && !(p.rotaId || p.rota_id));
 
   const podeVerSugestoes = (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar());
   cont.innerHTML = `
@@ -11360,13 +11396,23 @@ function _carrosSemCorredorHTML(corredores, vivos){
       <div class="corredor-card-nums"><span class="corredor-semrota">${orfaos.length}</span><span class="corredor-chevron">${_corredoresAbertos.has('__orfaos__')?'▲':'▼'}</span></div>
     </div>
     ${_corredoresAbertos.has('__orfaos__') ? `<div class="corredor-pedidos">
-      <p class="text-muted text-sm" style="padding:.3rem 0">O sistema tenta encaixar por <strong>pátio</strong> (se houver) ou <strong>origem</strong> → <strong>destino</strong>. Se a cidade não está nas paradas de nenhum corredor, o carro cai aqui. Confira a grafia.</p>
-      ${orfaos.map(p => `<div class="corredor-pedido-linha">
-        <span class="carteira-cli">#${p.id} · <strong>${p.cliente||'—'}</strong></span>
-        <span>partida: <strong>${p.patioAtual ? '🅿️ '+p.patioAtual : (p.cidadeOrigem||'—')}</strong></span>
-        <span class="text-muted">→ destino: <strong>${p.cidadeDestino||'—'}</strong></span>
-        <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="Informar pátio">🅿️</button>
-      </div>`).join('')}
+      <p class="text-muted text-sm" style="padding:.3rem 0">O sistema tenta encaixar por <strong>pátio</strong> (se houver) ou <strong>origem</strong> → <strong>destino</strong>. Se a cidade não está nas paradas de nenhum corredor, o carro cai aqui. Confira a grafia ou use ➡️ para jogar num corredor.</p>
+      <table class="corr-tabela">
+        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Partida</th><th>Destino</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>${orfaos.map(p => `<tr class="corr-tr">
+          <td class="ct-id">#${p.id}</td>
+          <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+          <td class="ct-modelo">${p.modelo||'—'}</td>
+          <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+          <td>${p.patioAtual ? '🅿️ '+p.patioAtual.split('/')[0] : (p.cidadeOrigem||'—')}</td>
+          <td class="ct-rota"><strong>${p.cidadeDestino||'—'}</strong></td>
+          <td class="ct-status">${_statusPill(p.status)}</td>
+          <td class="ct-acoes">
+            <button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>
+            <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="Informar pátio">🅿️</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>
     </div>` : ''}
   </div>`;
 }
@@ -11379,7 +11425,9 @@ function _corredorCardHTML(c, vivos, ci){
   // pedidos compatíveis: parte do PÁTIO ATUAL (se houver) ou da origem do pedido;
   // entra se partida→destino couber no corredor (ordem certa) ou for encaixe no caminho.
   let compat = vivos.filter(p => {
-    if (String(p.corredorManualId || '') === String(c.id)) return true; // jogado manualmente aqui
+    // Corredor manual MANDA e é EXCLUSIVO: se o pedido foi jogado num corredor,
+    // ele só aparece nele — some do encaixe automático de qualquer outro.
+    if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
     const partida = p.patioAtual || p.cidadeOrigem; // pátio manda quando existe
     const io = _posNaSeq(paradasStr, partida);
     const id = _posNaSeq(paradasStr, p.cidadeDestino);
@@ -11475,8 +11523,9 @@ function _corredorPedidoLinha(p, c, paradasStr){
     <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
     <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
     <td class="ct-frete">R$ ${frete}</td>
-    <td class="ct-status"><span class="status-pill-mini">${p.status||'Pendente'}</span> ${rotaTag}</td>
+    <td class="ct-status">${_statusPill(p.status)} ${rotaTag}</td>
     <td class="ct-acoes">
+      <button class="btn-kanban-patio" onclick="abrirModalStatus(${p.id})" title="Avançar status">▶</button>
       ${ehManual
         ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
         : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
@@ -11614,4 +11663,176 @@ async function criarRotaDoCorredorSelec(corredorId){
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
       `✅ Rota "${dados.nome}" criada com ${ids.length} carro(s). Defina a cegonha/guincho na Gestão Logística.`, 'success');
   } catch(e){ alert('Erro ao criar rota: ' + (e.message || e)); }
+}
+
+// Pílula de status com a cor oficial do fluxo (igual ao painel)
+function _statusPill(status){
+  const s = status || 'Pendente';
+  const cor = (typeof FLUXO_STATUS !== 'undefined' && FLUXO_STATUS[s]?.cor) || '#888';
+  return `<span class="status-pill-cor" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${s}</span>`;
+}
+
+// ============================================================
+// Aba "Avançar Pedidos" — esteira por status (logística)
+// Lista tudo que pode avançar, agrupado por status, com 1 clique.
+// O botão abre o fluxo de status já validado (abrirModalStatus).
+// ============================================================
+function renderizarAvancarPedidos(){
+  const cont = document.getElementById('painelViewAvancar');
+  if (!cont) return;
+  const viewer = (typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
+  // pedidos que têm próximo status e que o perfil atual pode conduzir
+  const vivos = (pedidosGlobais || []).filter(p => {
+    const cfg = FLUXO_STATUS[p.status || 'Pendente'];
+    if (!cfg || !cfg.proximos || cfg.proximos.length === 0) return false;
+    let dono = (cfg.perfis || []).filter(x => x !== 'admin')[0] || 'logistica';
+    if (p.origemLancamento === 'logistica' && dono === 'comercial') dono = 'logistica';
+    return viewer === 'admin' || viewer === dono || PERFIS_LOGISTICA.includes(viewer);
+  });
+
+  const busca = (document.getElementById('avancarBusca')?.value || '').toLowerCase().trim();
+  let lista = vivos;
+  if (busca) lista = lista.filter(p =>
+    `${p.cliente||''} ${p.placa||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`.toLowerCase().includes(busca));
+
+  // agrupa por status atual, na ordem do fluxo
+  const grupos = {};
+  lista.forEach(p => { const s = p.status || 'Pendente'; (grupos[s] = grupos[s] || []).push(p); });
+  const ordem = ['Pendente','Intenção Agendada','Aguardando Confirmação','Em Coleta','Em Transporte','Transbordo'];
+  const chaves = Object.keys(grupos).sort((a,b) => ordem.indexOf(a) - ordem.indexOf(b));
+
+  cont.innerHTML = `
+    <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">▶️ Tudo que está esperando um próximo passo, agrupado por status. Clique em <strong>Avançar</strong> para levar o pedido à próxima etapa.</p>
+    <div class="carteira-topo">
+      <input type="text" id="avancarBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, placa, cidade..." oninput="renderizarAvancarPedidos()" value="${busca.replace(/"/g,'&quot;')}">
+      <span class="text-muted">${lista.length} pedido(s) para avançar</span>
+    </div>
+    ${chaves.length === 0 ? '<p class="text-muted" style="padding:1rem 0">Nada para avançar agora. 👌</p>' : chaves.map(s => {
+      const itens = grupos[s];
+      const prox = (FLUXO_STATUS[s]?.proximos || []).join(' / ');
+      return `<div class="carteira-grupo">
+        <div class="carteira-grupo-tit">${_statusPill(s)} <span class="text-muted" style="font-size:.8rem">→ ${prox}</span> <span class="carteira-badge">${itens.length}</span></div>
+        <table class="corr-tabela">
+          <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Cegonha</th><th></th></tr></thead>
+          <tbody>${itens.map(p => `<tr class="corr-tr">
+            <td class="ct-id">#${p.id}</td>
+            <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+            <td class="ct-modelo">${p.modelo||'—'}</td>
+            <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+            <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+            <td class="ct-modelo">${p.placaCegonha || '—'}</td>
+            <td class="ct-acoes"><button class="btn btn-primary btn-sm" onclick="abrirModalStatus(${p.id})">▶ Avançar</button></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+    }).join('')}`;
+}
+
+// ============================================================
+// Módulo de Cobrança — comercial marca; financeiro confirma
+// Estados: a_cobrar -> cobrado -> pago -> confirmado
+// ============================================================
+let _cobFiltro = '';
+const _COB_LABEL = { a_cobrar:'A cobrar', cobrado:'Cobrado', pago:'Pago', confirmado:'Confirmado' };
+const _COB_COR   = { a_cobrar:'#fbbf24', cobrado:'#60a5fa', pago:'#a78bfa', confirmado:'#4ade80' };
+
+function filtrarCobranca(status, btn){
+  _cobFiltro = status;
+  document.querySelectorAll('.cobranca-filtros .ocup-chip').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderizarCobranca();
+}
+
+function _cobPill(st){
+  const s = st || 'a_cobrar';
+  const cor = _COB_COR[s] || '#888';
+  return `<span class="status-pill-cor" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${_COB_LABEL[s]||s}</span>`;
+}
+
+function renderizarCobranca(){
+  const wrap = document.getElementById('cobrancaWrap');
+  if (!wrap) return;
+  const ehFinanceiro = ['financeiro','admin'].includes(typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
+  const ehComercial  = ['comercial','admin'].includes(typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
+  const busca = (document.getElementById('cobrancaBusca')?.value || '').toLowerCase().trim();
+
+  // só pedidos que já geram receita (entregues ou com frete definido), não cancelados
+  let lista = (pedidosGlobais || []).filter(p => (p.status !== 'Cancelado') && Number(p.valorFrete||0) > 0);
+  if (_cobFiltro) lista = lista.filter(p => (p.cobrancaStatus||'a_cobrar') === _cobFiltro);
+  if (busca) lista = lista.filter(p =>
+    `${p.cliente||''} ${p.placa||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`.toLowerCase().includes(busca));
+
+  // resumo por status
+  const soma = {};
+  (pedidosGlobais||[]).filter(p => p.status!=='Cancelado' && Number(p.valorFrete||0)>0)
+    .forEach(p => { const s = p.cobrancaStatus||'a_cobrar'; soma[s] = (soma[s]||0) + Number(p.valorFrete||0); });
+  const resumo = ['a_cobrar','cobrado','pago','confirmado'].map(s =>
+    `<span class="cob-resumo-item">${_cobPill(s)} R$ ${Number(soma[s]||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>`).join('');
+
+  // Alerta de atrasadas: entregue há +15 dias e ainda não confirmado (mesma régua da Conferência de Receitas)
+  const ATRASO = 15;
+  const atrasadas = (pedidosGlobais||[]).filter(p => {
+    if (p.status !== 'Entregue') return false;
+    if ((p.cobrancaStatus||'a_cobrar') === 'confirmado' || p.receitaConfirmada) return false;
+    const d = p.dataEntregaReal || p.data_entrega_real || p.dataSolicitacao;
+    return d && (Date.now() - new Date(d).getTime())/86400000 >= ATRASO;
+  });
+  const totalAtras = atrasadas.reduce((s,p)=>s+Number(p.valorFrete||0),0);
+  const alertaAtraso = atrasadas.length
+    ? `<span class="cob-resumo-item" style="color:#f87171"><strong>⚠️ ${atrasadas.length} atrasada(s) (+${ATRASO}d)</strong> R$ ${totalAtras.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>`
+    : '';
+
+  if (lista.length === 0){ wrap.innerHTML = `<div class="cob-resumo">${resumo}${alertaAtraso}</div><p class="text-muted" style="padding:1rem 0">Nenhum pedido nesse filtro.</p>`; return; }
+
+  lista.sort((a,b) => b.id - a.id);
+
+  wrap.innerHTML = `<div class="cob-resumo">${resumo}${alertaAtraso}</div>
+    <table class="corr-tabela">
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Valor</th><th>Situação</th><th>Ações</th></tr></thead>
+      <tbody>${lista.map(p => {
+        const st = p.cobrancaStatus || 'a_cobrar';
+        let acoes = '';
+        // Comercial conduz até "pago"; Financeiro confirma
+        if (ehComercial && st === 'a_cobrar') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'cobrado')">Marcar cobrado</button>`;
+        if (ehComercial && st === 'cobrado') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'pago')">Marcar pago</button>`;
+        if (ehFinanceiro && st === 'pago') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'confirmado')">✅ Confirmar recebimento</button>`;
+        if ((ehComercial || ehFinanceiro) && st !== 'a_cobrar') acoes += `<button class="btn btn-sm btn-secondary" onclick="marcarCobranca(${p.id},'_voltar')" title="Voltar um passo">↩️</button>`;
+        return `<tr class="corr-tr">
+          <td class="ct-id">#${p.id}</td>
+          <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+          <td class="ct-modelo">${p.modelo||'—'}</td>
+          <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+          <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+          <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+          <td class="ct-status">${_cobPill(st)}</td>
+          <td class="ct-acoes">${acoes || '<span class="text-muted">—</span>'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+async function marcarCobranca(pedidoId, novo){
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p || !supabase) return;
+  const fluxo = ['a_cobrar','cobrado','pago','confirmado'];
+  let alvo = novo;
+  if (novo === '_voltar'){
+    const i = fluxo.indexOf(p.cobrancaStatus||'a_cobrar');
+    alvo = fluxo[Math.max(0, i-1)];
+  }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || '';
+  const upd = { cobranca_status: alvo };
+  const agora = new Date().toISOString();
+  if (alvo === 'cobrado'){ upd.cobrado_em = agora; upd.cobrado_por = usuario; }
+  if (alvo === 'pago'){ upd.pago_em = agora; upd.pago_por = usuario; }
+  if (alvo === 'confirmado'){ upd.pagto_confirmado_em = agora; upd.pagto_confirmado_por = usuario;
+    // Sincroniza com a Conferência de Receitas (mesma verdade: dinheiro recebido)
+    upd.receita_confirmada = true; upd.receita_confirmada_em = agora; upd.receita_confirmada_por = usuario;
+  }
+  try {
+    const { error } = await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    p.cobrancaStatus = alvo;
+    renderizarCobranca();
+  } catch(e){ alert('Erro ao atualizar cobrança: ' + (e.message||e)); }
 }
