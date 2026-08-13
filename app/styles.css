@@ -6538,7 +6538,11 @@ a.audit-chip-cte:hover { background: rgba(74,222,128,0.28); }
     font-size: 0.78rem; line-height: 1.7;
     padding: 0.4rem 0.5rem; background: rgba(255,255,255,0.02);
     border-radius: 6px; margin-bottom: 0.55rem;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+    max-width: 100%; overflow: hidden;
 }
+.rota-com-cidades .rota-seta { margin: 0 !important; }
+.rota-com-cidades .rota-ponto { white-space: normal; word-break: break-word; }
 .rota-com-ocup { display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; color: var(--text-muted); }
 .rota-com-barra { flex: 1; height: 6px; background: var(--black-void); border-radius: 3px; overflow: hidden; }
 .rota-com-barra-inner { height: 100%; transition: width 0.3s ease; }
@@ -8492,3 +8496,13 @@ input:focus, select:focus, textarea:focus {
 .ct-acoes { white-space: nowrap; text-align: right; }
 .ct-acoes .btn-kanban-patio { margin-left: 3px; }
 [data-tema="claro"] .corr-tr:hover { background: rgba(0,0,0,.03); }
+
+/* Pílula de status colorida (corredores) */
+.status-pill-cor { font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; display: inline-block; }
+
+/* Módulo de cobrança */
+.cobranca-filtros { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.cobranca-filtros .ocup-busca { max-width: 240px; margin-left: auto; }
+.cob-resumo { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px; margin-bottom: 14px; border-radius: 10px; background: var(--surface-2, rgba(255,255,255,.04)); }
+.cob-resumo-item { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: .9rem; }
+[data-tema="claro"] .cob-resumo { background: var(--surface-1); }
