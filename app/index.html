@@ -218,17 +218,22 @@
                         </div>
                         <div class="form-group">
                             <label for="novoPerfil">Perfil *</label>
-                            <select id="novoPerfil" required>
+                            <select id="novoPerfil" required onchange="_toggleEquipeVinculo()">
                                 <option value="">Selecione...</option>
                                 <option value="comercial">Comercial</option>
                                 <option value="logistica">Logística</option>
                                 <option value="motorista">Motorista</option>
+                                <option value="equipe">Equipe (coletas & entregas)</option>
                                 <option value="financeiro">Financeiro</option>
                                 <option value="fiscal">Fiscal (CTE)</option>
                                 <option value="diretoria">Diretoria</option>
                                 <option value="manutencao">Manutenção / Oficina</option>
                                 <option value="admin">Administrador</option>
                             </select>
+                        </div>
+                        <div class="form-group" id="grupoEquipeVinculo" style="display:none">
+                            <label for="novoEquipeId">Equipe (cidade que atende) *</label>
+                            <select id="novoEquipeId"></select>
                         </div>
                     </div>
                     <div class="form-row">
