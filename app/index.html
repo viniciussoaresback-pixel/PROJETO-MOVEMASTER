@@ -291,6 +291,7 @@
                     <button class="nav-btn active" data-tab="comercial">Lançamento Comercial</button>
                     <button class="nav-btn" data-tab="orcamento">💵 Orçamento</button>
                     <button class="nav-btn" data-tab="meusPedidos">Meus Pedidos <span id="seloOcorrencias" class="selo-aba" style="display:none">0</span></button>
+                    <button class="nav-btn" data-tab="cobranca">💰 Cobrança</button>
                     <button class="nav-btn" data-tab="painel">Painel de Acompanhamento</button>
                     <button class="nav-btn" data-tab="logistica">Gestão Logística</button>
                     <button class="nav-btn" data-tab="faturamento">Faturamento</button>
@@ -767,9 +768,11 @@
                     </div>
                     <div class="cad-subtabs painel-subtabs">
                         <button class="cad-subtab-btn ativo" onclick="mostrarViewPainel('acomp',this)">📋 Acompanhamento</button>
-                        <button class="cad-subtab-btn" onclick="mostrarViewPainel('carteira',this)">🗂️ Carteira de Demanda</button>
+                        <button class="cad-subtab-btn" onclick="mostrarViewPainel('carteira',this)">🗂️ Rotas Diversas</button>
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('corredores',this)">🛣️ Corredores</button>
+                        <button class="cad-subtab-btn" onclick="mostrarViewPainel('avancar',this)">▶️ Avançar Pedidos</button>
                     </div>
+                    <div id="painelViewAvancar" style="display:none"></div>
                     <div id="painelViewCarteira" style="display:none"></div>
                     <div id="painelViewCorredores" style="display:none"></div>
                     <!-- Cards de resumo -->
@@ -1413,6 +1416,25 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </section>
+
+            <section id="cobranca" class="tab-content">
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>💰 Cobrança</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarCobranca()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Comercial marca <strong>Cobrado</strong> e <strong>Pago</strong>. O Financeiro confirma o recebimento na conta.</p>
+                    <div class="cobranca-filtros">
+                        <button class="ocup-chip active" data-cob="" onclick="filtrarCobranca('', this)">Todos</button>
+                        <button class="ocup-chip" data-cob="a_cobrar" onclick="filtrarCobranca('a_cobrar', this)">A cobrar</button>
+                        <button class="ocup-chip" data-cob="cobrado" onclick="filtrarCobranca('cobrado', this)">Cobrado</button>
+                        <button class="ocup-chip" data-cob="pago" onclick="filtrarCobranca('pago', this)">Pago</button>
+                        <button class="ocup-chip" data-cob="confirmado" onclick="filtrarCobranca('confirmado', this)">Confirmado</button>
+                        <input type="text" id="cobrancaBusca" class="ocup-busca" placeholder="🔍 Cliente, placa, cidade..." oninput="renderizarCobranca()">
+                    </div>
+                    <div id="cobrancaWrap"></div>
                 </div>
             </section>
 
