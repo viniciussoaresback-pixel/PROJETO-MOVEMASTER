@@ -13,9 +13,9 @@ var perfilLogado = null;   // linha completa da tabela perfis (inclui motorista_
 
 // Mapa de permissões por perfil
 const PERMISSOES = {
-    admin:      ['comercial','meusPedidos','painel','logistica','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca'],
-    comercial:  ['comercial','meusPedidos','painel','cadastros','orcamento','cobranca'],
-    logistica:  ['painel','logistica','comercial','cadastros'],
+    admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca'],
+    comercial:  ['comercial','meusPedidos','painel','equipes','cadastros','orcamento','cobranca'],
+    logistica:  ['painel','logistica','equipes','comercial','cadastros'],
     financeiro: ['faturamento','cobranca'],
     motorista:  ['motorista'],
     fiscal:     ['fiscal'],
