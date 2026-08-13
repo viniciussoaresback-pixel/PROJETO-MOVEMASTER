@@ -8510,3 +8510,7 @@ input:focus, select:focus, textarea:focus {
 
 /* Aviso de carga atual no modal inserir carro */
 .cob-aviso-carga { color: #fbbf24; font-weight: 700; font-size: .8rem; }
+
+/* Tela de Equipes */
+.equipe-abas { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.eq-membro-sel { padding: 3px 6px; border-radius: 6px; font-size: .8rem; margin-right: 4px; }
