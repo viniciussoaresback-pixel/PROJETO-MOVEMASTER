@@ -11523,12 +11523,13 @@ function _corredorPedidoLinha(p, c, paradasStr){
     <td class="ct-frete">R$ ${frete}</td>
     <td class="ct-status">${_statusPill(p.status)} ${rotaTag}</td>
     <td class="ct-acoes">
+      ${podeAvancarPedido(p) ? `<button class="btn-kanban-patio" onclick="abrirModalStatus(${p.id})" title="Avançar status">▶</button>` : ''}
       ${podeAgir ? `
-      <button class="btn-kanban-patio" onclick="abrirModalStatus(${p.id})" title="Avançar status">▶</button>
       ${ehManual
         ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
         : `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar em outro corredor">➡️</button>`}
-      <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️</button>` : '<span class="text-muted">—</span>'}
+      <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️</button>` : ''}
+      ${(!podeAvancarPedido(p) && !podeAgir) ? '<span class="text-muted">—</span>' : ''}
     </td>
   </tr>`;
 }
@@ -11664,6 +11665,19 @@ async function criarRotaDoCorredorSelec(corredorId){
   } catch(e){ alert('Erro ao criar rota: ' + (e.message || e)); }
 }
 
+// Decide se o perfil ATUAL pode avançar ESTE pedido (respeita o dono da etapa
+// e a regra do pedido feito pela logística, que pula a confirmação do comercial).
+function podeAvancarPedido(p){
+  const cfg = FLUXO_STATUS[p.status || 'Pendente'];
+  if (!cfg || !cfg.proximos || cfg.proximos.length === 0) return false;
+  const viewer = (typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
+  if (viewer === 'admin' || (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar())) return true;
+  let dono = (cfg.perfis || []).filter(x => x !== 'admin')[0] || 'logistica';
+  // pedido feito pela logística: ela conduz, o comercial não confirma
+  if (p.origemLancamento === 'logistica' && dono === 'comercial') dono = 'logistica';
+  return viewer === dono;
+}
+
 // Pílula de status com a cor oficial do fluxo (igual ao painel)
 function _statusPill(status){
   const s = status || 'Pendente';
@@ -11717,7 +11731,7 @@ function renderizarAvancarPedidos(){
             <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
             <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
             <td class="ct-modelo">${p.placaCegonha || '—'}</td>
-            <td class="ct-acoes">${podeAgir ? `<button class="btn btn-primary btn-sm" onclick="abrirModalStatus(${p.id})">▶ Avançar</button>` : '<span class="text-muted">acompanhando</span>'}</td>
+            <td class="ct-acoes">${podeAvancarPedido(p) ? `<button class="btn btn-primary btn-sm" onclick="abrirModalStatus(${p.id})">▶ Avançar</button>` : '<span class="text-muted">acompanhando</span>'}</td>
           </tr>`).join('')}</tbody>
         </table>
       </div>`;
