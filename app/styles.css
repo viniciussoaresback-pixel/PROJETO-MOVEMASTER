@@ -8506,3 +8506,6 @@ input:focus, select:focus, textarea:focus {
 .cob-resumo { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px; margin-bottom: 14px; border-radius: 10px; background: var(--surface-2, rgba(255,255,255,.04)); }
 .cob-resumo-item { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: .9rem; }
 [data-tema="claro"] .cob-resumo { background: var(--surface-1); }
+
+/* Aviso de carga atual no modal inserir carro */
+.cob-aviso-carga { color: #fbbf24; font-weight: 700; font-size: .8rem; }
