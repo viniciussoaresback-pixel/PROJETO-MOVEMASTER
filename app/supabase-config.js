@@ -18,6 +18,7 @@ const PERMISSOES = {
     logistica:  ['painel','logistica','equipes','comercial','cadastros'],
     financeiro: ['faturamento','cobranca'],
     motorista:  ['motorista'],
+    equipe:     ['equipes'],
     fiscal:     ['fiscal'],
     diretoria:  ['diretoria'],
     manutencao: ['manutencao']
@@ -28,6 +29,7 @@ const NOMES_PERFIL = {
     comercial:  'Comercial',
     logistica:  'Logística',
     motorista:  'Motorista',
+    equipe:     'Equipe (coletas & entregas)',
     financeiro: 'Financeiro',
     fiscal:     'Fiscal (CTE)',
     diretoria:  'Diretoria',
@@ -92,6 +94,7 @@ async function carregarPerfilUsuario(user) {
         }
 
         perfilAtual = data.perfil;
+        window._equipeIdLogada = data.equipe_id || null; // equipe vinculada (perfil "equipe")
         direcionarPorPerfil(data, user.email);
 
     } catch (e) {
@@ -2027,9 +2030,11 @@ async function criarNovoUsuario(e) {
         if (!userId) throw new Error('Usuário não criado.');
 
         // 2. Criar perfil na tabela perfis
+        const vinculoEquipe = (perfil === 'equipe') ? (parseInt(document.getElementById('novoEquipeId')?.value) || null) : null;
+        if (perfil === 'equipe' && !vinculoEquipe){ msgEl.textContent = 'Selecione a equipe que este usuário atende.'; msgEl.className = 'message show error'; return; }
         const { error: perfilError } = await supabase
             .from('perfis')
-            .insert({ user_id: userId, perfil, nome, email, ativo: true });
+            .insert({ user_id: userId, perfil, nome, email, ativo: true, equipe_id: vinculoEquipe });
 
         if (perfilError) throw perfilError;
 
@@ -2287,4 +2292,19 @@ function abrirEnvioDocumentoRapido(pedidoId) {
     abrirEnvioDocumento();
     const sel = document.getElementById('uploadPedidoId');
     if (sel) sel.value = String(pedidoId);
+}
+// Mostra/preenche o seletor de equipe quando o perfil "equipe" é escolhido
+function _toggleEquipeVinculo(){
+  const perfil = document.getElementById('novoPerfil')?.value;
+  const grupo = document.getElementById('grupoEquipeVinculo');
+  const sel = document.getElementById('novoEquipeId');
+  if (!grupo || !sel) return;
+  const ehEquipe = perfil === 'equipe';
+  grupo.style.display = ehEquipe ? '' : 'none';
+  if (ehEquipe){
+    const eqs = (typeof equipesEntregaGlobais !== 'undefined' ? equipesEntregaGlobais : []).filter(e => e.ativo !== false);
+    sel.innerHTML = eqs.length
+      ? eqs.map(e => `<option value="${e.id}">${e.nome}${e.cidade_base ? ' — '+e.cidade_base : ''}</option>`).join('')
+      : '<option value="">Cadastre uma equipe primeiro (Cadastros → Equipes)</option>';
+  }
 }
