@@ -11516,7 +11516,7 @@ function _corredorPedidoLinha(p, c, paradasStr){
   return `<tr class="corr-tr">
     <td>${podeAgir ? `<input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">` : ''}</td>
     <td class="ct-id">#${p.id}</td>
-    <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+    <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${typeof selCTEDoPedido==='function' ? selCTEDoPedido(p.id) : ''}</td>
     <td class="ct-modelo">${p.modelo||'—'}</td>
     <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
     <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
@@ -11877,27 +11877,71 @@ function abrirInserirCarroRota(rotaId){
 function _renderInserirCarroLista(rotaId){
   const alvo = document.getElementById('inserirCarroLista');
   if (!alvo) return;
+  const rota = (rotasGlobais||[]).find(r => String(r.id) === String(rotaId));
   const busca = (document.getElementById('inserirCarroBusca')?.value || '').toLowerCase().trim();
+  // TODOS os carros ativos (não entregues/cancelados) — inclusive os que já estão em outra carga
   let disp = (pedidosGlobais||[]).filter(p =>
-    !p.placaCegonha && !(p.rotaId || p.rota_id) && !['Entregue','Cancelado'].includes(p.status||'Pendente'));
+    !['Entregue','Cancelado'].includes(p.status||'Pendente') &&
+    !(rota && p.placaCegonha === rota.placa_cegonha)); // já está nesta cegonha
   if (busca) disp = disp.filter(p =>
     `${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`.toLowerCase().includes(busca));
   disp.sort((a,b)=>b.id-a.id);
   if (disp.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum carro disponível.</p>'; return; }
   alvo.innerHTML = `<table class="corr-tabela">
-    <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th></th></tr></thead>
-    <tbody>${disp.slice(0,50).map(p => `<tr class="corr-tr">
-      <td class="ct-id">#${p.id}</td>
-      <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
-      <td class="ct-modelo">${p.modelo||'—'}</td>
-      <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-      <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
-      <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-      <td class="ct-acoes"><button class="btn btn-primary btn-sm" onclick="_inserirCarroNaRota(${p.id}, ${rotaId})">+ Adicionar</button></td>
-    </tr>`).join('')}</tbody></table>`;
+    <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Carga atual</th><th></th></tr></thead>
+    <tbody>${disp.slice(0,80).map(p => {
+      const emCarga = p.placaCegonha;
+      const cargaTxt = emCarga
+        ? `<span class="cob-aviso-carga" title="Já está nesta cegonha — será movido (troca de seguro)">⚠️ ${p.placaCegonha}</span>`
+        : '<span class="text-muted">livre</span>';
+      return `<tr class="corr-tr">
+        <td class="ct-id">#${p.id}</td>
+        <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${selCTEDoPedido(p.id)}</td>
+        <td class="ct-modelo">${p.modelo||'—'}</td>
+        <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+        <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+        <td>${cargaTxt}</td>
+        <td class="ct-acoes"><button class="btn btn-primary btn-sm" onclick="_inserirCarroNaRota(${p.id}, ${rotaId})">${emCarga ? '🔄 Mover' : '+ Adicionar'}</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
 }
 
 async function _inserirCarroNaRota(pedidoId, rotaId){
-  await vincularPedidoRota(pedidoId, rotaId);
-  _renderInserirCarroLista(rotaId); // atualiza a lista do modal (o carro sai dela)
+  const rota = (rotasGlobais||[]).find(r => String(r.id) === String(rotaId));
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!rota || !p || !supabase) return;
+  const cegonhaAntiga = p.placaCegonha || null;
+  const cegonhaNova = rota.placa_cegonha || null;
+  const cte = cteInfoDoPedido(pedidoId);
+
+  // Se troca de cegonha, confirma mostrando a transição (troca de seguro)
+  if (cegonhaAntiga && cegonhaNova && cegonhaAntiga !== cegonhaNova){
+    const msgCte = cte ? `\n\n🧾 CTe${cte.numero ? ' nº '+cte.numero : ''} já emitido — será MANTIDO (não emite novo). Só muda o manifesto.` : '';
+    if (!confirm(`Mover o carro #${pedidoId} de cegonha?\n\n${cegonhaAntiga}  →  ${cegonhaNova}  (troca de seguro)${msgCte}`)) return;
+  }
+
+  try {
+    const update = { rota_id: rotaId };
+    if (cegonhaNova){ update.placa_cegonha = cegonhaNova; update.status = 'Intenção Agendada'; }
+    const { error } = await supabase.from('pedidos').update(update).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+
+    // Histórico da troca de seguro / inserção
+    let obs;
+    if (cegonhaAntiga && cegonhaNova && cegonhaAntiga !== cegonhaNova){
+      obs = `🔄 Troca de cegonha (seguro): ${cegonhaAntiga} → ${cegonhaNova}` + (cte ? ` · 🧾 CTe${cte.numero ? ' nº '+cte.numero : ''} mantido (só muda o manifesto)` : '');
+    } else {
+      obs = `➕ Inserido na rota "${rota.nome || '#'+rota.id}"${cegonhaNova ? ' — cegonha ' + cegonhaNova : ''}`;
+    }
+    try { await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: update.status || p.status,
+      usuario_nome: document.getElementById('usuarioLogado')?.textContent || 'Logística',
+      usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica', observacao: obs
+    }); } catch(_){}
+
+    await carregarDadosDoSupabase();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    _renderInserirCarroLista(rotaId);
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ ${obs}`, 'success');
+  } catch(e){ alert('Erro ao inserir/mover: ' + (e.message||e)); }
 }
