@@ -8534,3 +8534,9 @@ input:focus, select:focus, textarea:focus {
 .hist-carga-cab .hist-rota { color:var(--accent,#ff6a00); font-weight:600; }
 .hist-carga-cab .hist-total { margin-left:auto; color:#4ade80; font-weight:700; }
 [data-tema="claro"] .hist-mot-cab { background:var(--surface-1); }
+
+/* Viagem colapsável no histórico */
+.hist-carga-toggle { cursor:pointer; user-select:none; }
+.hist-carga-toggle:hover { background:rgba(255,255,255,.03); }
+.hist-chevron { color:var(--accent,#ff6a00); font-weight:700; width:14px; display:inline-block; }
+[data-tema="claro"] .hist-carga-toggle:hover { background:rgba(0,0,0,.03); }
