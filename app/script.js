@@ -784,16 +784,16 @@ function renderizarOcupacao() {
     setTxt('ocupEntregue', cont.Entregue);
 
     // Filtro + busca
-    const busca = (document.getElementById('ocupBusca')?.value || '').trim().toLowerCase();
-    const fOrigem = (document.getElementById('ocupOrigem')?.value || '').trim().toLowerCase();
-    const fDestino = (document.getElementById('ocupDestino')?.value || '').trim().toLowerCase();
+    const busca = _norm(document.getElementById('ocupBusca')?.value || '');
+    const fOrigem = _norm(document.getElementById('ocupOrigem')?.value || '');
+    const fDestino = _norm(document.getElementById('ocupDestino')?.value || '');
     let lista = pedidosGlobais.filter(p => grupoOcupacao(p.status || 'Pendente') !== 'Cancelado');
     if (_ocupFiltroStatus) lista = lista.filter(p => grupoOcupacao(p.status || 'Pendente') === _ocupFiltroStatus);
     if (busca) lista = lista.filter(p =>
-        `${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.placaCegonha||''} ${p.motorista1||''} ${p.referencia||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} #${p.id}`.toLowerCase().includes(busca)
+        _norm(`${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.placaCegonha||''} ${p.motorista1||''} ${p.referencia||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} #${p.id}`).includes(busca)
     );
-    if (fOrigem) lista = lista.filter(p => `${p.cidadeOrigem||''} ${p.ufOrigem||''}`.toLowerCase().includes(fOrigem));
-    if (fDestino) lista = lista.filter(p => `${p.cidadeDestino||''} ${p.ufDestino||''}`.toLowerCase().includes(fDestino));
+    if (fOrigem) lista = lista.filter(p => _norm(`${p.cidadeOrigem||''} ${p.ufOrigem||''}`).includes(fOrigem));
+    if (fDestino) lista = lista.filter(p => _norm(`${p.cidadeDestino||''} ${p.ufDestino||''}`).includes(fDestino));
 
     // Ordena: pendentes primeiro, depois em rota, depois entregues; dentro por coleta
     const ordemGrupo = { 'Pendente': 0, 'Em Rota': 1, 'Entregue': 2 };
@@ -4722,8 +4722,8 @@ function renderizarPedidosComercial() {
 
     let pedidos = [...pedidosGlobais].sort((a, b) => b.id - a.id);
 
-    if (filtroOrigem) pedidos = pedidos.filter(p => `${p.cidadeOrigem||''} ${p.ufOrigem||''}`.toLowerCase().includes(filtroOrigem));
-    if (filtroDestino) pedidos = pedidos.filter(p => `${p.cidadeDestino||''} ${p.ufDestino||''}`.toLowerCase().includes(filtroDestino));
+    if (filtroOrigem) pedidos = pedidos.filter(p => _norm(`${p.cidadeOrigem||''} ${p.ufOrigem||''}`).includes(_norm(filtroOrigem)));
+    if (filtroDestino) pedidos = pedidos.filter(p => _norm(`${p.cidadeDestino||''} ${p.ufDestino||''}`).includes(_norm(filtroDestino)));
     if (filtroStatus) pedidos = pedidos.filter(p => p.status === filtroStatus);
     if (filtroRota) pedidos = pedidos.filter(p => {
         const r = `${p.cidadeOrigem||''}/${p.ufOrigem||''} → ${p.cidadeDestino||''}/${p.ufDestino||''}`;
@@ -7703,6 +7703,7 @@ function renderizarRotas() {
                 ${(r.status === 'planejada' || r.status === 'em_andamento') ? `<button class="btn btn-secondary btn-sm" onclick="abrirInserirCarroRota(${r.id})" title="Adicionar qualquer carro disponível a esta rota">➕ Inserir carro</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-secondary btn-sm" onclick="abrirEditarRota(${r.id})" title="Alterar dados antes de iniciar a viagem">✏️ Editar</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-primary btn-sm" onclick="mudarStatusRota(${r.id}, 'em_andamento')">▶️ Iniciar viagem</button>` : ''}
+                ${(r.status === 'planejada' || r.status === 'em_andamento') ? `<button class="btn btn-secondary btn-sm" onclick="abrirAvancarStatusRota(${r.id})" title="Avançar o status dos carros desta rota">⏩ Avançar status</button>` : ''}
                 ${r.status === 'em_andamento' ? `<button class="btn btn-primary btn-sm" onclick="abrirRegistrarChegada(${r.id})" title="Marcar chegada dos carros (motorista ou pátio)">🏁 Registrar chegada</button>` : ''}
                 <button class="btn btn-secondary btn-sm" onclick="mudarStatusRota(${r.id}, 'cancelada')">Cancelar rota</button>
             </div>
@@ -8066,7 +8067,11 @@ async function desvincularPedidoRota(pedidoId) {
     try {
         const { error } = await supabase.from('pedidos').update({
             rota_id: null, placa_cegonha: null, status: 'Pendente',
-            motorista_1: null, motorista_2: null
+            motorista_1: null, motorista_2: null,
+            percent_motorista_1: null, percent_motorista_2: null,
+            patio_atual: null, patio_desde: null
+            // corredor_manual_id é PRESERVADO: se tinha 📌, volta pro mesmo corredor manual;
+            // se não tinha, volta pro corredor automático pela geografia.
         }).eq('id', pedidoId);
         if (error) throw error;
 
@@ -8081,6 +8086,30 @@ async function desvincularPedidoRota(pedidoId) {
 
 async function mudarStatusRota(rotaId, novoStatus) {
     const labels = { em_andamento: 'iniciar a viagem desta rota', concluida: 'concluir esta rota', cancelada: 'cancelar esta rota' };
+    if (novoStatus === 'em_andamento'){
+        const carros = (pedidosGlobais||[]).filter(p =>
+            String(p.rotaId || p.rota_id) === String(rotaId) &&
+            !['Entregue','Cancelado','Em Transporte','Transbordo'].includes(p.status||'Pendente'));
+        if (!confirm(`Iniciar a viagem desta rota?\n\nOs ${carros.length} carro(s) da carga vão direto para "Em Transporte".`)) return;
+        const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+        try {
+            const { error } = await supabase.from('rotas_planejadas').update({ status: 'em_andamento' }).eq('id', rotaId);
+            if (error) throw error;
+            // Todos os carros da rota entram direto em trânsito (fluxo enxuto)
+            for (const p of carros){
+                await supabase.from('pedidos').update({ status: 'Em Transporte' }).eq('id', p.id);
+                try { await supabase.from('historico_status').insert({
+                    pedido_id: p.id, status_anterior: p.status, status_novo: 'Em Transporte',
+                    usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+                    observacao: `🚚 Viagem iniciada — carro entrou em trânsito.`
+                }); } catch(_){}
+            }
+            await carregarDadosDoSupabase();
+            renderizarRotas();
+            if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `🚚 Viagem iniciada — ${carros.length} carro(s) em trânsito.`, 'success');
+        } catch(e){ alert('Erro: ' + (e.message||e)); }
+        return;
+    }
     if (!confirm(`Confirma ${labels[novoStatus] || 'alterar esta rota'}?`)) return;
     try {
         const { error } = await supabase.from('rotas_planejadas')
@@ -10238,7 +10267,8 @@ async function desalocarPedido(pedidoId){
     motorista_1: null, percent_motorista_1: null,
     motorista_2: null, percent_motorista_2: null,
     data_prev_coleta: null, data_prev_entrega: null,
-    corredor_manual_id: null, patio_atual: null, patio_desde: null,
+    patio_atual: null, patio_desde: null,
+    // corredor_manual_id PRESERVADO: se tinha 📌, volta pro mesmo corredor; senão, automático
     status: 'Pendente'
   };
   try {
@@ -11266,13 +11296,12 @@ function renderizarCarteiraDemanda(){
 function _renderCarteiraGrupos(){
   const alvo = document.getElementById('carteiraGrupos');
   if (!alvo) return;
-  const busca = (document.getElementById('carteiraBusca')?.value || '').toLowerCase().trim();
+  const busca = _norm(document.getElementById('carteiraBusca')?.value || '');
   // Acompanhamento: TODOS os carros ativos (não só os sem corredor), agrupados por origem
   let lista = (pedidosGlobais || []).filter(p =>
     !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
   if (busca) lista = lista.filter(p =>
-    `${p.cliente||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} ${p.placa||''} ${p.placaCegonha||''} #${p.id}`
-      .toLowerCase().includes(busca));
+    _norm(`${p.cliente||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} ${p.placa||''} ${p.placaCegonha||''} #${p.id}`).includes(busca));
 
   const total = document.getElementById('carteiraTotal');
   if (total) total.textContent = `${lista.length} carro(s) em andamento`;
@@ -11503,7 +11532,7 @@ function _carrosSemCorredorHTML(corredores, vivos){
 function _corredorCardHTML(c, vivos, ci){
   const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
   const paradasStr = seq.filter(Boolean);
-  const busca = (document.getElementById('corredorBusca')?.value || '').toLowerCase().trim();
+  const busca = _norm(document.getElementById('corredorBusca')?.value || '');
 
   // pedidos compatíveis: parte do PÁTIO ATUAL (se houver) ou da origem do pedido;
   // entra se partida→destino couber no corredor (ordem certa) ou for encaixe no caminho.
@@ -11519,7 +11548,7 @@ function _corredorCardHTML(c, vivos, ci){
         || (noPatioDoTronco && id === -1);       // no pátio do tronco, destino é ramal (transborda no hub)
   });
   if (busca) compat = compat.filter(p =>
-    `${p.cliente||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.placa||''} #${p.id}`.toLowerCase().includes(busca));
+    _norm(`${p.cliente||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.placa||''} #${p.id}`).includes(busca));
 
   const semRota = compat.filter(p => !(p.rotaId || p.rota_id) && !p.placaCegonha).length;
   _corredorCache[String(c.id)] = { nome: c.nome, seq: paradasStr, itens: compat };
@@ -11838,10 +11867,10 @@ function renderizarAvancarPedidos(){
     return cfg && cfg.proximos && cfg.proximos.length > 0 && !['Entregue','Cancelado'].includes(p.status||'Pendente');
   });
 
-  const busca = (document.getElementById('avancarBusca')?.value || '').toLowerCase().trim();
+  const busca = _norm(document.getElementById('avancarBusca')?.value || '');
   let lista = vivos;
   if (busca) lista = lista.filter(p =>
-    `${p.cliente||''} ${p.placa||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`.toLowerCase().includes(busca));
+    _norm(`${p.cliente||''} ${p.placa||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`).includes(busca));
 
   // agrupa por status atual, na ordem do fluxo
   const grupos = {};
@@ -11902,13 +11931,13 @@ function renderizarCobranca(){
   if (!wrap) return;
   const ehFinanceiro = ['financeiro','admin'].includes(typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
   const ehComercial  = ['comercial','admin'].includes(typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
-  const busca = (document.getElementById('cobrancaBusca')?.value || '').toLowerCase().trim();
+  const busca = _norm(document.getElementById('cobrancaBusca')?.value || '');
 
   // só pedidos que já geram receita (entregues ou com frete definido), não cancelados
   let lista = (pedidosGlobais || []).filter(p => (p.status !== 'Cancelado') && Number(p.valorFrete||0) > 0);
   if (_cobFiltro) lista = lista.filter(p => (p.cobrancaStatus||'a_cobrar') === _cobFiltro);
   if (busca) lista = lista.filter(p =>
-    `${p.cliente||''} ${p.placa||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`.toLowerCase().includes(busca));
+    _norm(`${p.cliente||''} ${p.placa||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`).includes(busca));
 
   // resumo por status
   const soma = {};
@@ -12016,13 +12045,13 @@ function _renderInserirCarroLista(rotaId){
   const alvo = document.getElementById('inserirCarroLista');
   if (!alvo) return;
   const rota = (rotasGlobais||[]).find(r => String(r.id) === String(rotaId));
-  const busca = (document.getElementById('inserirCarroBusca')?.value || '').toLowerCase().trim();
+  const busca = _norm(document.getElementById('inserirCarroBusca')?.value || '');
   // TODOS os carros ativos (não entregues/cancelados) — inclusive os que já estão em outra carga
   let disp = (pedidosGlobais||[]).filter(p =>
     !['Entregue','Cancelado'].includes(p.status||'Pendente') &&
     !(rota && p.placaCegonha === rota.placa_cegonha)); // já está nesta cegonha
   if (busca) disp = disp.filter(p =>
-    `${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`.toLowerCase().includes(busca));
+    _norm(`${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`).includes(busca));
   disp.sort((a,b)=>b.id-a.id);
   if (disp.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum carro disponível.</p>'; return; }
   alvo.innerHTML = `<table class="corr-tabela">
@@ -12060,7 +12089,11 @@ async function _inserirCarroNaRota(pedidoId, rotaId){
 
   try {
     const update = { rota_id: rotaId };
-    if (cegonhaNova){ update.placa_cegonha = cegonhaNova; update.status = 'Intenção Agendada'; }
+    if (cegonhaNova){
+      update.placa_cegonha = cegonhaNova;
+      // Se a rota já está em andamento, o carro entra direto em trânsito; senão, Intenção Agendada
+      update.status = (rota.status === 'em_andamento') ? 'Em Transporte' : 'Intenção Agendada';
+    }
     const { error } = await supabase.from('pedidos').update(update).eq('id', parseInt(pedidoId));
     if (error) throw error;
 
@@ -12338,4 +12371,95 @@ async function marcarEntregaEquipe(pedidoId, equipeId){
     await carregarDadosDoSupabase();
     renderizarEquipesPainel();
   } catch(e){ alert('Erro ao marcar entrega: '+(e.message||e)); }
+}
+
+// ============================================================
+// Avançar status em lote dos carros de uma rota planejada/andamento
+// ============================================================
+function abrirAvancarStatusRota(rotaId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('avançar status')) return;
+  const rota = (rotasGlobais||[]).find(r => String(r.id) === String(rotaId));
+  if (!rota) return;
+  const carros = (pedidosGlobais||[]).filter(p =>
+    String(p.rotaId || p.rota_id) === String(rotaId) &&
+    !['Entregue','Cancelado'].includes(p.status||'Pendente') &&
+    (FLUXO_STATUS[p.status||'Pendente']?.proximos||[]).length > 0);
+  const old = document.getElementById('modalAvancarRota'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalAvancarRota';
+  div.className = 'modal-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  const linhas = carros.length ? carros.map(p => {
+    const prox = (FLUXO_STATUS[p.status||'Pendente']?.proximos||[])[0] || '';
+    return `<tr class="corr-tr">
+      <td><input type="checkbox" class="avr-check" value="${p.id}" checked></td>
+      <td class="ct-id">#${p.id}</td>
+      <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+      <td class="ct-modelo">${p.modelo||'—'}</td>
+      <td class="ct-status">${_statusPill(p.status)}</td>
+      <td class="ct-rota"><span class="cpl-seta">→</span> <strong>${prox}</strong></td>
+    </tr>`;
+  }).join('') : '';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:680px;width:94%;max-height:86vh;overflow:auto;border-radius:14px;padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h2 style="margin:0">⏩ Avançar status — ${rota.nome || ('#'+rota.id)}</h2>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalAvancarRota').remove()">✕</button>
+      </div>
+      ${carros.length === 0 ? '<p class="text-muted" style="padding:1rem 0">Nenhum carro para avançar nesta rota (ou precisam de ação individual, como confirmação/checklist).</p>' : `
+      <p class="text-muted" style="font-size:.86rem;margin:.2rem 0 1rem">Selecione os carros e avance todos para o próximo status de uma vez. Etapas que exigem confirmação individual (checklist, transbordo) continuam pelo botão ▶ de cada carro.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-secondary btn-sm" onclick="_avrSelTodos(true)">Selecionar todos</button>
+        <button class="btn btn-secondary btn-sm" onclick="_avrSelTodos(false)">Limpar</button>
+        <span id="avrCont" class="text-muted" style="margin-left:auto"></span>
+      </div>
+      <table class="corr-tabela">
+        <thead><tr><th></th><th>ID</th><th>Placa</th><th>Modelo</th><th>Status atual</th><th>Próximo</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button class="btn btn-primary" style="flex:1;padding:13px" onclick="_aplicarAvancarRota(${rotaId})">⏩ Avançar selecionados</button>
+      </div>`}
+    </div>`;
+  document.body.appendChild(div);
+  _avrAtualizaCont();
+}
+function _avrSelTodos(v){ document.querySelectorAll('.avr-check').forEach(c => c.checked = v); _avrAtualizaCont(); }
+function _avrAtualizaCont(){
+  const n = document.querySelectorAll('.avr-check:checked').length;
+  const el = document.getElementById('avrCont'); if (el) el.textContent = `${n} selecionado(s)`;
+}
+document.addEventListener('change', e => { if (e.target && e.target.classList?.contains('avr-check')) _avrAtualizaCont(); });
+
+async function _aplicarAvancarRota(rotaId){
+  const ids = Array.from(document.querySelectorAll('.avr-check:checked')).map(c => parseInt(c.value));
+  if (ids.length === 0){ alert('Selecione ao menos um carro.'); return; }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  let ok = 0, pulados = 0;
+  try {
+    for (const id of ids){
+      const p = (pedidosGlobais||[]).find(x => String(x.id) === String(id));
+      if (!p) continue;
+      const cfg = FLUXO_STATUS[p.status||'Pendente'];
+      const prox = (cfg?.proximos||[])[0];
+      if (!prox){ pulados++; continue; }
+      // Só avança direto os passos simples; Transbordo e Entregue exigem tela própria
+      if (prox === 'Transbordo' || prox === 'Entregue'){ pulados++; continue; }
+      // Trava: Intenção Agendada precisa de cegonha para virar Aguardando Confirmação
+      if (p.status === 'Intenção Agendada' && !p.placaCegonha){ pulados++; continue; }
+      await supabase.from('pedidos').update({ status: prox }).eq('id', id);
+      try { await supabase.from('historico_status').insert({
+        pedido_id: id, status_anterior: p.status, status_novo: prox,
+        usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+        observacao: `⏩ Status avançado em lote (rota) para ${prox}.`
+      }); } catch(_){}
+      ok++;
+    }
+    await carregarDadosDoSupabase();
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    document.getElementById('modalAvancarRota')?.remove();
+    const msg = `⏩ ${ok} carro(s) avançado(s).` + (pulados ? ` ${pulados} exigem ação individual (checklist/transbordo/cegonha).` : '');
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', msg, 'success');
+    if (pulados && ok === 0) alert(msg);
+  } catch(e){ alert('Erro ao avançar: '+(e.message||e)); }
 }
