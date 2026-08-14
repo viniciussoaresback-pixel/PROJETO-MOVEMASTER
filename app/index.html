@@ -777,8 +777,10 @@
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('carteira',this)">🗂️ Rotas Diversas</button>
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('corredores',this)">🛣️ Corredores</button>
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('avancar',this)">▶️ Avançar Pedidos</button>
+                        <button class="cad-subtab-btn" onclick="mostrarViewPainel('historico',this)">📚 Histórico de Cargas</button>
                     </div>
                     <div id="painelViewAvancar" style="display:none"></div>
+                    <div id="painelViewHistorico" style="display:none"></div>
                     <div id="painelViewCarteira" style="display:none"></div>
                     <div id="painelViewCorredores" style="display:none"></div>
                     <!-- Cards de resumo -->
@@ -1422,6 +1424,14 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>📚 Histórico de Cargas por Motorista</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarHistoricoCargas()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Cargas concluídas, agrupadas por motorista e dia — carros, rota, CTe, cobrança e entrega. (Somente visualização.)</p>
+                    <div id="faturamentoHistoricoCargas"></div>
                 </div>
             </section>
 
