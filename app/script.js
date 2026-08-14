@@ -109,6 +109,10 @@ function trocarAba(event) {
     if (tabAlvo === 'logistica') carregarLogistica();
     if (tabAlvo === 'manutencao' && typeof carregarManutencao === 'function') carregarManutencao();
     if (tabAlvo === 'faturamento' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
+    if (tabAlvo === 'faturamento'){
+        const wrap = document.getElementById('faturamentoHistoricoCargas');
+        if (wrap && typeof _histCargasCasca === 'function'){ wrap.innerHTML = _histCargasCasca(); renderizarHistoricoCargas('historicoCargasWrap'); }
+    }
     if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial(); }
     if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
@@ -11264,16 +11268,19 @@ function mostrarViewPainel(view, btn){
   const carteira = document.getElementById('painelViewCarteira');
   const corredores = document.getElementById('painelViewCorredores');
   const avancar = document.getElementById('painelViewAvancar');
+  const historico = document.getElementById('painelViewHistorico');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'carteira' || view === 'corredores' || view === 'avancar');
+  const ehExtra = (view === 'carteira' || view === 'corredores' || view === 'avancar' || view === 'historico');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (carteira) carteira.style.display = (view === 'carteira') ? '' : 'none';
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
   if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
+  if (historico) historico.style.display = (view === 'historico') ? '' : 'none';
   if (view === 'carteira') renderizarCarteiraDemanda();
   if (view === 'corredores') renderizarPainelCorredores();
   if (view === 'avancar') renderizarAvancarPedidos();
+  if (view === 'historico'){ historico.innerHTML = _histCargasCasca(); renderizarHistoricoCargas(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
 }
@@ -12462,4 +12469,105 @@ async function _aplicarAvancarRota(rotaId){
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', msg, 'success');
     if (pulados && ok === 0) alert(msg);
   } catch(e){ alert('Erro ao avançar: '+(e.message||e)); }
+}
+
+// ============================================================
+// HISTÓRICO DE CARGAS CONCLUÍDAS — por motorista e por dia
+// Só visualização. Aparece no Painel (logística) e no Faturamento (financeiro).
+// ============================================================
+function renderizarHistoricoCargas(containerId){
+  const cont = document.getElementById(containerId || 'historicoCargasWrap');
+  if (!cont) return;
+
+  const fMot = _norm(document.getElementById('histMotorista')?.value || '');
+  const fCeg = _norm(document.getElementById('histCegonha')?.value || '');
+  const fDe = document.getElementById('histDataDe')?.value || '';
+  const fAte = document.getElementById('histDataAte')?.value || '';
+
+  // Cargas concluídas = rotas com status 'concluida'
+  let rotas = (rotasGlobais||[]).filter(r => r.status === 'concluida');
+
+  // monta os dados de cada carga (rota + seus pedidos)
+  let cargas = rotas.map(r => {
+    const pedidos = (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id) === String(r.id));
+    const data = r.data_saida || (pedidos[0]?.dataSolicitacao) || null;
+    const total = pedidos.reduce((s,p)=>s+Number(p.valorFrete||0),0);
+    return {
+      id: r.id, nome: r.nome, data,
+      motorista: r.motorista_1 || pedidos[0]?.motorista1 || '—',
+      cegonha: r.placa_cegonha || '—',
+      paradas: Array.isArray(r.paradas) ? r.paradas : [],
+      pedidos, total
+    };
+  });
+
+  // filtros
+  if (fMot) cargas = cargas.filter(c => _norm(c.motorista).includes(fMot));
+  if (fCeg) cargas = cargas.filter(c => _norm(c.cegonha).includes(fCeg));
+  if (fDe) cargas = cargas.filter(c => c.data && c.data >= fDe);
+  if (fAte) cargas = cargas.filter(c => c.data && c.data <= fAte);
+
+  // ordena por data desc
+  cargas.sort((a,b) => (b.data||'').localeCompare(a.data||''));
+
+  if (cargas.length === 0){ cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhuma carga concluída no filtro.</p>'; return; }
+
+  // agrupa por motorista
+  const porMot = {};
+  cargas.forEach(c => { (porMot[c.motorista] = porMot[c.motorista] || []).push(c); });
+  const motoristas = Object.keys(porMot).sort();
+
+  cont.innerHTML = motoristas.map(mot => {
+    const lista = porMot[mot];
+    const totalMot = lista.reduce((s,c)=>s+c.total,0);
+    const totalCarros = lista.reduce((s,c)=>s+c.pedidos.length,0);
+    return `<div class="hist-motorista">
+      <div class="hist-mot-cab">
+        <strong>👤 ${mot}</strong>
+        <span class="text-muted">${lista.length} carga(s) · ${totalCarros} carro(s) · R$ ${totalMot.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+      </div>
+      ${lista.map(c => `
+        <div class="hist-carga">
+          <div class="hist-carga-cab">
+            <span>📅 ${c.data ? new Date(c.data+'T12:00').toLocaleDateString('pt-BR') : '—'}</span>
+            <span>🚛 <strong>${c.cegonha}</strong></span>
+            <span class="hist-rota">${c.paradas.length ? c.paradas.join(' → ') : (c.nome||'—')}</span>
+            <span class="text-muted">${c.pedidos.length} carro(s)</span>
+            <span class="hist-total">R$ ${c.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+          </div>
+          <table class="corr-tabela">
+            <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>CTe</th><th>Cobrança</th><th>Entrega</th></tr></thead>
+            <tbody>${c.pedidos.map(p => {
+              const cte = (typeof cteInfoDoPedido==='function') ? cteInfoDoPedido(p.id) : null;
+              const entregaTxt = p.entregaEquipeEm ? `📤 equipe${p.entregaEquipePor?' ('+p.entregaEquipePor+')':''}`
+                : (p.fluxoEntrega === 'direta' ? '✅ motorista' : (p.status==='Entregue'?'entregue':'—'));
+              const cobr = p.cobrancaStatus ? (typeof _COB_LABEL!=='undefined' ? (_COB_LABEL[p.cobrancaStatus]||p.cobrancaStatus) : p.cobrancaStatus) : 'a cobrar';
+              return `<tr class="corr-tr">
+                <td class="ct-id">#${p.id}</td>
+                <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+                <td class="ct-modelo">${p.modelo||'—'}</td>
+                <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+                <td class="ct-cli">${p.cliente||'—'}</td>
+                <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+                <td>${cte ? '🧾 '+(cte.numero||'sim') : '—'}</td>
+                <td>${cobr}</td>
+                <td>${entregaTxt}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// casca com filtros (reutilizada nos dois lugares)
+function _histCargasCasca(){
+  return `
+    <div class="hist-filtros">
+      <input type="text" id="histMotorista" class="ocup-busca" placeholder="👤 Motorista..." oninput="renderizarHistoricoCargas()">
+      <input type="text" id="histCegonha" class="ocup-busca" placeholder="🚛 Cegonha..." oninput="renderizarHistoricoCargas()">
+      <label class="hist-data">De <input type="date" id="histDataDe" onchange="renderizarHistoricoCargas()"></label>
+      <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
+    </div>
+    <div id="historicoCargasWrap"></div>`;
 }
