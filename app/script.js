@@ -463,6 +463,17 @@ function adicionarVeiculoExtra() {
                 <input type="text" class="veiculo-extra-placa" placeholder="Ex: XYZ9876" maxlength="8" style="text-transform:uppercase">
             </div>
             <div class="form-group" style="max-width:180px">
+                <label>Categoria *</label>
+                <select class="veiculo-extra-categoria">
+                    <option value="">Selecione...</option>
+                    <option value="hatch">Hatch</option>
+                    <option value="sedan">Sedan</option>
+                    <option value="suv">SUV</option>
+                    <option value="caminhonete">Caminhonete</option>
+                    <option value="moto">Moto</option>
+                </select>
+            </div>
+            <div class="form-group" style="max-width:180px">
                 <label>Valor Frete (R$)</label>
                 <div class="input-moeda-wrap">
                     <span class="input-moeda-prefixo">R$</span>
@@ -508,11 +519,13 @@ function coletarVeiculosExtras() {
         const valorStr = linha.querySelector('.veiculo-extra-valor')?.value.trim() || '';
         const endColeta  = linha.querySelector('.veiculo-extra-end-coleta')?.value.trim() || '';
         const endEntrega = linha.querySelector('.veiculo-extra-end-entrega')?.value.trim() || '';
+        const categoria = linha.querySelector('.veiculo-extra-categoria')?.value || '';
         if (!modelo && !placa) continue; // linha vazia, ignora
         if (!modelo || !placa) return null; // linha incompleta
         veiculos.push({
             modelo,
             placa,
+            categoriaVeiculo: categoria || null,
             valorFrete: valorStr ? valorMoedaParaFloat(valorStr) : null,
             enderecoColeta: endColeta,   // vazio = herda do 1º
             enderecoEntrega: endEntrega  // vazio = herda do 1º
@@ -634,6 +647,7 @@ async function salvarPedidoComercial(event) {
                         ...dadosParaSalvar,
                         modelo: v.modelo,
                         placa: v.placa,
+                        categoria_veiculo: v.categoriaVeiculo || dadosParaSalvar.categoria_veiculo || null,
                         valor_frete: _valoresCarro[i + 1],
                         endereco_coleta:  v.enderecoColeta  || dadosParaSalvar.endereco_coleta,
                         endereco_entrega: v.enderecoEntrega || dadosParaSalvar.endereco_entrega,
@@ -7640,7 +7654,10 @@ function renderizarRotas() {
             </div>
 
             <div class="rota-meta">
-                🚛 ${r.placa_cegonha || '<span class="tag-adefinir">A DEFINIR</span>'}
+                🚛 ${r.status === 'planejada'
+                    ? `<a class="rota-cegonha-link" onclick="abrirEditarRota(${r.id})" title="Clique para escolher/trocar a cegonha e o motorista">${r.placa_cegonha || '<span class="tag-adefinir">A DEFINIR</span>'}</a>`
+                    : (r.placa_cegonha || '<span class="tag-adefinir">A DEFINIR</span>')}
+                ${r.motorista_1 ? ` · 👤 ${r.status === 'planejada' ? `<a class="rota-cegonha-link" onclick="abrirEditarRota(${r.id})" title="Clique para trocar o motorista">${r.motorista_1}</a>` : r.motorista_1}` : (r.placa_cegonha ? ' · <span class="tag-adefinir">motorista a definir</span>' : '')}
                 ${r.data_saida ? ` · 📅 ${new Date(r.data_saida + 'T12:00').toLocaleDateString('pt-BR')}` : ''}
                 ${vagas > 0 ? ` · <strong style="color:${corPct}">faltam ${vagas} carro(s)</strong>` : ' · <strong style="color:#4ade80">carreta cheia ✔</strong>'}
                 ${typeof etaRotaHTML === 'function' ? etaRotaHTML(r) : ''}
@@ -7773,7 +7790,13 @@ function _abrirModalRota(rota) {
                 <div class="form-group">
                     <label>Cegonha *</label>
                     <input type="text" id="rotaCegonhaBusca" placeholder="🔎 Buscar por placa, modelo ou transportador..." oninput="filtrarCegonhasRota()">
-                    <select id="rotaCegonha" size="5" style="margin-top:0.5rem" onchange="_rotaCegonhaSel = this.value"></select>
+                    <select id="rotaCegonha" size="5" style="margin-top:0.5rem" onchange="_rotaCegonhaSel = this.value; _rotaEditPreencheMotorista()"></select>
+                </div>
+                <div class="form-group" style="max-width:280px">
+                    <label>Motorista</label>
+                    <input type="text" id="rotaMotorista" placeholder="Motorista da viagem" list="listaMotoristasRotaEdit" value="${rota?.motorista_1 ? rota.motorista_1.replace(/"/g,'&quot;') : ''}">
+                    <datalist id="listaMotoristasRotaEdit">${(motoristasGlobais||[]).map(m => `<option value="${(m.nome||m).toString().replace(/"/g,'&quot;')}">`).join('')}</datalist>
+                    <span class="text-muted" style="font-size:.75rem">Ao escolher a cegonha, o motorista padrão dela vem aqui. Pode trocar.</span>
                 </div>
             </div>
 
@@ -7851,8 +7874,17 @@ function filtrarCegonhasRota(tipo) {
     }
     sel.innerHTML = lista.map(v => {
         const info = tipoAtual === 'terceiro' && v.transportador_nome ? ` · 🏢 ${v.transportador_nome}` : '';
-        return `<option value="${v.placa}">${v.placa} — ${v.tipo || 'Cegonha'} · ${v.capacidade || '?'} vagas${info}</option>`;
+        return `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}">${v.placa} — ${v.tipo || 'Cegonha'} · ${v.capacidade || '?'} vagas${info}${v.motorista_padrao ? ' · 👤 '+v.motorista_padrao : ''}</option>`;
     }).join('');
+}
+
+// Preenche o motorista padrão da cegonha ao escolher, na edição de rota
+function _rotaEditPreencheMotorista(){
+  const sel = document.getElementById('rotaCegonha');
+  const opt = sel?.options[sel.selectedIndex];
+  const mot = opt?.getAttribute('data-mot') || '';
+  const inp = document.getElementById('rotaMotorista');
+  if (inp && mot) inp.value = mot; // só preenche se a cegonha tem padrão (não apaga o que já tem)
 }
 
 function adicionarParadaRota() {
@@ -7918,6 +7950,8 @@ async function salvarNovaRota() {
     const dados = {
         nome: document.getElementById('rotaNome').value.trim() || null,
         placa_cegonha: (document.getElementById('rotaCegonha').value || _rotaCegonhaSel) || null,
+        motorista_1: document.getElementById('rotaMotorista')?.value.trim() || null,
+        percent_motorista_1: (document.getElementById('rotaMotorista')?.value.trim()) ? 100 : null,
         data_saida: document.getElementById('rotaData').value || null,
         corredor_id: corredorId ? parseInt(corredorId) : null,
         hora_saida_prevista: horaPrev,
@@ -10204,6 +10238,7 @@ async function desalocarPedido(pedidoId){
     motorista_1: null, percent_motorista_1: null,
     motorista_2: null, percent_motorista_2: null,
     data_prev_coleta: null, data_prev_entrega: null,
+    corredor_manual_id: null, patio_atual: null, patio_desde: null,
     status: 'Pendente'
   };
   try {
@@ -11216,10 +11251,9 @@ function mostrarViewPainel(view, btn){
 function renderizarCarteiraDemanda(){
   const cont = document.getElementById('painelViewCarteira');
   if (!cont) return;
-  // monta a casca uma vez (mantém o foco da busca)
   if (!document.getElementById('carteiraBusca')){
     cont.innerHTML = `
-      <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">📥 <strong>Caixa de entrada</strong> — pedidos que ainda <strong>não entraram em nenhum corredor</strong> nem rota. Daqui você usa ➡️ para jogar num corredor (ou 🅿️ para informar o pátio). Assim que entram num corredor, saem daqui.</p>
+      <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">📋 <strong>Acompanhamento por origem</strong> — todos os carros de cada cidade de origem. Use ➡️ para jogar num corredor. O carro <strong>não sai daqui</strong>: mostra o caminhão alocado e o status até ser entregue.</p>
       <div class="carteira-topo">
         <input type="text" id="carteiraBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, cidade, placa..." oninput="_renderCarteiraGrupos()">
         <span id="carteiraTotal" class="text-muted"></span>
@@ -11233,46 +11267,61 @@ function _renderCarteiraGrupos(){
   const alvo = document.getElementById('carteiraGrupos');
   if (!alvo) return;
   const busca = (document.getElementById('carteiraBusca')?.value || '').toLowerCase().trim();
+  // Acompanhamento: TODOS os carros ativos (não só os sem corredor), agrupados por origem
   let lista = (pedidosGlobais || []).filter(p =>
-    !(p.rotaId || p.rota_id) && !p.placaCegonha &&
-    !['Entregue','Cancelado'].includes(p.status || 'Pendente') &&
-    !_pedidoEmAlgumCorredor(p));  // inbox = o que ainda não entrou em corredor nenhum
+    !['Entregue','Cancelado'].includes(p.status || 'Pendente'));
   if (busca) lista = lista.filter(p =>
-    `${p.cliente||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} ${p.placa||''} #${p.id}`
+    `${p.cliente||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} ${p.placa||''} ${p.placaCegonha||''} #${p.id}`
       .toLowerCase().includes(busca));
 
   const total = document.getElementById('carteiraTotal');
-  if (total) total.textContent = `${lista.length} pedido(s) sem corredor`;
+  if (total) total.textContent = `${lista.length} carro(s) em andamento`;
 
-  // agrupa por origem de coleta
   const grupos = {};
   lista.forEach(p => { const k = `${p.cidadeOrigem || '—'}/${p.ufOrigem || ''}`; (grupos[k] = grupos[k] || []).push(p); });
   const chaves = Object.keys(grupos).sort((a,b) => grupos[b].length - grupos[a].length);
 
-  if (chaves.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum pedido solto — tudo já está num corredor ou rota. 👌</p>'; return; }
+  if (chaves.length === 0){ alvo.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum carro em andamento. 👌</p>'; return; }
 
   _carteiraCache = grupos;
   _carteiraChaves = chaves;
+  const podeJogar = ['logistica','admin','comercial'].includes(typeof perfilAtual!=='undefined'?perfilAtual:'');
 
   alvo.innerHTML = chaves.map((k, i) => {
     const itens = grupos[k];
     return `<div class="carteira-grupo">
-      <div class="carteira-grupo-tit">📍 ${k} <span class="carteira-badge">${itens.length} pedido(s)</span></div>
+      <div class="carteira-grupo-tit">📍 ${k} <span class="carteira-badge">${itens.length} carro(s)</span></div>
       <table class="corr-tabela">
-        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
-        <tbody>${itens.map(p => `<tr class="corr-tr">
+        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead>
+        <tbody>${itens.map(p => {
+          // Situação: mostra a cegonha quando alocado / transportando; ou o corredor direcionado
+          let sit = _statusPill(p.status);
+          if (p.placaCegonha){
+            sit += ` <span class="corredor-tag-comrota" title="Cegonha alocada">🚛 ${p.placaCegonha}</span>`;
+          } else if (p.rotaId || p.rota_id){
+            sit += ` <span class="corredor-tag-comrota">alocado</span>`;
+          } else {
+            const cor = (typeof _corredorDoPedido === 'function') ? _corredorDoPedido(p) : null;
+            if (cor){
+              const manual = p.corredorManualId ? ' 📌' : '';
+              sit += ` <span class="rd-corredor-tag" title="Direcionado para este corredor${p.corredorManualId ? ' (manual)' : ''}">➡️ ${cor.nome}${manual}</span>`;
+            }
+          }
+          const jaAlocado = p.placaCegonha || p.rotaId || p.rota_id;
+          return `<tr class="corr-tr">
           <td class="ct-id">#${p.id}</td>
-          <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+          <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${typeof selCTEDoPedido==='function'?selCTEDoPedido(p.id):''}</td>
           <td class="ct-modelo">${p.modelo||'—'}</td>
           <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
           <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
-          <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-          <td class="ct-status">${_statusPill(p.status)}</td>
+          <td class="ct-status">${sit}</td>
           <td class="ct-acoes">
-            <button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>
-            <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>
+            ${(podeJogar && !jaAlocado) ? `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>` : ''}
+            ${podeJogar ? `<button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="${p.patioAtual ? 'No pátio de ' + p.patioAtual : 'Informar pátio'}">🅿️${p.patioAtual ? ' ' + p.patioAtual.split('/')[0] : ''}</button>` : ''}
+            ${!podeJogar ? '<span class="text-muted">—</span>' : ''}
           </td>
-        </tr>`).join('')}</tbody>
+        </tr>`;
+        }).join('')}</tbody>
       </table>
     </div>`;
   }).join('');
@@ -11289,6 +11338,20 @@ function _pedidoEmAlgumCorredor(p){
     const noPatio = p.patioAtual && _posNaSeq(seq, p.patioAtual) !== -1;
     return (io !== -1 && id !== -1 && io < id) || (noPatio && id === -1);
   });
+}
+
+// Retorna o corredor (objeto) em que o pedido está: manual manda; senão o 1º que casa
+function _corredorDoPedido(p){
+  if (p.corredorManualId){
+    return (corredoresGlobais||[]).find(c => String(c.id) === String(p.corredorManualId)) || null;
+  }
+  const partida = p.patioAtual || p.cidadeOrigem;
+  return (corredoresGlobais||[]).find(c => {
+    const seq = ((c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino]).filter(Boolean);
+    const io = _posNaSeq(seq, partida), id = _posNaSeq(seq, p.cidadeDestino);
+    const noPatio = p.patioAtual && _posNaSeq(seq, p.patioAtual) !== -1;
+    return (io !== -1 && id !== -1 && io < id) || (noPatio && id === -1);
+  }) || null;
 }
 
 let _carteiraCache = {};
@@ -11600,7 +11663,8 @@ async function criarRotaDoCorredor(corredorId){
 // Jogar/tirar um pedido manualmente de um corredor
 // ============================================================
 function abrirJogarCorredor(pedidoId){
-  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('mover para um corredor')) return;
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  if (!['logistica','admin','comercial'].includes(perfil)){ alert('Você não tem permissão para mover para um corredor.'); return; }
   const corredores = (corredoresGlobais || []).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
   if (corredores.length === 0){ alert('Nenhum corredor cadastrado.'); return; }
   const opcoes = corredores.map((c,i) => `${i+1}. ${c.nome}`).join('\n');
@@ -11667,24 +11731,75 @@ async function criarRotaDoCorredorSelec(corredorId){
   if (!dados || !supabase) return;
   const ids = _checksCorredor(corredorId).filter(c => c.checked).map(c => parseInt(c.value));
   if (ids.length === 0){ alert('Selecione ao menos um carro.'); return; }
-  const aviso = ids.length > 11 ? `\n\n⚠️ Você selecionou ${ids.length} carros, acima de 11 (capacidade da cegonha). Se for guincho ou carga maior, tudo bem.` : '';
-  if (!confirm(`Criar a rota "${dados.nome}" com ${ids.length} carro(s) selecionado(s)?${aviso}`)) return;
+  // Abre modal para escolher a cegonha (motorista padrão vem junto)
+  _corridorRotaCtx = { corredorId, ids, nome: dados.nome, seq: dados.seq || [] };
+  const cegonhas = (veiculosGlobais||[]).filter(v => (v.tipo === 'cegonha' || v.categoria === 'cegonha' || (v.capacidade||0) > 1) && v.ativo !== false);
+  const old = document.getElementById('modalCriarRotaCorr'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalCriarRotaCorr';
+  div.className = 'modal-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  const aviso = ids.length > 11 ? `<p class="cont-excede" style="margin:.3rem 0">⚠️ ${ids.length} carros (acima de 11). Se for guincho/carga maior, tudo bem.</p>` : '';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">🛣️ Criar rota — ${dados.nome}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} carro(s) selecionado(s). Escolha a cegonha — o motorista padrão dela já vem junto (pode trocar).</p>
+      ${aviso}
+      <div class="form-group">
+        <label>Cegonha / Guincho</label>
+        <select id="rotaCorrCegonha" onchange="_rotaCorrPreencheMotorista()">
+          <option value="">— sem cegonha por enquanto —</option>
+          ${cegonhas.map(v => `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}">${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Motorista</label>
+        <input type="text" id="rotaCorrMotorista" placeholder="Motorista da viagem" list="listaMotoristasRotaCorr">
+        <datalist id="listaMotoristasRotaCorr">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="_confirmarCriarRotaCorr()">✅ Criar rota</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalCriarRotaCorr').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+let _corridorRotaCtx = null;
+function _rotaCorrPreencheMotorista(){
+  const sel = document.getElementById('rotaCorrCegonha');
+  const opt = sel?.options[sel.selectedIndex];
+  const mot = opt?.getAttribute('data-mot') || '';
+  const inp = document.getElementById('rotaCorrMotorista');
+  if (inp) inp.value = mot;  // motorista padrão da cegonha
+}
+
+async function _confirmarCriarRotaCorr(){
+  const ctx = _corridorRotaCtx;
+  if (!ctx || !supabase) return;
+  const cegonha = document.getElementById('rotaCorrCegonha')?.value || null;
+  const motorista = document.getElementById('rotaCorrMotorista')?.value.trim() || null;
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
     const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
-      nome: dados.nome, corredor_id: parseInt(corredorId) || null,
-      paradas: dados.seq || [], status: 'planejada', criado_por: usuario
+      nome: ctx.nome, corredor_id: parseInt(ctx.corredorId) || null,
+      paradas: ctx.seq, status: 'planejada', criado_por: usuario,
+      placa_cegonha: cegonha, motorista_1: motorista, percent_motorista_1: motorista ? 100 : null
     }).select();
     if (e1) throw e1;
     const rotaId = nova && nova[0] && nova[0].id;
     if (!rotaId) throw new Error('Falha ao criar a rota.');
-    const { error: e2 } = await supabase.from('pedidos').update({ rota_id: rotaId }).in('id', ids);
+    // vincula pedidos; se tem cegonha, já entra como Intenção Agendada com a cegonha/motorista
+    const upd = { rota_id: rotaId };
+    if (cegonha){ upd.placa_cegonha = cegonha; upd.status = 'Intenção Agendada'; if (motorista) upd.motorista_1 = motorista; }
+    const { error: e2 } = await supabase.from('pedidos').update(upd).in('id', ctx.ids);
     if (e2) throw e2;
+    document.getElementById('modalCriarRotaCorr')?.remove();
     await recarregarPedidos();
     if (typeof renderizarRotas === 'function') renderizarRotas();
     if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
-      `✅ Rota "${dados.nome}" criada com ${ids.length} carro(s). Defina a cegonha/guincho na Gestão Logística.`, 'success');
+      `✅ Rota "${ctx.nome}" criada com ${ctx.ids.length} carro(s)${cegonha ? ' na cegonha '+cegonha+(motorista?' · '+motorista:'') : ''}.`, 'success');
   } catch(e){ alert('Erro ao criar rota: ' + (e.message || e)); }
 }
 
