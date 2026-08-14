@@ -12628,16 +12628,28 @@ function _veiculosNaRota(rotaId){
   return (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id) === String(rotaId) && p.status !== 'Cancelado');
 }
 
-function _cardCarrosHTML(pedidos, corTxt, corBorda, limite){
-  const mostra = pedidos.slice(0, limite || 3);
+let _kanbanExpandido = new Set();
+function _toggleKanbanCard(chave){
+  if (_kanbanExpandido.has(chave)) _kanbanExpandido.delete(chave); else _kanbanExpandido.add(chave);
+  renderizarKanbanDemanda();
+}
+
+function _cardCarrosHTML(pedidos, corTxt, corBorda, chave){
+  const expandido = chave && _kanbanExpandido.has(chave);
+  const limite = 3;
+  const mostra = expandido ? pedidos : pedidos.slice(0, limite);
   const resto = pedidos.length - mostra.length;
   const cor = corTxt || 'var(--text-primary)';
   const sec = corTxt || 'var(--text-secondary)';
-  return mostra.map(p => `
+  let html = mostra.map(p => `
     <div style="border-left:2px solid ${corBorda||'var(--border-strong)'};padding:2px 0 2px 8px;margin-bottom:6px">
       <div style="font-size:12px;font-weight:600;color:${cor}">${p.modelo||'—'} · <span style="font-family:monospace">${p.placa||''}</span></div>
       <div style="font-size:11px;color:${sec};opacity:.85">${p.cliente||'—'}</div>
-    </div>`).join('') + (resto > 0 ? `<div style="font-size:11px;color:var(--accent,#ff6a00);margin-top:2px">+ ${resto} veículo(s)</div>` : '');
+    </div>`).join('');
+  if (chave && (resto > 0 || expandido)){
+    html += `<div onclick="_toggleKanbanCard('${chave}')" style="font-size:11px;color:var(--accent,#ff6a00);margin-top:2px;cursor:pointer;user-select:none">${expandido ? '− recolher' : '+ '+resto+' veículo(s)'}</div>`;
+  }
+  return html;
 }
 
 function renderizarKanbanDemanda(){
@@ -12690,7 +12702,7 @@ function renderizarKanbanDemanda(){
         <span style="font-size:14px;font-weight:600">${c.nome}</span>
         <span style="font-size:11px;color:var(--text-secondary,#9ca3af)">${c.pedidos.length} veíc</span>
       </div>
-      ${_cardCarrosHTML(c.pedidos)}
+      ${_cardCarrosHTML(c.pedidos, null, null, 'corr_'+c.nome.replace(/[^a-zA-Z0-9]/g,''))}
     </div>`).join('');
 
   const cardRota = (d, bg, bd, tx) => `
@@ -12699,7 +12711,7 @@ function renderizarKanbanDemanda(){
         <span style="font-size:14px;font-weight:600;color:${tx}">${d.nome}</span>
         <span style="font-size:11px;font-weight:600;color:${tx}">${d.veic.length}/${d.cap}${d.vagas>0?' · restam '+d.vagas:''}</span>
       </div>
-      ${_cardCarrosHTML(d.veic, tx, tx)}
+      ${_cardCarrosHTML(d.veic, tx, tx, 'rota_'+d.rota.id)}
       ${d.rota.motorista_1 || d.rota.data_saida ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid ${bd};font-size:11px;color:${tx};display:flex;flex-direction:column;gap:3px">
         ${d.rota.data_saida ? `<span>🕒 Saída ${new Date(d.rota.data_saida+'T12:00').toLocaleDateString('pt-BR')}${d.rota.hora_saida_prevista?' · '+d.rota.hora_saida_prevista:''}</span>` : ''}
         ${d.rota.motorista_1 ? `<span>👤 ${d.rota.motorista_1} · 🚛 ${d.rota.placa_cegonha}</span>` : ''}
