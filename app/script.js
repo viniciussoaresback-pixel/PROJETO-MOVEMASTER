@@ -621,6 +621,7 @@ async function salvarPedidoComercial(event) {
                 tipo_entrega: document.getElementById('tipoEntregaPedido')?.value || 'patio',
                 origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
                 criado_por_nome: (document.getElementById('usuarioLogado')?.textContent || null),
+                corredor_manual_id: (parseInt(document.getElementById('pedidoCorredor')?.value) || null),
                 status: 'Pendente'
             };
 
@@ -12524,18 +12525,21 @@ function renderizarHistoricoCargas(containerId){
     return `<div class="hist-motorista">
       <div class="hist-mot-cab">
         <strong>👤 ${mot}</strong>
-        <span class="text-muted">${lista.length} carga(s) · ${totalCarros} carro(s) · R$ ${totalMot.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+        <span class="text-muted">${lista.length} viagem(ns) · ${totalCarros} carro(s) · R$ ${totalMot.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
       </div>
-      ${lista.map(c => `
+      ${lista.map(c => {
+        const aberto = _histViagensAbertas.has(String(c.id));
+        return `
         <div class="hist-carga">
-          <div class="hist-carga-cab">
+          <div class="hist-carga-cab hist-carga-toggle" onclick="_toggleHistViagem('${c.id}')">
+            <span class="hist-chevron">${aberto ? '▾' : '▸'}</span>
             <span>📅 ${c.data ? new Date(c.data+'T12:00').toLocaleDateString('pt-BR') : '—'}</span>
             <span>🚛 <strong>${c.cegonha}</strong></span>
             <span class="hist-rota">${c.paradas.length ? c.paradas.join(' → ') : (c.nome||'—')}</span>
             <span class="text-muted">${c.pedidos.length} carro(s)</span>
             <span class="hist-total">R$ ${c.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
           </div>
-          <table class="corr-tabela">
+          ${aberto ? `<table class="corr-tabela">
             <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>CTe</th><th>Cobrança</th><th>Entrega</th></tr></thead>
             <tbody>${c.pedidos.map(p => {
               const cte = (typeof cteInfoDoPedido==='function') ? cteInfoDoPedido(p.id) : null;
@@ -12554,10 +12558,20 @@ function renderizarHistoricoCargas(containerId){
                 <td>${entregaTxt}</td>
               </tr>`;
             }).join('')}</tbody>
-          </table>
-        </div>`).join('')}
+          </table>` : ''}
+        </div>`;
+      }).join('')}
     </div>`;
   }).join('');
+}
+
+let _histViagensAbertas = new Set();
+function _toggleHistViagem(id){
+  const k = String(id);
+  if (_histViagensAbertas.has(k)) _histViagensAbertas.delete(k); else _histViagensAbertas.add(k);
+  renderizarHistoricoCargas();
+  // re-render pode ter alvo diferente (faturamento); tenta os dois
+  if (document.getElementById('historicoCargasWrap')) renderizarHistoricoCargas('historicoCargasWrap');
 }
 
 // casca com filtros (reutilizada nos dois lugares)
@@ -12570,4 +12584,26 @@ function _histCargasCasca(){
       <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
     </div>
     <div id="historicoCargasWrap"></div>`;
+}
+
+// Popula o seletor de corredor no lançamento, marcando os que combinam com origem→destino
+function _popularCorredoresPedido(){
+  const sel = document.getElementById('pedidoCorredor');
+  if (!sel) return;
+  const origVal = document.getElementById('cidadeOrigem')?.value || '';
+  const destVal = document.getElementById('cidadeDestino')?.value || '';
+  const corredores = (corredoresGlobais||[]).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
+  const combina = (c) => {
+    const seq = ((c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino]).filter(Boolean);
+    const io = _posNaSeq(seq, origVal), id = _posNaSeq(seq, destVal);
+    return io !== -1 && id !== -1 && io < id;
+  };
+  const atual = sel.value;
+  // possíveis primeiro (com ✅), depois os demais
+  const possiveis = corredores.filter(combina);
+  const outros = corredores.filter(c => !combina(c));
+  sel.innerHTML = '<option value="">— deixar o sistema encaixar automaticamente —</option>'
+    + (possiveis.length ? `<optgroup label="✅ Corredores que combinam">${possiveis.map(c=>`<option value="${c.id}">✅ ${c.nome}</option>`).join('')}</optgroup>` : '')
+    + (outros.length ? `<optgroup label="Outros corredores">${outros.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</optgroup>` : '');
+  if (atual) sel.value = atual;
 }
