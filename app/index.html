@@ -472,7 +472,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label for="cidadeOrigem">Cidade Origem *</label>
-                                    <select id="cidadeOrigem" required>
+                                    <select id="cidadeOrigem" required onchange="_popularCorredoresPedido()">
                                         <option value="">Selecione a cidade</option>
                                     </select>
                                 </div>
@@ -486,7 +486,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label for="cidadeDestino">Cidade Destino *</label>
-                                    <select id="cidadeDestino" required>
+                                    <select id="cidadeDestino" required onchange="_popularCorredoresPedido()">
                                         <option value="">Selecione a cidade</option>
                                     </select>
                                 </div>
@@ -553,6 +553,13 @@
                                 <div class="form-group">
                                     <label for="observacaoPedido">Observações</label>
                                     <textarea id="observacaoPedido" rows="1" placeholder="Informação adicional sobre este pedido..."></textarea>
+                                </div>
+                                <div class="form-group" style="flex:1 1 100%">
+                                    <label for="pedidoCorredor">🛣️ Jogar num corredor (opcional)</label>
+                                    <select id="pedidoCorredor">
+                                        <option value="">— deixar o sistema encaixar automaticamente —</option>
+                                    </select>
+                                    <span class="text-muted" style="font-size:.78rem">Os corredores que combinam com a origem → destino aparecem marcados com ✅. Deixe em branco para o encaixe automático.</span>
                                 </div>
                             </div>
                         </div>
