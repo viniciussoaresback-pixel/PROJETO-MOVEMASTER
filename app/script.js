@@ -7797,6 +7797,7 @@ function _abrirModalRota(rota) {
                     <label>Cegonha *</label>
                     <input type="text" id="rotaCegonhaBusca" placeholder="🔎 Buscar por placa, modelo ou transportador..." oninput="filtrarCegonhasRota()">
                     <select id="rotaCegonha" size="5" style="margin-top:0.5rem" onchange="_rotaCegonhaSel = this.value; _rotaEditPreencheMotorista()"></select>
+                    <div id="rotaCegonhaSelecionada" style="font-size:.82rem;color:#4ade80;margin-top:6px">${rota?.placa_cegonha ? '✅ Cegonha selecionada: <strong>'+rota.placa_cegonha+'</strong>' : ''}</div>
                 </div>
                 <div class="form-group" style="max-width:280px">
                     <label>Motorista</label>
@@ -7889,8 +7890,15 @@ function _rotaEditPreencheMotorista(){
   const sel = document.getElementById('rotaCegonha');
   const opt = sel?.options[sel.selectedIndex];
   const mot = opt?.getAttribute('data-mot') || '';
+  const placa = sel?.value || '';
   const inp = document.getElementById('rotaMotorista');
-  if (inp && mot) inp.value = mot; // só preenche se a cegonha tem padrão (não apaga o que já tem)
+  if (inp && mot) inp.value = mot; // motorista padrão da cegonha
+  // Reflete a placa escolhida no campo de busca (confirma a seleção sem depender do destaque)
+  const busca = document.getElementById('rotaCegonhaBusca');
+  if (busca && placa) busca.value = placa;
+  // Selo de confirmação
+  let selo = document.getElementById('rotaCegonhaSelecionada');
+  if (selo && placa) selo.innerHTML = `✅ Cegonha selecionada: <strong>${placa}</strong>`;
 }
 
 function adicionarParadaRota() {
@@ -12750,17 +12758,28 @@ function renderizarVagasPorRota(){
   if (!cont) return;
   const busca = _norm(document.getElementById('vagasBusca')?.value || '');
 
-  // rotas ativas com cegonha (capacidade existe)
+  // ===== Seção 1: AGUARDANDO CAMINHÃO — demanda por corredor, sem cegonha ainda =====
+  const corredores = (corredoresGlobais||[]).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
+  let demanda = corredores.map(c => {
+    const paradasStr = (c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino];
+    const pedidos = (pedidosGlobais||[]).filter(p => {
+      if (['Entregue','Cancelado'].includes(p.status||'Pendente')) return false;
+      if (p.placaCegonha || p.rotaId || p.rota_id) return false;
+      if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
+      const partida = p.patioAtual || p.cidadeOrigem;
+      const io = _posNaSeq(paradasStr, partida), id = _posNaSeq(paradasStr, p.cidadeDestino);
+      const noPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1;
+      return (io !== -1 && id !== -1 && io < id) || (noPatio && id === -1);
+    });
+    return { nome: c.nome, pedidos };
+  }).filter(c => c.pedidos.length > 0);
+  if (busca) demanda = demanda.filter(c => _norm(c.nome).includes(busca));
+  demanda.sort((a,b) => b.pedidos.length - a.pedidos.length);
+
+  // ===== Seção 2: rotas com cegonha (vagas) =====
   let rotas = (rotasGlobais||[]).filter(r =>
     r.status !== 'cancelada' && r.status !== 'concluida' && r.placa_cegonha);
   if (busca) rotas = rotas.filter(r => _norm(`${r.nome||''} ${r.placa_cegonha||''} ${r.motorista_1||''}`).includes(busca));
-
-  if (rotas.length === 0){
-    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhuma rota com cegonha no momento. Assim que a logística montar uma carga, ela aparece aqui com as vagas disponíveis.</p>';
-    return;
-  }
-
-  // ordena: mais vagas primeiro (onde dá pra vender)
   const dados = rotas.map(r => {
     const cap = _capacidadeRota(r);
     const veic = _veiculosNaRota(r.id);
@@ -12768,43 +12787,86 @@ function renderizarVagasPorRota(){
     return { r, cap, ocup: veic.length, vagas, encaixam: _pedidosQueEncaixamNaRota(r) };
   }).sort((a,b) => b.vagas - a.vagas);
 
-  cont.innerHTML = dados.map(d => {
-    const r = d.r;
-    let cor, corTxt, rotulo;
-    if (d.vagas <= 0){ cor = '#f87171'; rotulo = 'Lotada'; }
-    else if (d.vagas <= _KANBAN_CORTE_AMARELO){ cor = '#fbbf24'; rotulo = d.vagas + (d.vagas===1?' vaga':' vagas'); }
-    else { cor = '#4ade80'; rotulo = d.vagas + ' vagas'; }
-    const programada = r.motorista_1 && r.data_saida;
-    const aberto = _vagasRotaAberta.has(String(r.id));
-    return `<div style="background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.1));border-left:3px solid ${cor};border-radius:12px;padding:14px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="min-width:0">
-          <div style="font-size:15px;font-weight:600">${r.nome||'—'}</div>
-          <div style="font-size:12px;color:var(--text-secondary,#9ca3af);margin-top:3px">
-            🚛 ${r.placa_cegonha}${r.motorista_1?' · 👤 '+r.motorista_1:''}${r.data_saida?' · 🕒 '+new Date(r.data_saida+'T12:00').toLocaleDateString('pt-BR')+(r.hora_saida_prevista?' '+r.hora_saida_prevista:''):''}
+  let html = '';
+
+  // Bloco: aguardando caminhão
+  html += `<h3 style="font-size:.9rem;color:var(--text-secondary,#9ca3af);margin:.2rem 0 .8rem;text-transform:uppercase;letter-spacing:.4px">🕗 Aguardando caminhão <span class="text-muted" style="text-transform:none">(demanda represada por corredor)</span></h3>`;
+  if (demanda.length === 0){
+    html += '<p class="text-muted" style="padding:.3rem 0 1rem">Nenhuma demanda solta — tudo já está em rota. 👌</p>';
+  } else {
+    html += demanda.map(c => {
+      const chave = 'dem_'+c.nome.replace(/[^a-zA-Z0-9]/g,'');
+      const aberto = _vagasRotaAberta.has(chave);
+      return `<div style="background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.1));border-left:3px solid var(--border-strong,#666);border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="font-size:15px;font-weight:600">${c.nome}</div>
+          <div style="text-align:right">
+            <div style="font-size:18px;font-weight:700;color:var(--text-secondary,#9ca3af)">${c.pedidos.length} carro(s)</div>
+            <div style="font-size:11px;color:var(--text-secondary,#9ca3af)">sem caminhão ainda</div>
           </div>
         </div>
-        <div style="text-align:right">
-          <div style="font-size:20px;font-weight:700;color:${cor}">${rotulo}</div>
-          <div style="font-size:11px;color:var(--text-secondary,#9ca3af)">${d.ocup}/${d.cap} ocupadas</div>
+        <div style="margin-top:8px">
+          <span onclick="_toggleVagasRota('${chave}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ver carros</span>
         </div>
-      </div>
-      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        ${programada ? '<span style="font-size:11px;font-weight:600;color:#60a5fa;background:rgba(96,165,250,.14);padding:2px 8px;border-radius:6px">Em planejamento</span>' : (d.vagas<=0 ? '<span style="font-size:11px;color:var(--text-secondary,#9ca3af)">aguardando programação</span>' : '')}
-        ${d.encaixam.length > 0 ? `<span onclick="_toggleVagasRota('${r.id}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ${d.encaixam.length} pedido(s) que encaixam</span>` : '<span style="font-size:12px;color:var(--text-secondary,#9ca3af)">sem pedidos soltos que encaixam</span>'}
-      </div>
-      ${aberto && d.encaixam.length ? `<table class="corr-tabela" style="margin-top:10px">
-        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
-        <tbody>${d.encaixam.map(p => `<tr class="corr-tr">
-          <td class="ct-id">#${p.id}</td>
-          <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
-          <td class="ct-modelo">${p.modelo||'—'}</td>
-          <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-          <td class="ct-cli">${p.cliente||'—'}</td>
-        </tr>`).join('')}</tbody>
-      </table>` : ''}
-    </div>`;
-  }).join('');
+        ${aberto ? `<table class="corr-tabela" style="margin-top:10px">
+          <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
+          <tbody>${c.pedidos.map(p => `<tr class="corr-tr">
+            <td class="ct-id">#${p.id}</td>
+            <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+            <td class="ct-modelo">${p.modelo||'—'}</td>
+            <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+            <td class="ct-cli">${p.cliente||'—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // Bloco: com vaga para vender
+  html += `<h3 style="font-size:.9rem;color:var(--text-secondary,#9ca3af);margin:1.4rem 0 .8rem;text-transform:uppercase;letter-spacing:.4px">🚛 Rotas com caminhão <span class="text-muted" style="text-transform:none">(vagas para vender)</span></h3>`;
+  if (dados.length === 0){
+    html += '<p class="text-muted" style="padding:.3rem 0">Nenhuma rota com cegonha no momento.</p>';
+  } else {
+    html += dados.map(d => {
+      const r = d.r;
+      let cor, rotulo;
+      if (d.vagas <= 0){ cor = '#f87171'; rotulo = 'Lotada'; }
+      else if (d.vagas <= _KANBAN_CORTE_AMARELO){ cor = '#fbbf24'; rotulo = d.vagas + (d.vagas===1?' vaga':' vagas'); }
+      else { cor = '#4ade80'; rotulo = d.vagas + ' vagas'; }
+      const programada = r.motorista_1 && r.data_saida;
+      const aberto = _vagasRotaAberta.has(String(r.id));
+      return `<div style="background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.1));border-left:3px solid ${cor};border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:600">${r.nome||'—'}</div>
+            <div style="font-size:12px;color:var(--text-secondary,#9ca3af);margin-top:3px">
+              🚛 ${r.placa_cegonha}${r.motorista_1?' · 👤 '+r.motorista_1:''}${r.data_saida?' · 🕒 '+new Date(r.data_saida+'T12:00').toLocaleDateString('pt-BR')+(r.hora_saida_prevista?' '+r.hora_saida_prevista:''):''}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:20px;font-weight:700;color:${cor}">${rotulo}</div>
+            <div style="font-size:11px;color:var(--text-secondary,#9ca3af)">${d.ocup}/${d.cap} ocupadas</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          ${programada ? '<span style="font-size:11px;font-weight:600;color:#60a5fa;background:rgba(96,165,250,.14);padding:2px 8px;border-radius:6px">Em planejamento</span>' : (d.vagas<=0 ? '<span style="font-size:11px;color:var(--text-secondary,#9ca3af)">aguardando programação</span>' : '')}
+          ${d.encaixam.length > 0 ? `<span onclick="_toggleVagasRota('${r.id}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ${d.encaixam.length} pedido(s) que encaixam</span>` : '<span style="font-size:12px;color:var(--text-secondary,#9ca3af)">sem pedidos soltos que encaixam</span>'}
+        </div>
+        ${aberto && d.encaixam.length ? `<table class="corr-tabela" style="margin-top:10px">
+          <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
+          <tbody>${d.encaixam.map(p => `<tr class="corr-tr">
+            <td class="ct-id">#${p.id}</td>
+            <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+            <td class="ct-modelo">${p.modelo||'—'}</td>
+            <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+            <td class="ct-cli">${p.cliente||'—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  cont.innerHTML = html;
 }
 function _toggleVagasRota(id){
   const k = String(id);
