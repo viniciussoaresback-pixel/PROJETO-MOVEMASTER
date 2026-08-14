@@ -11266,25 +11266,22 @@ async function criarRotaDaSugestao(idx){
 // ============================================================
 function mostrarViewPainel(view, btn){
   const painel = document.getElementById('painel');
-  const carteira = document.getElementById('painelViewCarteira');
   const corredores = document.getElementById('painelViewCorredores');
   const avancar = document.getElementById('painelViewAvancar');
   const historico = document.getElementById('painelViewHistorico');
-  const demanda = document.getElementById('painelViewDemanda');
+  const vagas = document.getElementById('painelViewVagas');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'carteira' || view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'demanda');
+  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
-  if (carteira) carteira.style.display = (view === 'carteira') ? '' : 'none';
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
   if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
   if (historico) historico.style.display = (view === 'historico') ? '' : 'none';
-  if (demanda) demanda.style.display = (view === 'demanda') ? '' : 'none';
-  if (view === 'carteira') renderizarCarteiraDemanda();
+  if (vagas) vagas.style.display = (view === 'vagas') ? '' : 'none';
   if (view === 'corredores') renderizarPainelCorredores();
   if (view === 'avancar') renderizarAvancarPedidos();
   if (view === 'historico'){ historico.innerHTML = _histCargasCasca(); renderizarHistoricoCargas(); }
-  if (view === 'demanda'){ demanda.innerHTML = '<div id="kanbanDemandaWrap"></div>'; renderizarKanbanDemanda(); }
+  if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="renderizarVagasPorRota()"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
 }
@@ -12726,4 +12723,91 @@ function renderizarKanbanDemanda(){
     ${coluna('Fechados','✅','#4ade80', col3.map(d=>cardRota(d,'rgba(74,222,128,.12)','rgba(74,222,128,.4)','#3aa563')).join(''), 'Nenhuma carga fechada.')}
     ${coluna('Programados','📅','#60a5fa', col4.map(d=>cardRota(d,'rgba(96,165,250,.12)','rgba(96,165,250,.4)','#4084d4')).join(''), 'Nada programado ainda.')}
   </div>`;
+}
+
+
+// ============================================================
+// VAGAS POR ROTA — onde o comercial vê onde vender
+// Uma linha por rota da logística: vagas livres + programação + pedidos que encaixam
+// ============================================================
+let _vagasRotaAberta = new Set();
+
+function _pedidosQueEncaixamNaRota(r){
+  // pedidos ainda não roteirizados cujo origem→destino casa com as paradas da rota
+  const seq = (Array.isArray(r.paradas) && r.paradas.length >= 2) ? r.paradas : [];
+  if (seq.length < 2) return [];
+  return (pedidosGlobais||[]).filter(p => {
+    if (['Entregue','Cancelado'].includes(p.status||'Pendente')) return false;
+    if (p.placaCegonha || p.rotaId || p.rota_id) return false;
+    const partida = p.patioAtual || p.cidadeOrigem;
+    const io = _posNaSeq(seq, partida), id = _posNaSeq(seq, p.cidadeDestino);
+    return io !== -1 && id !== -1 && io < id;
+  });
+}
+
+function renderizarVagasPorRota(){
+  const cont = document.getElementById('vagasPorRotaWrap');
+  if (!cont) return;
+  const busca = _norm(document.getElementById('vagasBusca')?.value || '');
+
+  // rotas ativas com cegonha (capacidade existe)
+  let rotas = (rotasGlobais||[]).filter(r =>
+    r.status !== 'cancelada' && r.status !== 'concluida' && r.placa_cegonha);
+  if (busca) rotas = rotas.filter(r => _norm(`${r.nome||''} ${r.placa_cegonha||''} ${r.motorista_1||''}`).includes(busca));
+
+  if (rotas.length === 0){
+    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhuma rota com cegonha no momento. Assim que a logística montar uma carga, ela aparece aqui com as vagas disponíveis.</p>';
+    return;
+  }
+
+  // ordena: mais vagas primeiro (onde dá pra vender)
+  const dados = rotas.map(r => {
+    const cap = _capacidadeRota(r);
+    const veic = _veiculosNaRota(r.id);
+    const vagas = cap - veic.length;
+    return { r, cap, ocup: veic.length, vagas, encaixam: _pedidosQueEncaixamNaRota(r) };
+  }).sort((a,b) => b.vagas - a.vagas);
+
+  cont.innerHTML = dados.map(d => {
+    const r = d.r;
+    let cor, corTxt, rotulo;
+    if (d.vagas <= 0){ cor = '#f87171'; rotulo = 'Lotada'; }
+    else if (d.vagas <= _KANBAN_CORTE_AMARELO){ cor = '#fbbf24'; rotulo = d.vagas + (d.vagas===1?' vaga':' vagas'); }
+    else { cor = '#4ade80'; rotulo = d.vagas + ' vagas'; }
+    const programada = r.motorista_1 && r.data_saida;
+    const aberto = _vagasRotaAberta.has(String(r.id));
+    return `<div style="background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.1));border-left:3px solid ${cor};border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:15px;font-weight:600">${r.nome||'—'}</div>
+          <div style="font-size:12px;color:var(--text-secondary,#9ca3af);margin-top:3px">
+            🚛 ${r.placa_cegonha}${r.motorista_1?' · 👤 '+r.motorista_1:''}${r.data_saida?' · 🕒 '+new Date(r.data_saida+'T12:00').toLocaleDateString('pt-BR')+(r.hora_saida_prevista?' '+r.hora_saida_prevista:''):''}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:20px;font-weight:700;color:${cor}">${rotulo}</div>
+          <div style="font-size:11px;color:var(--text-secondary,#9ca3af)">${d.ocup}/${d.cap} ocupadas</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        ${programada ? '<span style="font-size:11px;font-weight:600;color:#60a5fa;background:rgba(96,165,250,.14);padding:2px 8px;border-radius:6px">Em planejamento</span>' : (d.vagas<=0 ? '<span style="font-size:11px;color:var(--text-secondary,#9ca3af)">aguardando programação</span>' : '')}
+        ${d.encaixam.length > 0 ? `<span onclick="_toggleVagasRota('${r.id}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ${d.encaixam.length} pedido(s) que encaixam</span>` : '<span style="font-size:12px;color:var(--text-secondary,#9ca3af)">sem pedidos soltos que encaixam</span>'}
+      </div>
+      ${aberto && d.encaixam.length ? `<table class="corr-tabela" style="margin-top:10px">
+        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
+        <tbody>${d.encaixam.map(p => `<tr class="corr-tr">
+          <td class="ct-id">#${p.id}</td>
+          <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+          <td class="ct-modelo">${p.modelo||'—'}</td>
+          <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+          <td class="ct-cli">${p.cliente||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>` : ''}
+    </div>`;
+  }).join('');
+}
+function _toggleVagasRota(id){
+  const k = String(id);
+  if (_vagasRotaAberta.has(k)) _vagasRotaAberta.delete(k); else _vagasRotaAberta.add(k);
+  renderizarVagasPorRota();
 }
