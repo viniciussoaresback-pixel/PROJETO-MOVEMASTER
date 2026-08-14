@@ -12,6 +12,7 @@ let paradasEmergenciaGlobais = [];
 let episPendentesGlobais = [];
 let paramReservaTimerMin = 120;
 let equipesEntregaGlobais = [];
+let tabelaPrecosGlobais = [];
 let entregasLastMileGlobais = [];
 let estadosBrasil = [];
 let cidadesPorEstado = {};
@@ -114,7 +115,7 @@ function trocarAba(event) {
         if (wrap && typeof _histCargasCasca === 'function'){ wrap.innerHTML = _histCargasCasca(); renderizarHistoricoCargas('historicoCargasWrap'); }
     }
     if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial(); }
-    if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
+    if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof renderizarTabelaPrecos === 'function') renderizarTabelaPrecos(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
     if (tabAlvo === 'equipes' && typeof renderizarEquipesPainel === 'function') renderizarEquipesPainel();
     if (tabAlvo === 'cobranca' && typeof renderizarCobranca === 'function') renderizarCobranca();
@@ -221,7 +222,7 @@ async function carregarDadosDoSupabase(opts) {
         // Rotas planejadas (tabela opcional — se não existir, segue sem quebrar)
         // Carrega TODAS as tabelas secundárias em paralelo (antes era em fila = lento)
         const [
-          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn
+          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn, resTab
         ] = await Promise.all([
           supabase.from('rotas_planejadas').select('*').order('data_saida', { ascending: true }),
           supabase.from('agendamentos_manutencao').select('*').order('data_hora', { ascending: true }),
@@ -231,7 +232,8 @@ async function carregarDadosDoSupabase(opts) {
           supabase.from('corredores').select('*').order('nome'),
           supabase.from('corredor_paradas').select('*').order('ordem'),
           supabase.from('equipes_entrega').select('*').order('nome'),
-          supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false })
+          supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false }),
+          supabase.from('tabela_precos').select('*').order('cidade_origem')
         ].map(q => q.then(r => r).catch(() => ({ data: null }))));
 
         rotasGlobais = resRotas.data || [];
@@ -244,6 +246,7 @@ async function carregarDadosDoSupabase(opts) {
           corredoresGlobais.forEach(c => { c._paradas = porCor[c.id] || []; }); }
         equipesEntregaGlobais = resEq.data || [];
         entregasLastMileGlobais = resEn.data || [];
+        tabelaPrecosGlobais = resTab.data || [];
 
         // Folgas (tabela opcional) — mantém sua própria função
         if (typeof carregarFolgas === 'function') { try { await carregarFolgas(); } catch(e){} }
@@ -12872,4 +12875,69 @@ function _toggleVagasRota(id){
   const k = String(id);
   if (_vagasRotaAberta.has(k)) _vagasRotaAberta.delete(k); else _vagasRotaAberta.add(k);
   renderizarVagasPorRota();
+}
+
+// ============================================================
+// TABELA DE PREÇOS — remuneração do motorista por trecho
+// ============================================================
+async function salvarTabelaPreco(){
+  const msg = document.getElementById('mensagemTabelaPreco');
+  const origem = document.getElementById('tpOrigem')?.value.trim();
+  const destino = document.getElementById('tpDestino')?.value.trim();
+  const ufO = (document.getElementById('tpUfOrigem')?.value.trim()||'').toUpperCase() || null;
+  const ufD = (document.getElementById('tpUfDestino')?.value.trim()||'').toUpperCase() || null;
+  const comum = valorMoedaParaFloat(document.getElementById('tpComum')?.value || '0');
+  const suv = valorMoedaParaFloat(document.getElementById('tpSuv')?.value || '0');
+  if (!origem || !destino){ msg.textContent='Informe origem e destino.'; msg.className='message show error'; return; }
+  msg.textContent='Salvando...'; msg.className='message show';
+  try {
+    const usuario = document.getElementById('usuarioLogado')?.textContent || null;
+    const { data, error } = await supabase.from('tabela_precos')
+      .insert({ cidade_origem: origem, uf_origem: ufO, cidade_destino: destino, uf_destino: ufD,
+                valor_comum: comum, valor_suv: suv, ativo: true, criado_por: usuario }).select();
+    if (error) throw error;
+    if (data && data[0]) tabelaPrecosGlobais.push(data[0]);
+    msg.textContent='Trecho salvo.'; msg.className='message show success';
+    ['tpOrigem','tpUfOrigem','tpDestino','tpUfDestino','tpComum','tpSuv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    renderizarTabelaPrecos();
+  } catch(e){
+    const dup = (e.message||'').includes('idx_tabela_precos_trecho') || (e.code==='23505');
+    msg.textContent = dup ? 'Já existe um trecho com essa origem → destino.' : ('Erro: '+(e.message||e));
+    msg.className='message show error';
+  }
+}
+
+function renderizarTabelaPrecos(){
+  const cont = document.getElementById('listaTabelaPrecos');
+  if (!cont) return;
+  const lista = (tabelaPrecosGlobais||[]).slice().sort((a,b)=>(a.cidade_origem||'').localeCompare(b.cidade_origem||''));
+  if (lista.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhum trecho cadastrado.</p>'; return; }
+  cont.innerHTML = `<table class="corr-tabela" style="margin-top:10px">
+    <thead><tr><th>Trecho</th><th>Comum</th><th>SUV/Caminhonete</th><th></th></tr></thead>
+    <tbody>${lista.map(t => `<tr class="corr-tr">
+      <td class="ct-rota"><strong>${t.cidade_origem}${t.uf_origem?'/'+t.uf_origem:''}</strong> <span class="cpl-seta">→</span> <strong>${t.cidade_destino}${t.uf_destino?'/'+t.uf_destino:''}</strong></td>
+      <td class="ct-frete">R$ ${Number(t.valor_comum||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td class="ct-frete">R$ ${Number(t.valor_suv||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td class="ct-acoes"><button class="btn btn-sm btn-secondary" onclick="excluirTabelaPreco(${t.id})">🗑️</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function excluirTabelaPreco(id){
+  if (!confirm('Excluir este trecho da tabela de preços?')) return;
+  try {
+    const { error } = await supabase.from('tabela_precos').delete().eq('id', id);
+    if (error) throw error;
+    tabelaPrecosGlobais = tabelaPrecosGlobais.filter(t => t.id !== id);
+    renderizarTabelaPrecos();
+  } catch(e){ alert('Erro ao excluir: '+(e.message||e)); }
+}
+
+// Helper: valor que o motorista recebe por um trecho (origem->destino) e categoria
+// categoria: 'suv'/'caminhonete' => faixa SUV; senão faixa comum
+function valorTabelaTrecho(cidadeOrigem, cidadeDestino, categoria){
+  const faixaSuv = ['suv','caminhonete'].includes((categoria||'').toLowerCase());
+  const t = (tabelaPrecosGlobais||[]).find(x =>
+    _cidadeIgual(x.cidade_origem, cidadeOrigem) && _cidadeIgual(x.cidade_destino, cidadeDestino));
+  if (!t) return null; // trecho não cadastrado
+  return Number(faixaSuv ? t.valor_suv : t.valor_comum) || 0;
 }
