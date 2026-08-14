@@ -774,7 +774,7 @@ function renderizarOcupacao() {
     pedidosGlobais.forEach(p => {
         const g = grupoOcupacao(p.status || 'Pendente');
         if (g === 'Cancelado') return;
-        cont.total++;
+        if (g !== 'Entregue') cont.total++; // total ATIVO: só o que ainda está em andamento
         if (cont[g] !== undefined) cont[g]++;
     });
     const setTxt = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
