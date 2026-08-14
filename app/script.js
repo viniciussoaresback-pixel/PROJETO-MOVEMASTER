@@ -11270,18 +11270,21 @@ function mostrarViewPainel(view, btn){
   const corredores = document.getElementById('painelViewCorredores');
   const avancar = document.getElementById('painelViewAvancar');
   const historico = document.getElementById('painelViewHistorico');
+  const demanda = document.getElementById('painelViewDemanda');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'carteira' || view === 'corredores' || view === 'avancar' || view === 'historico');
+  const ehExtra = (view === 'carteira' || view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'demanda');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (carteira) carteira.style.display = (view === 'carteira') ? '' : 'none';
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
   if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
   if (historico) historico.style.display = (view === 'historico') ? '' : 'none';
+  if (demanda) demanda.style.display = (view === 'demanda') ? '' : 'none';
   if (view === 'carteira') renderizarCarteiraDemanda();
   if (view === 'corredores') renderizarPainelCorredores();
   if (view === 'avancar') renderizarAvancarPedidos();
   if (view === 'historico'){ historico.innerHTML = _histCargasCasca(); renderizarHistoricoCargas(); }
+  if (view === 'demanda'){ demanda.innerHTML = '<div id="kanbanDemandaWrap"></div>'; renderizarKanbanDemanda(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
 }
@@ -12606,4 +12609,109 @@ function _popularCorredoresPedido(){
     + (possiveis.length ? `<optgroup label="✅ Corredores que combinam">${possiveis.map(c=>`<option value="${c.id}">✅ ${c.nome}</option>`).join('')}</optgroup>` : '')
     + (outros.length ? `<optgroup label="Outros corredores">${outros.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</optgroup>` : '');
   if (atual) sel.value = atual;
+}
+
+// ============================================================
+// KANBAN GESTÃO DA DEMANDA (comercial) — 4 colunas
+// Col 1: corredores (demanda, sem capacidade)
+// Col 2/3/4: rotas (capacidade = cegonha vinculada)
+// ============================================================
+const _KANBAN_CORTE_AMARELO = 4; // restam <= 4 vagas = amarelo
+
+function _capacidadeRota(r){
+  // soma a capacidade das cegonhas vinculadas (por enquanto 1 cegonha por rota)
+  if (!r.placa_cegonha) return 0;
+  const v = (veiculosGlobais||[]).find(x => x.placa === r.placa_cegonha);
+  return (v?.capacidade) || 11;
+}
+function _veiculosNaRota(rotaId){
+  return (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id) === String(rotaId) && p.status !== 'Cancelado');
+}
+
+function _cardCarrosHTML(pedidos, corTxt, corBorda, limite){
+  const mostra = pedidos.slice(0, limite || 3);
+  const resto = pedidos.length - mostra.length;
+  const cor = corTxt || 'var(--text-primary)';
+  const sec = corTxt || 'var(--text-secondary)';
+  return mostra.map(p => `
+    <div style="border-left:2px solid ${corBorda||'var(--border-strong)'};padding:2px 0 2px 8px;margin-bottom:6px">
+      <div style="font-size:12px;font-weight:600;color:${cor}">${p.modelo||'—'} · <span style="font-family:monospace">${p.placa||''}</span></div>
+      <div style="font-size:11px;color:${sec};opacity:.85">${p.cliente||'—'}</div>
+    </div>`).join('') + (resto > 0 ? `<div style="font-size:11px;color:var(--accent,#ff6a00);margin-top:2px">+ ${resto} veículo(s)</div>` : '');
+}
+
+function renderizarKanbanDemanda(){
+  const cont = document.getElementById('kanbanDemandaWrap');
+  if (!cont) return;
+
+  // ---- Coluna 1: corredores com demanda (pedidos ainda não roteirizados) ----
+  const corredores = (corredoresGlobais||[]).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
+  const col1 = corredores.map(c => {
+    const paradasStr = (c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino];
+    const pedidos = (pedidosGlobais||[]).filter(p => {
+      if (['Entregue','Cancelado'].includes(p.status||'Pendente')) return false;
+      if (p.placaCegonha || p.rotaId || p.rota_id) return false; // já virou rota
+      if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
+      const partida = p.patioAtual || p.cidadeOrigem;
+      const io = _posNaSeq(paradasStr, partida), id = _posNaSeq(paradasStr, p.cidadeDestino);
+      const noPatio = p.patioAtual && _posNaSeq(paradasStr, p.patioAtual) !== -1;
+      return (io !== -1 && id !== -1 && io < id) || (noPatio && id === -1);
+    });
+    return { nome: c.nome, pedidos };
+  }).filter(c => c.pedidos.length > 0);
+
+  // ---- Rotas com cegonha (capacidade existe) ----
+  const rotas = (rotasGlobais||[]).filter(r => r.status !== 'cancelada' && r.status !== 'concluida' && r.placa_cegonha);
+  const col2 = [], col3 = [], col4 = [];
+  rotas.forEach(r => {
+    const cap = _capacidadeRota(r);
+    const veic = _veiculosNaRota(r.id);
+    const vagas = cap - veic.length;
+    const programada = r.placa_cegonha && r.motorista_1 && r.data_saida;
+    const dados = { nome: r.nome, rota: r, cap, veic, vagas };
+    if (programada) col4.push(dados);
+    else if (vagas <= 0) col3.push(dados);
+    else if (vagas <= _KANBAN_CORTE_AMARELO) col2.push(dados);
+    // rotas com muitas vagas e sem programação não aparecem (ainda são "demanda aberta")
+  });
+
+  const coluna = (titulo, icone, cor, conteudo, vazio) => `
+    <div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+        <span style="color:${cor}">${icone}</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text-secondary,#9ca3af)">${titulo}</span>
+      </div>
+      ${conteudo || `<p class="text-muted" style="font-size:12px;padding:.5rem 0">${vazio}</p>`}
+    </div>`;
+
+  const c1 = col1.map(c => `
+    <div style="background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.1));border-radius:12px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:600">${c.nome}</span>
+        <span style="font-size:11px;color:var(--text-secondary,#9ca3af)">${c.pedidos.length} veíc</span>
+      </div>
+      ${_cardCarrosHTML(c.pedidos)}
+    </div>`).join('');
+
+  const cardRota = (d, bg, bd, tx) => `
+    <div style="background:${bg};border:1px solid ${bd};border-radius:12px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:600;color:${tx}">${d.nome}</span>
+        <span style="font-size:11px;font-weight:600;color:${tx}">${d.veic.length}/${d.cap}${d.vagas>0?' · restam '+d.vagas:''}</span>
+      </div>
+      ${_cardCarrosHTML(d.veic, tx, tx)}
+      ${d.rota.motorista_1 || d.rota.data_saida ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid ${bd};font-size:11px;color:${tx};display:flex;flex-direction:column;gap:3px">
+        ${d.rota.data_saida ? `<span>🕒 Saída ${new Date(d.rota.data_saida+'T12:00').toLocaleDateString('pt-BR')}${d.rota.hora_saida_prevista?' · '+d.rota.hora_saida_prevista:''}</span>` : ''}
+        ${d.rota.motorista_1 ? `<span>👤 ${d.rota.motorista_1} · 🚛 ${d.rota.placa_cegonha}</span>` : ''}
+      </div>` : ''}
+      ${d.vagas<=0 && !(d.rota.motorista_1&&d.rota.data_saida) ? `<div style="margin-top:6px;font-size:11px;font-weight:600;color:${tx}">Carga fechada · aguardando programação</div>` : ''}
+      ${(d.rota.motorista_1&&d.rota.data_saida) ? `<div style="margin-top:8px"><span style="font-size:11px;font-weight:600;color:${tx};background:var(--surface-2,#fff);padding:2px 8px;border-radius:6px">Em planejamento</span></div>` : ''}
+    </div>`;
+
+  cont.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:start">
+    ${coluna('Corredores disponíveis','🛣️','var(--text-secondary)', c1, 'Sem demanda aberta.')}
+    ${coluna('Próximos de fechar','⚠️','#fbbf24', col2.map(d=>cardRota(d,'rgba(251,191,36,.12)','rgba(251,191,36,.4)','#d99e18')).join(''), 'Nenhuma rota quase cheia.')}
+    ${coluna('Fechados','✅','#4ade80', col3.map(d=>cardRota(d,'rgba(74,222,128,.12)','rgba(74,222,128,.4)','#3aa563')).join(''), 'Nenhuma carga fechada.')}
+    ${coluna('Programados','📅','#60a5fa', col4.map(d=>cardRota(d,'rgba(96,165,250,.12)','rgba(96,165,250,.4)','#4084d4')).join(''), 'Nada programado ainda.')}
+  </div>`;
 }
