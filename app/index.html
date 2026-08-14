@@ -1529,8 +1529,32 @@
                     <div id="listaEquipes"><p class="text-muted">Nenhuma equipe carregada.</p></div>
                 </div>
 
-                <div class="card" id="cardCadastroClientes">
-                    <h2>Cadastro de Clientes</h2>
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>💵 Tabela de Preços (remuneração do motorista por trecho)</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarTabelaPrecos()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Valor que o <strong>motorista recebe por trecho</strong> (entre duas cidades). Viagens longas somam os trechos. Duas faixas: comum (hatch/sedan/passeio) e SUV/caminhonete.</p>
+                    <div class="epi-motorista-form">
+                        <div class="manut-toolbar-campo"><label for="tpOrigem">Cidade origem</label>
+                            <input type="text" id="tpOrigem" placeholder="Ex.: Curitiba"></div>
+                        <div class="manut-toolbar-campo" style="max-width:80px"><label for="tpUfOrigem">UF</label>
+                            <input type="text" id="tpUfOrigem" placeholder="PR" maxlength="2" style="text-transform:uppercase"></div>
+                        <div class="manut-toolbar-campo"><label for="tpDestino">Cidade destino</label>
+                            <input type="text" id="tpDestino" placeholder="Ex.: Cascavel"></div>
+                        <div class="manut-toolbar-campo" style="max-width:80px"><label for="tpUfDestino">UF</label>
+                            <input type="text" id="tpUfDestino" placeholder="PR" maxlength="2" style="text-transform:uppercase"></div>
+                        <div class="manut-toolbar-campo" style="max-width:150px"><label for="tpComum">Comum (R$)</label>
+                            <input type="text" id="tpComum" placeholder="750,00"></div>
+                        <div class="manut-toolbar-campo" style="max-width:150px"><label for="tpSuv">SUV/Caminhonete (R$)</label>
+                            <input type="text" id="tpSuv" placeholder="800,00"></div>
+                    </div>
+                    <div id="mensagemTabelaPreco" class="message"></div>
+                    <div class="manut-acoes">
+                        <button type="button" class="btn btn-primary" onclick="salvarTabelaPreco()">💵 Salvar trecho</button>
+                    </div>
+                    <div id="listaTabelaPrecos"><p class="text-muted">Nenhum trecho cadastrado.</p></div>
+                </div>
                     <form id="formCadastroCliente" class="form">
 
                         <!-- Tipo e Nome -->
