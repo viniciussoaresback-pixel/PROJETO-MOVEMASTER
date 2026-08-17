@@ -1,0 +1,258 @@
+/* ============================================================
+   REFINAMENTO ESTETICO — ETAPA 2
+   Dashboards, tabelas, formularios e modais.
+   Usa somente tokens (--surface-*, --border*, --accent) para
+   funcionar igual no tema escuro e no tema claro.
+   Carregar DEPOIS de styles.css e de refinamento.css.
+   ============================================================ */
+
+.dash-card,
+.ocup-resumo-card,
+.perfil-acesso-card,
+.dir-bloco {
+    border-radius: 14px;
+    border: 1px solid var(--border-soft);
+    background: var(--surface-1);
+    box-shadow: 0 8px 24px -20px rgba(0, 0, 0, 0.55);
+    transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.dash-card:hover,
+.ocup-resumo-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 106, 0, 0.4);
+    box-shadow: 0 14px 30px -22px rgba(0, 0, 0, 0.6);
+}
+
+.dash-card {
+    position: relative;
+    overflow: hidden;
+    padding: 1.05rem 1.15rem;
+}
+.dash-card::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), rgba(255, 106, 0, 0));
+    opacity: .6;
+}
+
+.dash-valor,
+.ocup-resumo-num {
+    font-family: 'Oswald', 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: clamp(1.6rem, 2.4vw, 2.05rem);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-label,
+.ocup-resumo-label {
+    font-size: .72rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    opacity: .8;
+}
+
+.dash-info { font-size: .78rem; opacity: .7; }
+
+.dir-bloco-titulo,
+.form-secao-titulo {
+    font-family: 'Oswald', 'Inter', sans-serif;
+    font-weight: 500;
+    letter-spacing: .03em;
+    text-transform: none;
+    font-size: 1.02rem;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+}
+
+.painel-header-bar {
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: .7rem;
+    margin-bottom: 1rem;
+    gap: .75rem;
+}
+
+.table-container,
+.tabela-scroll,
+.ocup-tabela {
+    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+    overflow: auto;
+    background: var(--surface-1);
+}
+
+.table-container table,
+.tabela-scroll table,
+.ocup-tabela table,
+table.table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    font-size: .86rem;
+}
+
+.table-container thead th,
+.tabela-scroll thead th,
+.ocup-tabela thead th,
+table.table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface-2);
+    font-family: 'Oswald', 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: .72rem;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: .6rem .75rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.table-container tbody td,
+.tabela-scroll tbody td,
+.ocup-tabela tbody td,
+table.table tbody td {
+    padding: .58rem .75rem;
+    border-bottom: 1px solid var(--border-soft);
+    font-variant-numeric: tabular-nums;
+}
+
+.table-container tbody tr:hover,
+.tabela-scroll tbody tr:hover,
+.ocup-tabela tbody tr:hover,
+table.table tbody tr:hover {
+    background: var(--accent-soft, rgba(255, 106, 0, 0.08));
+}
+
+.form-secao {
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 1rem 1.1rem 1.15rem;
+    margin-bottom: 1rem;
+    background: var(--surface-1);
+}
+
+.form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .85rem;
+}
+.form-row > .form-group { flex: 1 1 220px; min-width: 0; }
+.form-group { margin-bottom: .85rem; }
+
+.form-group > label {
+    display: block;
+    font-size: .74rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    opacity: .78;
+    margin-bottom: .32rem;
+}
+
+.form-group input:not([type="checkbox"]):not([type="radio"]),
+.form-group select,
+.form-group textarea,
+.filtro-select {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    padding: .56rem .7rem;
+    font-size: .9rem;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.form-group input:hover:not([type="checkbox"]):not([type="radio"]),
+.form-group select:hover,
+.form-group textarea:hover,
+.filtro-select:hover { border-color: var(--border-strong); }
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus,
+.filtro-select:focus {
+    outline: none;
+    border-color: rgba(255, 106, 0, 0.65);
+    box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.15);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder { opacity: .45; }
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    justify-content: flex-end;
+    padding-top: .9rem;
+    margin-top: .4rem;
+    border-top: 1px solid var(--border-soft);
+}
+
+.fg-inline { display: flex; align-items: center; gap: .45rem; }
+
+.checklist-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .65rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    margin-bottom: .45rem;
+    background: var(--surface-1);
+}
+.checklist-item:hover { border-color: rgba(255, 106, 0, 0.32); }
+
+.ocup-chip,
+.patio-qtd {
+    border-radius: 999px;
+    font-size: .74rem;
+    letter-spacing: .03em;
+    padding: .22rem .6rem;
+}
+
+.modal {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: 0 40px 90px -45px rgba(0, 0, 0, 0.8);
+    animation: rf-modal-in .18s ease-out;
+}
+
+@keyframes rf-modal-in {
+    from { opacity: 0; transform: translateY(8px) scale(.985); }
+    to { opacity: 1; transform: none; }
+}
+
+.modal-content .close {
+    opacity: .6;
+    transition: opacity .15s ease, transform .15s ease;
+}
+.modal-content .close:hover { opacity: 1; transform: rotate(90deg); }
+
+@media (max-width: 640px) {
+    .form-row { gap: .6rem; }
+    .form-secao { padding: .85rem .9rem 1rem; }
+    .dash-card { padding: .9rem 1rem; }
+    .form-actions { justify-content: stretch; }
+    .form-actions .btn { flex: 1 1 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-card, .ocup-resumo-card, .modal-content {
+        transition: none;
+        animation: none;
+        transform: none;
+    }
+}
