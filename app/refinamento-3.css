@@ -1,176 +1,361 @@
-/* ============================================================
-   ETAPA 3 — Navegação, botões, badges e responsividade
-   Camada aditiva: usa as variáveis do styles.css para manter
-   o tema escuro e o tema claro corretos.
-   ============================================================ */
-
-/* ---------- Barra de navegação (abas) ---------- */
+/* Refinamento etapas 3 e 4 - camada visual aditiva */
 .nav-tabs {
-    gap: 0.35rem;
-    padding: 0.35rem;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--text-light) 6%, transparent);
-    border: 1px solid var(--border-color);
-    align-items: center;
+gap: 0.35rem;
+padding: 0.35rem;
+border-radius: 12px;
+background: color-mix(in srgb, var(--text-light) 6%, transparent);
+border: 1px solid var(--border-color);
+align-items: center;
 }
-
 .nav-btn {
-    border: 1px solid transparent;
-    border-radius: 8px;
-    padding: 0.55rem 1rem;
-    letter-spacing: 0.04em;
-    font-size: 0.82rem;
-    color: var(--text-light);
-    position: relative;
-    transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+border: 1px solid transparent;
+border-radius: 8px;
+padding: 0.55rem 1rem;
+letter-spacing: 0.04em;
+font-size: 0.82rem;
+color: var(--text-light);
+position: relative;
+transition: background-color .18s ease, color .18s ease, border-color .18s ease;
 }
-
 .nav-btn:hover:not(.active) {
-    background-color: color-mix(in srgb, var(--orange) 12%, transparent);
-    border-color: color-mix(in srgb, var(--orange) 28%, transparent);
-    color: var(--white);
+background-color: color-mix(in srgb, var(--orange) 12%, transparent);
+border-color: color-mix(in srgb, var(--orange) 28%, transparent);
+color: var(--white);
 }
-
 .nav-btn.active {
-    box-shadow: 0 6px 18px -12px color-mix(in srgb, var(--orange) 70%, transparent);
-    border-color: var(--orange);
+box-shadow: 0 6px 18px -12px color-mix(in srgb, var(--orange) 70%, transparent);
+border-color: var(--orange);
 }
-
 .nav-btn:focus-visible,
 .btn:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--orange) 65%, transparent);
-    outline-offset: 2px;
+outline: 2px solid color-mix(in srgb, var(--orange) 65%, transparent);
+outline-offset: 2px;
 }
-
-/* Selo de contagem nas abas */
 .selo-aba {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.15rem;
-    height: 1.15rem;
-    margin-left: 0.4rem;
-    padding: 0 0.3rem;
-    border-radius: 999px;
-    font-size: 0.68rem;
-    font-weight: 700;
-    line-height: 1;
-    background: var(--danger-color, #ef4444);
-    color: #fff;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+min-width: 1.15rem;
+height: 1.15rem;
+margin-left: 0.4rem;
+padding: 0 0.3rem;
+border-radius: 999px;
+font-size: 0.68rem;
+font-weight: 700;
+line-height: 1;
+background: var(--danger-color, #ef4444);
+color: #fff;
 }
-
-/* ---------- Botões ---------- */
 .btn {
-    border-radius: 8px;
-    padding: 0.7rem 1.4rem;
-    letter-spacing: 0.05em;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    transition: background-color .18s ease, color .18s ease, border-color .18s ease,
-                transform .18s ease, box-shadow .18s ease;
+border-radius: 8px;
+padding: 0.7rem 1.4rem;
+letter-spacing: 0.05em;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 0.45rem;
+transition: background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
 }
-
 .btn:hover {
-    transform: translateY(-1px);
+transform: translateY(-1px);
 }
-
 .btn:active {
-    transform: translateY(0);
+transform: translateY(0);
 }
-
 .btn-sm {
-    border-radius: 6px;
+border-radius: 6px;
 }
-
 .btn:disabled,
 .btn[disabled] {
-    opacity: 0.45;
-    filter: saturate(0.6);
-    box-shadow: none;
+opacity: 0.45;
+filter: saturate(0.6);
+box-shadow: none;
 }
-
-/* ---------- Badges ---------- */
 .badge,
 .badge-perfil {
-    border-radius: 999px;
-    padding: 0.2rem 0.6rem;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    line-height: 1.5;
-    white-space: nowrap;
+border-radius: 999px;
+padding: 0.2rem 0.6rem;
+font-size: 0.7rem;
+font-weight: 700;
+letter-spacing: 0.06em;
+line-height: 1.5;
+white-space: nowrap;
 }
-
-/* ---------- Scrollbars discretas ---------- */
 * {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--text-light) 35%, transparent) transparent;
+scrollbar-width: thin;
+scrollbar-color: color-mix(in srgb, var(--text-light) 35%, transparent) transparent;
 }
-
 *::-webkit-scrollbar {
-    width: 9px;
-    height: 9px;
+width: 9px;
+height: 9px;
 }
-
 *::-webkit-scrollbar-track {
-    background: transparent;
+background: transparent;
 }
-
 *::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--text-light) 30%, transparent);
-    border-radius: 999px;
+background: color-mix(in srgb, var(--text-light) 30%, transparent);
+border-radius: 999px;
 }
-
 *::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in srgb, var(--orange) 55%, transparent);
+background: color-mix(in srgb, var(--orange) 55%, transparent);
 }
-
-/* ---------- Responsividade ---------- */
 @media (max-width: 900px) {
-    .nav-tabs {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        scrollbar-width: none;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .nav-tabs::-webkit-scrollbar {
-        display: none;
-    }
-
-    .nav-btn {
-        flex: 0 0 auto;
-        padding: 0.5rem 0.85rem;
-        font-size: 0.78rem;
-    }
-
-    .btn {
-        width: auto;
-        padding: 0.65rem 1.1rem;
-    }
+.nav-tabs {
+flex-wrap: nowrap;
+overflow-x: auto;
+scrollbar-width: none;
+-webkit-overflow-scrolling: touch;
 }
-
+.nav-tabs::-webkit-scrollbar {
+display: none;
+}
+.nav-btn {
+flex: 0 0 auto;
+padding: 0.5rem 0.85rem;
+font-size: 0.78rem;
+}
+.btn {
+width: auto;
+padding: 0.65rem 1.1rem;
+}
+}
 @media (max-width: 620px) {
-    .form-row {
-        grid-template-columns: 1fr;
-    }
-
-    .dash-card {
-        padding: 0.9rem;
-    }
+.form-row {
+grid-template-columns: 1fr;
 }
-
-/* ---------- Movimento reduzido ---------- */
+.dash-card {
+padding: 0.9rem;
+}
+}
 @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        transition-duration: 0.01ms !important;
-    }
+*,
+*::before,
+*::after {
+animation-duration: 0.01ms !important;
+transition-duration: 0.01ms !important;
+}
+}
+/* ETAPA 4: mobile, estados vazios/carregando, impressao */
+.table td.text-center:only-child,
+.table td[colspan] {
+padding: 2.4rem 1rem;
+text-align: center;
+color: var(--text-tertiary, #8b8b93);
+font-size: 0.9rem;
+letter-spacing: 0.02em;
+}
+.table td[colspan],
+.text-muted {
+transition: opacity 0.2s ease;
+}
+.table td[colspan]:not(:empty) {
+animation: mmPulse 1.6s ease-in-out infinite;
+}
+@keyframes mmPulse {
+0%, 100% { opacity: 1; }
+50% { opacity: 0.55; }
+}
+#listaAgendamentos > p.text-muted,
+#listaEmergenciasManut > p.text-muted,
+#listaTabelaPrecos > p.text-muted,
+#listaCorredores > p.text-muted,
+#listaEquipes > p.text-muted,
+#painelSolicitacoesEdicao > p.text-muted {
+display: block;
+margin: 0;
+padding: 2rem 1.25rem;
+text-align: center;
+border: 1px dashed var(--border-color, rgba(255, 255, 255, 0.12));
+border-radius: 12px;
+background: color-mix(in srgb, var(--surface-2, #16161b) 60%, transparent);
+font-size: 0.9rem;
+}
+.message:not(:empty) {
+padding: 0.8rem 1rem;
+border-radius: 10px;
+border-left: 3px solid var(--orange, #ff6a00);
+background: color-mix(in srgb, var(--orange, #ff6a00) 10%, transparent);
+font-size: 0.9rem;
+margin-bottom: 1rem;
+}
+.header-content {
+row-gap: 0.75rem;
+align-items: center;
+}
+.header-right {
+display: flex;
+align-items: center;
+gap: 0.6rem;
+flex-wrap: wrap;
+}
+.usuario-logado {
+font-size: 0.82rem;
+color: var(--text-secondary, #c9c9d1);
+max-width: 22ch;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+.badge-perfil {
+font-size: 0.68rem;
+letter-spacing: 0.08em;
+text-transform: uppercase;
+padding: 0.3rem 0.6rem;
+border-radius: 999px;
+}
+.btn-logout {
+border-radius: 999px;
+padding: 0.4rem 0.9rem;
+font-size: 0.82rem;
+}
+.card-header-row {
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+justify-content: space-between;
+gap: 0.75rem;
+margin-bottom: 1rem;
+}
+.card-header-row h2 {
+margin: 0;
+}
+@media (max-width: 1024px) {
+.main-content {
+padding-left: 1rem;
+padding-right: 1rem;
+}
+.card {
+padding: 1.25rem;
+}
+.table {
+font-size: 0.86rem;
+}
+}
+@media (max-width: 640px) {
+.header-content {
+flex-direction: column;
+align-items: flex-start;
+gap: 0.6rem;
+padding: 0.85rem 1rem;
+}
+.logo-img {
+height: 34px;
+}
+.logo-brand {
+font-size: 1.05rem;
+}
+.logo-tagline {
+font-size: 0.6rem;
+}
+.header-right {
+width: 100%;
+justify-content: space-between;
+gap: 0.5rem;
+}
+.usuario-logado {
+max-width: 14ch;
+}
+.nav-tabs {
+display: flex;
+flex-direction: row;
+width: 100%;
+overflow-x: auto;
+flex-wrap: nowrap;
+scrollbar-width: none;
+-webkit-overflow-scrolling: touch;
+}
+.nav-tabs::-webkit-scrollbar {
+display: none;
+}
+.nav-btn {
+flex: 0 0 auto;
+white-space: nowrap;
+min-height: 40px;
+}
+.main-content {
+padding: 0.9rem 0.75rem 2.5rem;
+}
+.card {
+padding: 1rem;
+border-radius: 12px;
+}
+.card-header-row {
+align-items: stretch;
+}
+.card-header-row .btn {
+width: 100%;
+}
+.form-row,
+.form-grid {
+grid-template-columns: 1fr !important;
+display: grid;
+gap: 0.75rem;
+}
+input,
+select,
+textarea,
+.btn {
+min-height: 44px;
+font-size: 0.95rem;
+}
+.table-container,
+.tabela-scroll {
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+border-radius: 10px;
+background: linear-gradient(to right, transparent 85%, color-mix(in srgb, var(--orange, #ff6a00) 8%, transparent));
+}
+.table th,
+.table td {
+white-space: nowrap;
+padding: 0.6rem 0.7rem;
+}
+.modal-content {
+width: 100%;
+max-width: 100%;
+max-height: 92vh;
+border-radius: 14px 14px 0 0;
+margin-top: auto;
+}
+.login-card {
+padding: 2rem 1.4rem;
+border-radius: 14px;
+}
+}
+@media print {
+body::before,
+body::after,
+.header,
+.nav-tabs,
+.btn,
+.btn-logout,
+.modal,
+.toast,
+.fab {
+display: none !important;
+}
+body,
+.card,
+.table {
+background: #fff !important;
+color: #111 !important;
+box-shadow: none !important;
+}
+.card {
+border: 1px solid #ddd !important;
+break-inside: avoid;
+page-break-inside: avoid;
+}
+.table th {
+background: #f2f2f2 !important;
+color: #111 !important;
+}
+.table-container,
+.tabela-scroll {
+overflow: visible !important;
+max-height: none !important;
+}
 }
