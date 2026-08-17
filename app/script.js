@@ -310,6 +310,7 @@ async function carregarDadosDoSupabase(opts) {
                 coletaEquipeEm: p.coleta_equipe_em || null,
                 coletaEquipePor: p.coleta_equipe_por || null,
                 formaColeta: p.forma_coleta || null,
+                localCarro: p.local_carro || null,
                 patioColeta: p.patio_coleta || null,
                 equipeColetaId: p.equipe_coleta_id || null,
                 obsColeta: p.obs_coleta || null,
@@ -1277,7 +1278,7 @@ function renderizarPedidosDrag() {
                     { label: 'Histórico', icone: '🕘', onclick: `abrirHistorico(${p.id})` },
                     ['Em Coleta','Em Transporte'].includes(p.status) ? { label: 'Ocorrência', icone: '⚠️', onclick: `abrirRegistrarOcorrencia(${p.id})` } : null,
                     p.status === 'Pendente' ? { label: 'Cancelar', icone: '🚫', onclick: `cancelarPedido(${p.id})`, classe: 'menu-acao-alerta' } : null,
-                    p.status === 'Pendente' ? { label: 'Excluir', icone: '🗑️', onclick: `excluirPedido(${p.id})`, classe: 'menu-acao-perigo' } : null
+                    { label: 'Excluir', icone: '🗑️', onclick: `excluirPedido(${p.id})`, classe: 'menu-acao-perigo' }
                 ])}
             </div>
         `;
@@ -4785,6 +4786,7 @@ function renderizarPedidosComercial() {
                     ${podeChecklist ? `<button class="btn btn-primary btn-sm" onclick="abrirChecklist(${p.id})">✅ Confirmar</button>` : ''}
                     <button class="btn btn-secondary btn-sm" onclick="solicitarEdicaoPedido(${p.id})" title="Solicitar edição à logística">✏️ Editar</button>
                     <button class="btn btn-secondary btn-sm" onclick="abrirHistorico(${p.id})">Histórico</button>
+                    <button class="btn btn-sm" style="background:#7f1d1d;color:#fff" onclick="excluirPedido(${p.id})" title="Excluir pedido">🗑️</button>
                     <button class="btn btn-secondary btn-sm" onclick="verFotosPlaca(${p.id},'${(p.cliente||'').replace(/'/g,"\'")}')">📸</button>
                     ${p.status === 'Entregue' ? `<button class="btn btn-secondary btn-sm" onclick="abrirConfirmarReceita(${p.id})">💰</button>` : ''}
                 </div>
@@ -6282,26 +6284,38 @@ async function cancelarPedido(pedidoId) {
 async function excluirPedido(pedidoId) {
     const p = pedidosGlobais.find(x => String(x.id) === String(pedidoId));
     if (!p || !supabase) return;
-    if (p.status !== 'Pendente') {
-        exibirMensagem('mensagemLogistica', 'Só é possível excluir pedidos pendentes.', 'error');
-        return;
+    const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+    if (!['comercial','logistica','admin'].includes(perfil)){ alert('Você não tem permissão para excluir pedidos.'); return; }
+    const temCte = (typeof cteInfoDoPedido === 'function') ? !!cteInfoDoPedido(p.id) : false;
+    const comprometido = p.placaCegonha || p.rotaId || p.rota_id || p.status === 'Entregue' || temCte;
+    let msg;
+    if (comprometido){
+        msg = `⚠️ ATENÇÃO: o pedido #${p.id} (${p.cliente||''}) já está COMPROMETIDO`
+            + `${p.placaCegonha?'\n• Em carga na cegonha '+p.placaCegonha:''}`
+            + `${(p.rotaId||p.rota_id)?'\n• Vinculado a uma rota':''}`
+            + `${p.status==='Entregue'?'\n• Já foi ENTREGUE':''}`
+            + `${temCte?'\n• Tem CTe emitido':''}`
+            + `\n\nExcluir vai REMOVER este pedido do histórico, das cargas e do faturamento. NÃO pode ser desfeito.`
+            + `\n\nSe foi combinado e depois desmarcado, prefira CANCELAR (mantém o histórico).`
+            + `\n\nTem certeza absoluta que quer EXCLUIR?`;
+    } else {
+        msg = `⚠️ EXCLUIR DEFINITIVAMENTE o pedido #${p.id} (${p.cliente || ''})?\n\nUse isto apenas para pedidos criados por engano. Esta ação NÃO pode ser desfeita.\n\nSe o transporte foi combinado e depois desmarcado, prefira CANCELAR (mantém o histórico).`;
     }
-
-    if (!confirm(`⚠️ EXCLUIR DEFINITIVAMENTE o pedido #${p.id} (${p.cliente || ''})?\n\nUse isto apenas para pedidos criados por engano. Esta ação NÃO pode ser desfeita.\n\nSe o transporte foi combinado e depois desmarcado, prefira CANCELAR (mantém o histórico).`)) return;
-
+    if (!confirm(msg)) return;
     try {
-        // Limpa vínculos antes de apagar o pedido
         await supabase.from('historico_status').delete().eq('pedido_id', pedidoId);
         await supabase.from('ocorrencias').delete().eq('pedido_id', pedidoId);
         const { error } = await supabase.from('pedidos').delete().eq('id', pedidoId);
         if (error) throw error;
-
         await carregarDadosDoSupabase();
-        renderizarPedidosDrag();
+        if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
         if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
-        exibirMensagem('mensagemLogistica', `🗑️ Pedido #${pedidoId} excluído definitivamente.`, 'success');
+        if (typeof renderizarPedidosComercial === 'function') renderizarPedidosComercial();
+        if (typeof renderizarRotas === 'function') renderizarRotas();
+        const alvoMsg = perfil === 'comercial' ? 'mensagemComercial' : 'mensagemLogistica';
+        if (typeof exibirMensagem === 'function') exibirMensagem(alvoMsg, `🗑️ Pedido #${pedidoId} excluído definitivamente.`, 'success');
     } catch (e) {
-        exibirMensagem('mensagemLogistica', 'Erro ao excluir: ' + e.message, 'error');
+        alert('Erro ao excluir: ' + (e.message||e));
     }
 }
 
@@ -7788,17 +7802,6 @@ function _abrirModalRota(rota) {
                         ${(corredoresGlobais||[]).map(c => `<option value="${c.id}" data-sla="${c.sla_horas}" ${String(rota?.corredor_id)===String(c.id)?'selected':''}>${c.nome} (SLA ${c.sla_horas}h)</option>`).join('')}
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Horário previsto de saída</label>
-                    <input type="time" id="rotaHoraPrev" value="${rota?.hora_saida_prevista || ''}">
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Data/hora REAL de saída (para calcular o ETA)</label>
-                    <input type="datetime-local" id="rotaSaidaReal" value="${rota?.data_hora_saida_real ? String(rota.data_hora_saida_real).slice(0,16) : ''}">
-                </div>
             </div>
 
             <div class="form-group">
@@ -7834,15 +7837,9 @@ function _abrirModalRota(rota) {
                 <div id="listaParadasRota" class="lista-paradas"></div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label>💰 Valor de tabela (R$)</label>
-                    <input type="number" step="0.01" id="rotaValorTabela" placeholder="0,00" value="${rota?.valor_tabela ?? ''}">
-                </div>
-                <div class="form-group">
-                    <label>Excedente (R$)</label>
-                    <input type="number" step="0.01" id="rotaValorExcedente" placeholder="0,00" value="${rota?.valor_excedente ?? ''}">
-                </div>
+            <div class="form-group" id="grupoVeiculosRota" style="${_rotaEditandoId ? '' : 'display:none'}">
+                <label>🚗 Veículos da carga — localização e romaneio do motorista</label>
+                <div id="rotaVeiculosEditor"></div>
             </div>
 
             <div class="form-group">
@@ -7869,6 +7866,7 @@ function _abrirModalRota(rota) {
         }
         if (sel) sel.value = rota.placa_cegonha;
     }
+    if (_rotaEditandoId && typeof _renderRotaVeiculosEditor === 'function') _renderRotaVeiculosEditor(_rotaEditandoId);
 }
 
 // #4 · Filtra a lista de cegonhas do modal por Frota/Terceiro + termo de busca
@@ -7966,17 +7964,7 @@ async function salvarNovaRota() {
     }
     const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
 
-    // Item 16 — ETA = saída real + SLA do corredor
     const corredorId = document.getElementById('rotaCorredor')?.value || null;
-    const horaPrev = document.getElementById('rotaHoraPrev')?.value || null;
-    const saidaRealRaw = document.getElementById('rotaSaidaReal')?.value || null;
-    let etaCalc = null;
-    if (saidaRealRaw && corredorId){
-        const cor = (corredoresGlobais||[]).find(c => String(c.id) === String(corredorId));
-        if (cor && cor.sla_horas){
-            etaCalc = new Date(new Date(saidaRealRaw).getTime() + cor.sla_horas*3600000).toISOString();
-        }
-    }
 
     const dados = {
         nome: document.getElementById('rotaNome').value.trim() || null,
@@ -7985,12 +7973,6 @@ async function salvarNovaRota() {
         percent_motorista_1: (document.getElementById('rotaMotorista')?.value.trim()) ? 100 : null,
         data_saida: document.getElementById('rotaData').value || null,
         corredor_id: corredorId ? parseInt(corredorId) : null,
-        hora_saida_prevista: horaPrev,
-        data_hora_saida_real: saidaRealRaw ? new Date(saidaRealRaw).toISOString() : null,
-        eta: etaCalc,
-        valor_tabela: parseFloat(document.getElementById('rotaValorTabela')?.value) || null,
-        valor_excedente: parseFloat(document.getElementById('rotaValorExcedente')?.value) || null,
-        valor_previsto: ((parseFloat(document.getElementById('rotaValorTabela')?.value) || 0) + (parseFloat(document.getElementById('rotaValorExcedente')?.value) || 0)) || null,
         paradas: _paradasNovaRota,
         observacao: document.getElementById('rotaObs').value.trim() || null
     };
@@ -10597,7 +10579,7 @@ function fechamentoRotaHTML(r){
   if (v.total === 0) return '';
   if (r.carga_fechada) return ` · <span class="tag-fechada">🔒 Carga fechada</span>`;
   if (v.todosVerdes && (typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar())){
-    return ` · <span class="tag-verde-ok">✅ Tudo validado</span> <button class="btn btn-sm btn-primary" onclick="fecharCargaRota(${r.id})">🔒 Fechar e enviar ao motorista</button>`;
+    return ` · <span class="tag-verde-ok">✅ Tudo validado</span>`;
   }
   return ` · <span class="text-muted">${v.verdes}/${v.total} validado(s)</span>`;
 }
@@ -12875,7 +12857,7 @@ function renderizarVagasPorRota(){
           <div style="min-width:0">
             <div style="font-size:15px;font-weight:600">${r.nome||'—'}</div>
             <div style="font-size:12px;color:var(--text-secondary,#9ca3af);margin-top:3px">
-              🚛 ${r.placa_cegonha}${r.motorista_1?' · 👤 '+r.motorista_1:''}${r.data_saida?' · 🕒 '+new Date(r.data_saida+'T12:00').toLocaleDateString('pt-BR')+(r.hora_saida_prevista?' '+r.hora_saida_prevista:''):''}
+              🚛 ${r.placa_cegonha}${r.motorista_1?' · 👤 '+r.motorista_1:''}${r.data_saida?' · 🕒 saída '+new Date(r.data_saida+'T12:00').toLocaleDateString('pt-BR'):''}${r.eta?' · 🏁 entrega prev. '+new Date(r.eta).toLocaleDateString('pt-BR'):''}
             </div>
           </div>
           <div style="text-align:right">
@@ -13322,8 +13304,8 @@ function _romaneioDados(rotaId){
   if (!rota) return null;
   const carros = (pedidosGlobais||[]).filter(p =>
     String(p.rotaId||p.rota_id) === String(rotaId) && p.status !== 'Cancelado');
-  const prontos = carros.filter(p => p.patioAtual || p.coletaEquipeEm || p.formaColeta === 'motorista');
-  const aguardando = carros.filter(p => !p.patioAtual && !p.coletaEquipeEm && p.formaColeta !== 'motorista');
+  const prontos = carros.filter(p => p.noPatio || p.patioAtual || p.coletaEquipeEm || p.formaColeta === 'motorista');
+  const aguardando = carros.filter(p => !p.noPatio && !p.patioAtual && !p.coletaEquipeEm && p.formaColeta !== 'motorista');
   return { rota, carros, prontos, aguardando };
 }
 
@@ -13341,8 +13323,8 @@ function _romaneioHTML(rotaId){
       else { ondeColeta = 'aguardando'; }
     }
     const local = pronto
-      ? (p.patioAtual ? `🅿️ ${p.patioAtual}` : (p.formaColeta==='motorista' ? '🚚 você coleta direto' : '✅ pronto'))
-      : `⏳ ${ondeColeta}`;
+      ? (p.localCarro ? `📍 ${p.localCarro}` : (p.patioAtual ? `🅿️ ${p.patioAtual}` : (p.formaColeta==='motorista' ? '🚚 você coleta direto' : '✅ pronto')))
+      : (p.localCarro ? `📍 ${p.localCarro}` : `⏳ ${ondeColeta}`);
     return `<tr class="corr-tr">
       <td class="ct-id">#${p.id}</td>
       <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
@@ -13367,42 +13349,111 @@ function _romaneioHTML(rotaId){
     ${tabela('⏳ Aguardando coleta (equipe vai trazer)', aguardando, false, 'Nada pendente de coleta. 👌')}`;
 }
 
-// Logística: abre o romaneio e envia a carga
+// Logística: abre o romaneio EDITÁVEL e envia a carga
 function abrirFecharEnviarCarga(rotaId){
   if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('fechar e enviar a carga')) return;
+  const d = _romaneioDados(rotaId);
+  if (!d){ alert('Carga não encontrada.'); return; }
   const old = document.getElementById('modalRomaneio'); if (old) old.remove();
   const div = document.createElement('div');
   div.id = 'modalRomaneio';
   div.className = 'modal-overlay';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  const linhaEdit = (p) => {
+    const noPatio = p.noPatio || !!p.patioAtual;
+    const local = p.localCarro || p.patioAtual || '';
+    return `<tr class="corr-tr">
+      <td class="ct-id">#${p.id}</td>
+      <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+      <td class="ct-modelo">${p.modelo||'—'}</td>
+      <td class="ct-rota">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></td>
+      <td style="text-align:center"><input type="checkbox" id="rmPatio_${p.id}" ${noPatio?'checked':''}></td>
+      <td><input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="onde está o carro..." class="ocup-busca" style="min-width:180px"></td>
+    </tr>`;
+  };
   div.innerHTML = `
-    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:760px;width:95%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:820px;width:96%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <h2 style="margin:0">📋 Romaneio de carregamento</h2>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalRomaneio').remove()">✕</button>
       </div>
-      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Confira a carga e envie ao motorista. Ele verá esta lista no app dele.</p>
-      <div id="romaneioConteudo">${_romaneioHTML(rotaId)}</div>
-      <div style="display:flex;gap:10px;margin-top:16px">
-        <button class="btn btn-primary" style="flex:1" onclick="_enviarCargaMotorista(${rotaId})">📤 Fechar e enviar ao motorista</button>
-        <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir</button>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Marque quais carros já estão <strong>no pátio</strong> e informe <strong>onde está</strong> cada um. Salve e envie ao motorista — ele verá esta lista (e o PDF) para saber onde coletar/pegar cada carro.</p>
+      <div class="romaneio-cab" style="margin-bottom:10px"><strong>🚛 ${d.rota.placa_cegonha||'—'}</strong>${d.rota.motorista_1?' · 👤 '+d.rota.motorista_1:''}${d.rota.nome?' · '+d.rota.nome:''}</div>
+      <table class="corr-tabela">
+        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>No pátio?</th><th>Onde está</th></tr></thead>
+        <tbody>${d.carros.map(linhaEdit).join('')}</tbody>
+      </table>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="_salvarLocaisRomaneio(${rotaId})">💾 Salvar localização</button>
+        <button class="btn btn-primary" style="flex:1;min-width:180px" onclick="_salvarLocaisRomaneio(${rotaId}, true)">📤 Salvar e enviar ao motorista</button>
+        <button class="btn btn-secondary" onclick="_gerarPdfRomaneio(${rotaId})">📄 Gerar PDF</button>
       </div>
     </div>`;
   document.body.appendChild(div);
 }
 
-async function _enviarCargaMotorista(rotaId){
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+async function _salvarLocaisRomaneio(rotaId, enviar){
+  const d = _romaneioDados(rotaId);
+  if (!d) return;
   try {
-    await supabase.from('rotas_planejadas').update({
-      carga_enviada_em: new Date().toISOString(), carga_enviada_por: usuario
-    }).eq('id', rotaId);
-    const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
-    if (rota){ rota.carga_enviada_em = new Date().toISOString(); rota.carga_enviada_por = usuario; }
-    document.getElementById('modalRomaneio')?.remove();
-    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', '📤 Carga enviada ao motorista — ele já pode ver o romaneio no app.', 'success');
-    if (typeof renderizarRotas === 'function') renderizarRotas();
-  } catch(e){ alert('Erro ao enviar: '+(e.message||e)); }
+    for (const p of d.carros){
+      const noPatio = document.getElementById('rmPatio_'+p.id)?.checked || false;
+      const local = document.getElementById('rmLocal_'+p.id)?.value.trim() || null;
+      await supabase.from('pedidos').update({ local_carro: local }).eq('id', p.id);
+      const pg = (pedidosGlobais||[]).find(x => String(x.id)===String(p.id));
+      if (pg){ pg.localCarro = local; if (noPatio && !pg.patioAtual){ pg.patioAtual = local || pg.patioAtual; } }
+      // reflete pátio conforme o checkbox
+      if (noPatio){ await supabase.from('pedidos').update({ patio_atual: local || p.patioAtual || (p.cidadeOrigem?`${p.cidadeOrigem}${p.ufOrigem?'/'+p.ufOrigem:''}`:null) }).eq('id', p.id); }
+      else { await supabase.from('pedidos').update({ patio_atual: null, patio_desde: null }).eq('id', p.id); if(pg) pg.patioAtual = null; }
+    }
+    if (enviar){
+      const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+      await supabase.from('rotas_planejadas').update({ carga_enviada_em: new Date().toISOString(), carga_enviada_por: usuario }).eq('id', rotaId);
+      const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
+      if (rota){ rota.carga_enviada_em = new Date().toISOString(); rota.carga_enviada_por = usuario; }
+      document.getElementById('modalRomaneio')?.remove();
+      if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', '📤 Carga enviada ao motorista com a localização de cada carro.', 'success');
+      if (typeof renderizarRotas === 'function') renderizarRotas();
+    } else {
+      if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', '💾 Localização salva.', 'success');
+    }
+  } catch(e){ alert('Erro ao salvar: '+(e.message||e)); }
+}
+
+function _gerarPdfRomaneio(rotaId){
+  const d = _romaneioDados(rotaId);
+  if (!d) return;
+  // lê os valores atuais dos campos (se o modal estiver aberto)
+  const carros = d.carros.map(p => {
+    const noPatio = document.getElementById('rmPatio_'+p.id)?.checked ?? (p.noPatio || !!p.patioAtual);
+    const local = document.getElementById('rmLocal_'+p.id)?.value ?? (p.localCarro || p.patioAtual || '');
+    return { ...p, _noPatio: noPatio, _local: local };
+  });
+  const linhas = carros.map(p => `
+    <tr>
+      <td>#${p.id}</td><td><strong>${p.placa||'—'}</strong></td><td>${p.modelo||'—'}</td>
+      <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
+      <td style="text-align:center">${p._noPatio?'✅ Sim':'⏳ Não'}</td>
+      <td>${p._local||'—'}</td>
+    </tr>`).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Romaneio ${d.rota.nome||''}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:24px;color:#111}
+      h1{font-size:18px;margin:0 0 4px} .sub{color:#555;font-size:13px;margin-bottom:16px}
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th,td{border:1px solid #ccc;padding:7px 9px;text-align:left}
+      th{background:#f3f3f3}
+    </style></head><body>
+    <h1>📋 Romaneio de carregamento</h1>
+    <div class="sub">🚛 ${d.rota.placa_cegonha||'—'}${d.rota.motorista_1?' · Motorista: '+d.rota.motorista_1:''}${d.rota.nome?' · '+d.rota.nome:''}<br>Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+    <table><thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>No pátio?</th><th>Onde está o carro</th></tr></thead>
+    <tbody>${linhas}</tbody></table>
+    <p style="margin-top:18px;font-size:12px;color:#555">Total: ${carros.length} veículo(s) · ${carros.filter(c=>c._noPatio).length} no pátio · ${carros.filter(c=>!c._noPatio).length} a coletar/localizar.</p>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w){ alert('Permita pop-ups para gerar o PDF.'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(() => w.print(), 400);
 }
 
 // Motorista: minhas cargas (romaneios enviados)
@@ -13416,5 +13467,19 @@ function renderizarRomaneiosMotorista(){
       nomes.has((r.motorista_1||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()));
   }
   if (minhas.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhuma carga enviada para você no momento.</p>'; return; }
-  cont.innerHTML = minhas.map(r => `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:12px;padding:14px;margin-bottom:12px">${_romaneioHTML(r.id)}</div>`).join('');
+  cont.innerHTML = minhas.map(r => `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:12px;padding:14px;margin-bottom:12px">${_romaneioHTML(r.id)}<div style="margin-top:10px"><button class="btn btn-secondary btn-sm" onclick="_gerarPdfRomaneio(${r.id})">📄 Baixar PDF</button></div></div>`).join('');
+}
+
+// ============================================================
+// EDITOR DE VEÍCULOS DA ROTA (localização por carro → romaneio/PDF)
+// ============================================================
+function _renderRotaVeiculosEditor(rotaId){
+  const cont = document.getElementById('rotaVeiculosEditor');
+  if (!cont) return;
+  const carros = (pedidosGlobais||[]).filter(p =>
+    String(p.rotaId||p.rota_id) === String(rotaId) && p.status !== 'Cancelado');
+  if (carros.length === 0){ cont.innerHTML = '<p class="text-muted" style="font-size:.85rem">Nenhum veículo vinculado ainda.</p>'; return; }
+  cont.innerHTML = `
+    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 .6rem">${carros.length} veículo(s). Abra o romaneio para marcar quais estão no pátio, informar onde está cada carro e gerar o PDF do motorista.</p>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="abrirFecharEnviarCarga(${rotaId})">📋 Abrir romaneio / localização dos carros</button>`;
 }
