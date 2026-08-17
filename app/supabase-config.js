@@ -552,6 +552,14 @@ function mostrarTelaMotorista() {
                 </div>
                 <div class="message" id="mensagemMotorista"></div>
             </div>
+            <div class="card" id="cardRomaneiosMotorista">
+                <div class="painel-header-bar">
+                    <h2>📋 Minha carga (romaneio de carregamento)</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="renderizarRomaneiosMotorista()">↻ Atualizar</button>
+                </div>
+                <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">O que já está pronto no pátio e o que a equipe ainda vai coletar para a sua carga.</p>
+                <div id="romaneiosMotoristaWrap"><p class="text-muted">Carregando...</p></div>
+            </div>
             <div class="card" id="cardExtratoMotorista">
                 <div class="painel-header-bar">
                     <h2>📄 Meu extrato</h2>
@@ -596,6 +604,7 @@ function mostrarTelaMotorista() {
         // Carregar pedidos do motorista
         setTimeout(() => carregarPedidosMotorista(), 300);
         setTimeout(() => { if (typeof carregarExtratoMotorista === 'function') carregarExtratoMotorista(); }, 700);
+        setTimeout(() => { if (typeof renderizarRomaneiosMotorista === 'function') renderizarRomaneiosMotorista(); }, 750);
         // Importante: existem 2 ".main-content" (telaAdmin e appPrincipal).
         // A tela do motorista precisa ir no main do appPrincipal, que é o visível.
         document.querySelector('#appPrincipal .main-content')?.appendChild(sec);
