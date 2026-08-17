@@ -8540,3 +8540,19 @@ input:focus, select:focus, textarea:focus {
 .hist-carga-toggle:hover { background:rgba(255,255,255,.03); }
 .hist-chevron { color:var(--accent,#ff6a00); font-weight:700; width:14px; display:inline-block; }
 [data-tema="claro"] .hist-carga-toggle:hover { background:rgba(0,0,0,.03); }
+
+/* Remuneração do motorista */
+.rem-selo { font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+.rem-selo-tab { background:rgba(74,222,128,.15); color:#4ade80; }
+.rem-selo-ped { background:rgba(96,165,250,.15); color:#60a5fa; }
+.rem-selo-man { background:rgba(251,191,36,.15); color:#d99e18; }
+.rem-selo-pend { background:rgba(248,113,113,.15); color:#f87171; }
+.rem-tr-pend { background:rgba(248,113,113,.06); }
+.rem-alerta { background:rgba(251,191,36,.12); border:1px solid rgba(251,191,36,.4); color:#d99e18; padding:10px 14px; border-radius:10px; font-size:.86rem; margin-bottom:12px; }
+
+/* Valor motorista no histórico de cargas */
+.hist-total-mot { color:#60a5fa; font-weight:700; margin-left:8px; }
+
+/* Romaneio de carregamento */
+.romaneio-cab { padding:10px 14px; background:var(--surface-2,rgba(255,255,255,.04)); border-radius:10px; margin-bottom:6px; }
+.romaneio-cab strong { font-size:1rem; }
