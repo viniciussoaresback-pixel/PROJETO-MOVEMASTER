@@ -13,6 +13,7 @@ let episPendentesGlobais = [];
 let paramReservaTimerMin = 120;
 let equipesEntregaGlobais = [];
 let tabelaPrecosGlobais = [];
+let precosManuaisTrechoGlobais = [];
 let entregasLastMileGlobais = [];
 let estadosBrasil = [];
 let cidadesPorEstado = {};
@@ -111,11 +112,13 @@ function trocarAba(event) {
     if (tabAlvo === 'manutencao' && typeof carregarManutencao === 'function') carregarManutencao();
     if (tabAlvo === 'faturamento' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
     if (tabAlvo === 'faturamento'){
+        if (typeof renderizarTabelaPrecos === 'function') renderizarTabelaPrecos();
         const wrap = document.getElementById('faturamentoHistoricoCargas');
         if (wrap && typeof _histCargasCasca === 'function'){ wrap.innerHTML = _histCargasCasca(); renderizarHistoricoCargas('historicoCargasWrap'); }
+        if (typeof abrirRelatorioFaturamento === 'function') abrirRelatorioFaturamento();
     }
     if (tabAlvo === 'comercial' && typeof renderizarReservasAtivas === 'function') { renderizarReservasAtivas(); iniciarTickReservas(); if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial(); if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial(); }
-    if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof renderizarTabelaPrecos === 'function') renderizarTabelaPrecos(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
+    if (tabAlvo === 'cadastros' && typeof carregarCorredores === 'function') { carregarCorredores(); if (typeof renderizarEquipesEntrega === 'function') renderizarEquipesEntrega(); if (typeof inicializarCadastrosSubabas === 'function') inicializarCadastrosSubabas(); }
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
     if (tabAlvo === 'equipes' && typeof renderizarEquipesPainel === 'function') renderizarEquipesPainel();
     if (tabAlvo === 'cobranca' && typeof renderizarCobranca === 'function') renderizarCobranca();
@@ -222,7 +225,7 @@ async function carregarDadosDoSupabase(opts) {
         // Rotas planejadas (tabela opcional — se não existir, segue sem quebrar)
         // Carrega TODAS as tabelas secundárias em paralelo (antes era em fila = lento)
         const [
-          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn, resTab
+          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn, resTab, resTabM
         ] = await Promise.all([
           supabase.from('rotas_planejadas').select('*').order('data_saida', { ascending: true }),
           supabase.from('agendamentos_manutencao').select('*').order('data_hora', { ascending: true }),
@@ -233,7 +236,8 @@ async function carregarDadosDoSupabase(opts) {
           supabase.from('corredor_paradas').select('*').order('ordem'),
           supabase.from('equipes_entrega').select('*').order('nome'),
           supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false }),
-          supabase.from('tabela_precos').select('*').order('cidade_origem')
+          supabase.from('tabela_precos').select('*').order('cidade_origem'),
+          supabase.from('precos_manuais_trecho').select('*')
         ].map(q => q.then(r => r).catch(() => ({ data: null }))));
 
         rotasGlobais = resRotas.data || [];
@@ -247,6 +251,7 @@ async function carregarDadosDoSupabase(opts) {
         equipesEntregaGlobais = resEq.data || [];
         entregasLastMileGlobais = resEn.data || [];
         tabelaPrecosGlobais = resTab.data || [];
+        precosManuaisTrechoGlobais = resTabM.data || [];
 
         // Folgas (tabela opcional) — mantém sua própria função
         if (typeof carregarFolgas === 'function') { try { await carregarFolgas(); } catch(e){} }
@@ -304,6 +309,10 @@ async function carregarDadosDoSupabase(opts) {
                 equipeEntregaId: p.equipe_entrega_id || null,
                 coletaEquipeEm: p.coleta_equipe_em || null,
                 coletaEquipePor: p.coleta_equipe_por || null,
+                formaColeta: p.forma_coleta || null,
+                patioColeta: p.patio_coleta || null,
+                equipeColetaId: p.equipe_coleta_id || null,
+                obsColeta: p.obs_coleta || null,
                 entregaEquipeEm: p.entrega_equipe_em || null,
                 entregaEquipePor: p.entrega_equipe_por || null,
                 origemLancamento: p.origem_lancamento || null,
@@ -622,6 +631,10 @@ async function salvarPedidoComercial(event) {
                 referencia: pedido.referencia,
                 observacao_pedido: pedido.observacao,
                 tipo_entrega: document.getElementById('tipoEntregaPedido')?.value || 'patio',
+                forma_coleta: document.getElementById('formaColeta')?.value || null,
+                patio_coleta: (document.getElementById('formaColeta')?.value === 'patio') ? (document.getElementById('patioColeta')?.value || null) : null,
+                equipe_coleta_id: (document.getElementById('formaColeta')?.value === 'coletador') ? (parseInt(document.getElementById('equipeColeta')?.value) || null) : null,
+                obs_coleta: document.getElementById('obsColeta')?.value.trim() || null,
                 origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
                 criado_por_nome: (document.getElementById('usuarioLogado')?.textContent || null),
                 corredor_manual_id: (parseInt(document.getElementById('pedidoCorredor')?.value) || null),
@@ -7711,6 +7724,7 @@ function renderizarRotas() {
                 ${(r.status === 'planejada' || r.status === 'em_andamento') ? `<button class="btn btn-secondary btn-sm" onclick="abrirInserirCarroRota(${r.id})" title="Adicionar qualquer carro disponível a esta rota">➕ Inserir carro</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-secondary btn-sm" onclick="abrirEditarRota(${r.id})" title="Alterar dados antes de iniciar a viagem">✏️ Editar</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-primary btn-sm" onclick="mudarStatusRota(${r.id}, 'em_andamento')">▶️ Iniciar viagem</button>` : ''}
+                ${r.status === 'planejada' ? `<button class="btn btn-secondary btn-sm" onclick="abrirFecharEnviarCarga(${r.id})" title="Ver o romaneio e enviar a carga ao motorista">📋 Fechar e enviar carga</button>` : ''}
                 ${(r.status === 'planejada' || r.status === 'em_andamento') ? `<button class="btn btn-secondary btn-sm" onclick="abrirAvancarStatusRota(${r.id})" title="Avançar o status dos carros desta rota">⏩ Avançar status</button>` : ''}
                 ${r.status === 'em_andamento' ? `<button class="btn btn-primary btn-sm" onclick="abrirRegistrarChegada(${r.id})" title="Marcar chegada dos carros (motorista ou pátio)">🏁 Registrar chegada</button>` : ''}
                 <button class="btn btn-secondary btn-sm" onclick="mudarStatusRota(${r.id}, 'cancelada')">Cancelar rota</button>
@@ -12251,10 +12265,18 @@ function _cidadeIgual(a, b){
 
 // Carros "a coletar" por uma equipe: coleta na cidade base, ainda não no pátio nem coletados
 function _aColetarDaEquipe(eq){
-  return (pedidosGlobais||[]).filter(p =>
-    !['Entregue','Cancelado'].includes(p.status||'Pendente') &&
-    !p.coletaEquipeEm && !p.patioAtual &&
-    _cidadeIgual(p.cidadeOrigem, eq.cidade_base));
+  return (pedidosGlobais||[]).filter(p => {
+    if (['Entregue','Cancelado'].includes(p.status||'Pendente')) return false;
+    if (p.coletaEquipeEm || p.patioAtual) return false;
+    if (p.formaColeta === 'motorista') return false; // motorista coleta direto: não passa por equipe
+    // 1) combinado explícito: equipe de coleta escolhida no pedido
+    if (p.equipeColetaId) return String(p.equipeColetaId) === String(eq.id);
+    // 2) marcado "coletador busca" sem equipe explícita: cai pela cidade base
+    if (p.formaColeta === 'coletador') return _cidadeIgual(p.cidadeOrigem, eq.cidade_base);
+    // 3) fallback antigo: sem combinado, usa a geografia (origem = cidade base)
+    if (!p.formaColeta) return _cidadeIgual(p.cidadeOrigem, eq.cidade_base);
+    return false;
+  });
 }
 
 // Carros "a entregar" por uma equipe: destino na cidade base, já no pátio da cidade, não entregues
@@ -12351,7 +12373,8 @@ async function marcarColetaEquipe(pedidoId, equipeId){
   const eq = (equipesEntregaGlobais||[]).find(e => String(e.id) === String(equipeId));
   if (!p || !eq || !supabase) return;
   const membro = document.getElementById(`mb_coletar_${pedidoId}`)?.value || null;
-  const cidade = `${eq.cidade_base}${eq.uf_base?'/'+eq.uf_base:''}`;
+  // Usa o pátio combinado no pedido (se o vendedor definiu); senão o pátio base da equipe
+  const cidade = p.patioColeta || `${eq.cidade_base}${eq.uf_base?'/'+eq.uf_base:''}`;
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
     const { error } = await supabase.from('pedidos').update({
@@ -12504,12 +12527,16 @@ function renderizarHistoricoCargas(containerId){
     const pedidos = (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id) === String(r.id));
     const data = r.data_saida || (pedidos[0]?.dataSolicitacao) || null;
     const total = pedidos.reduce((s,p)=>s+Number(p.valorFrete||0),0);
+    const totalMotorista = pedidos.reduce((s,p)=>{
+      const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null};
+      return s + (vm.valor||0);
+    }, 0);
     return {
       id: r.id, nome: r.nome, data,
       motorista: r.motorista_1 || pedidos[0]?.motorista1 || '—',
       cegonha: r.placa_cegonha || '—',
       paradas: Array.isArray(r.paradas) ? r.paradas : [],
-      pedidos, total
+      pedidos, total, totalMotorista
     };
   });
 
@@ -12548,22 +12575,27 @@ function renderizarHistoricoCargas(containerId){
             <span>🚛 <strong>${c.cegonha}</strong></span>
             <span class="hist-rota">${c.paradas.length ? c.paradas.join(' → ') : (c.nome||'—')}</span>
             <span class="text-muted">${c.pedidos.length} carro(s)</span>
-            <span class="hist-total">R$ ${c.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+            <span class="hist-total" title="Faturado do caminhão (soma dos fretes)">💰 R$ ${c.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+            <span class="hist-total-mot" title="Total que os motoristas recebem (tabela)">👤 R$ ${c.totalMotorista.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
           </div>
           ${aberto ? `<table class="corr-tabela">
-            <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>CTe</th><th>Cobrança</th><th>Entrega</th></tr></thead>
+            <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Frete</th><th>Motorista (R$)</th><th>CTe</th><th>Cobrança</th><th>Entrega</th></tr></thead>
             <tbody>${c.pedidos.map(p => {
               const cte = (typeof cteInfoDoPedido==='function') ? cteInfoDoPedido(p.id) : null;
               const entregaTxt = p.entregaEquipeEm ? `📤 equipe${p.entregaEquipePor?' ('+p.entregaEquipePor+')':''}`
                 : (p.fluxoEntrega === 'direta' ? '✅ motorista' : (p.status==='Entregue'?'entregue':'—'));
               const cobr = p.cobrancaStatus ? (typeof _COB_LABEL!=='undefined' ? (_COB_LABEL[p.cobrancaStatus]||p.cobrancaStatus) : p.cobrancaStatus) : 'a cobrar';
+              const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null,origem:'pendente'};
+              const vmTxt = vm.valor!=null ? 'R$ '+vm.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '<span style="color:#f87171">a definir</span>';
+              const transb = p.cidadeTransbordo ? `<div style="font-size:.72rem;color:#d99e18;margin-top:2px">🔄 transbordo em ${p.cidadeTransbordo}</div>` : '';
               return `<tr class="corr-tr">
                 <td class="ct-id">#${p.id}</td>
                 <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
                 <td class="ct-modelo">${p.modelo||'—'}</td>
-                <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+                <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong>${transb}</td>
                 <td class="ct-cli">${p.cliente||'—'}</td>
                 <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+                <td class="ct-frete">${vmTxt}</td>
                 <td>${cte ? '🧾 '+(cte.numero||'sim') : '—'}</td>
                 <td>${cobr}</td>
                 <td>${entregaTxt}</td>
@@ -12881,6 +12913,8 @@ function _toggleVagasRota(id){
 // TABELA DE PREÇOS — remuneração do motorista por trecho
 // ============================================================
 async function salvarTabelaPreco(){
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  if (!['financeiro','admin'].includes(perfil)){ alert('Apenas o Financeiro pode editar a tabela de preços.'); return; }
   const msg = document.getElementById('mensagemTabelaPreco');
   const origem = document.getElementById('tpOrigem')?.value.trim();
   const destino = document.getElementById('tpDestino')?.value.trim();
@@ -12923,6 +12957,8 @@ function renderizarTabelaPrecos(){
 }
 
 async function excluirTabelaPreco(id){
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  if (!['financeiro','admin'].includes(perfil)){ alert('Apenas o Financeiro pode editar a tabela de preços.'); return; }
   if (!confirm('Excluir este trecho da tabela de preços?')) return;
   try {
     const { error } = await supabase.from('tabela_precos').delete().eq('id', id);
@@ -12932,12 +12968,453 @@ async function excluirTabelaPreco(id){
   } catch(e){ alert('Erro ao excluir: '+(e.message||e)); }
 }
 
-// Helper: valor que o motorista recebe por um trecho (origem->destino) e categoria
-// categoria: 'suv'/'caminhonete' => faixa SUV; senão faixa comum
+// Helper: valor da TABELA oficial de um trecho (origem->destino) e categoria
 function valorTabelaTrecho(cidadeOrigem, cidadeDestino, categoria){
   const faixaSuv = ['suv','caminhonete'].includes((categoria||'').toLowerCase());
   const t = (tabelaPrecosGlobais||[]).find(x =>
     _cidadeIgual(x.cidade_origem, cidadeOrigem) && _cidadeIgual(x.cidade_destino, cidadeDestino));
-  if (!t) return null; // trecho não cadastrado
+  if (!t) return null; // trecho não cadastrado na tabela oficial
   return Number(faixaSuv ? t.valor_suv : t.valor_comum) || 0;
+}
+
+// Valor MANUAL de um trecho (avulso, não-rotineiro)
+function valorManualTrecho(cidadeOrigem, cidadeDestino, categoria){
+  const faixaSuv = ['suv','caminhonete'].includes((categoria||'').toLowerCase());
+  const t = (precosManuaisTrechoGlobais||[]).find(x =>
+    _cidadeIgual(x.cidade_origem, cidadeOrigem) && _cidadeIgual(x.cidade_destino, cidadeDestino));
+  if (!t) return null;
+  return Number(faixaSuv ? t.valor_suv : t.valor_comum) || 0;
+}
+
+// Valor que o motorista recebe por um pedido, seguindo a hierarquia:
+// 1) ajuste manual do pedido  >  2) tabela oficial  >  3) valor manual do trecho  >  pendente(null)
+// Retorna { valor, origem: 'pedido'|'tabela'|'manual'|'pendente' }
+function valorMotoristaPedido(p){
+  const cat = p.categoriaVeiculo || p.categoria_veiculo || '';
+  // 1) ajuste pontual do pedido vence tudo
+  const ajuste = p.valorMotoristaManual != null ? p.valorMotoristaManual : p.valor_motorista_manual;
+  if (ajuste != null && ajuste !== '') return { valor: Number(ajuste)||0, origem: 'pedido' };
+  // 2) tabela oficial
+  const tab = valorTabelaTrecho(p.cidadeOrigem, p.cidadeDestino, cat);
+  if (tab != null) return { valor: tab, origem: 'tabela' };
+  // 3) valor manual do trecho
+  const man = valorManualTrecho(p.cidadeOrigem, p.cidadeDestino, cat);
+  if (man != null) return { valor: man, origem: 'manual' };
+  // pendente
+  return { valor: null, origem: 'pendente' };
+}
+
+// ============================================================
+// RELATÓRIO DE FATURAMENTO (fechamento 25→25)
+// Considera CTe emitido no período E pedido entregue.
+// Cortes: caminhão, motorista, veículo, trecho, cliente, categoria de cliente.
+// ============================================================
+let _relatFatCache = null; // linhas montadas do período
+
+// Período padrão: dia 25 do mês anterior → dia 25 do mês atual
+function _periodoPadrao2525(){
+  const hoje = new Date();
+  let ini, fim;
+  if (hoje.getDate() >= 25){
+    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 25);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth()+1, 25);
+  } else {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth()-1, 25);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 25);
+  }
+  const fmt = d => d.toISOString().slice(0,10);
+  return { de: fmt(ini), ate: fmt(fim) };
+}
+
+async function abrirRelatorioFaturamento(){
+  const wrap = document.getElementById('relatFatWrap');
+  if (!wrap) return;
+  if (!document.getElementById('relatFatDe')){
+    const per = _periodoPadrao2525();
+    wrap.innerHTML = `
+      <div class="hist-filtros" style="align-items:flex-end">
+        <label class="hist-data">De <input type="date" id="relatFatDe" value="${per.de}"></label>
+        <label class="hist-data">Até <input type="date" id="relatFatAte" value="${per.ate}"></label>
+        <div class="manut-toolbar-campo" style="max-width:200px">
+          <label>Agrupar por</label>
+          <select id="relatFatGrupo" onchange="renderizarRelatorioFaturamento()">
+            <option value="cliente">Cliente</option>
+            <option value="tipoCliente">Categoria de cliente</option>
+            <option value="motorista">Motorista</option>
+            <option value="cegonha">Caminhão (cegonha)</option>
+            <option value="veiculo">Veículo</option>
+            <option value="trecho">Trecho</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="carregarRelatorioFaturamento()">🔎 Gerar</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportarRelatorioFaturamento()">⬇️ Exportar Excel</button>
+      </div>
+      <div id="relatFatResumo"></div>
+      <div id="relatFatConteudo"><p class="text-muted" style="padding:1rem 0">Escolha o período e clique em <strong>Gerar</strong>.</p></div>`;
+  }
+  // já gera com o período padrão
+  carregarRelatorioFaturamento();
+}
+
+async function carregarRelatorioFaturamento(){
+  const de = document.getElementById('relatFatDe')?.value;
+  const ate = document.getElementById('relatFatAte')?.value;
+  const cont = document.getElementById('relatFatConteudo');
+  if (!de || !ate){ alert('Informe o período.'); return; }
+  if (cont) cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Carregando...</p>';
+  try {
+    // 1. CTes emitidos no período
+    const { data: espelhos, error } = await supabase.from('ocorrencias')
+      .select('cte_numero, cte_emitido_em, dados_extras, created_at')
+      .eq('tipo','pdf_fiscal').eq('cte_emitido', true);
+    if (error) throw error;
+
+    // mapa nome do cliente -> tipo
+    const tipoPorCliente = {};
+    (clientesGlobais||[]).forEach(c => { if (c.nome) tipoPorCliente[c.nome] = c.tipo_cliente || ''; });
+
+    const linhas = [];
+    (espelhos||[]).forEach(e => {
+      const dataCte = (e.cte_emitido_em || e.created_at || '').slice(0,10);
+      if (!dataCte || dataCte < de || dataCte >= ate) return; // fora do período (por emissão)
+      let extras = {}; try { extras = JSON.parse(e.dados_extras||'{}'); } catch(_){}
+      const ids = Array.isArray(extras.pedidos_ids) ? extras.pedidos_ids : [];
+      ids.forEach(pid => {
+        const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pid));
+        if (!p) return;
+        if ((p.status||'') !== 'Entregue') return; // só entregues
+        linhas.push({
+          id: p.id, cteNumero: e.cte_numero, dataCte,
+          cliente: p.cliente || '—', tipoCliente: TIPOS_CLIENTE[tipoPorCliente[p.cliente]] || '—',
+          motorista: p.motorista1 || '—', cegonha: p.placaCegonha || '—',
+          veiculo: `${p.modelo||''} ${p.placa||''}`.trim() || '—',
+          trecho: `${p.cidadeOrigem||'?'} → ${p.cidadeDestino||'?'}`,
+          frete: Number(p.valorFrete||0),
+          cobrado: (p.cobrancaStatus === 'confirmado' || p.receitaConfirmada) ? 'sim' : 'não',
+          cteOk: e.cte_numero ? 'sim' : 'não'
+        });
+      });
+    });
+    _relatFatCache = linhas;
+    renderizarRelatorioFaturamento();
+    if (typeof renderizarRemuneracaoMotorista === 'function') renderizarRemuneracaoMotorista();
+  } catch(e){
+    if (cont) cont.innerHTML = `<p class="text-muted" style="padding:1rem 0">Erro ao carregar: ${e.message||e}</p>`;
+  }
+}
+
+function renderizarRelatorioFaturamento(){
+  const cont = document.getElementById('relatFatConteudo');
+  const resumo = document.getElementById('relatFatResumo');
+  const grupoCampo = document.getElementById('relatFatGrupo')?.value || 'cliente';
+  if (!cont) return;
+  const linhas = _relatFatCache || [];
+  if (linhas.length === 0){
+    if (resumo) resumo.innerHTML = '';
+    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum faturamento no período (CTe emitido + entregue).</p>';
+    return;
+  }
+  const total = linhas.reduce((s,l)=>s+l.frete,0);
+  const semCobranca = linhas.filter(l => l.cobrado === 'não').length;
+  const semCte = linhas.filter(l => l.cteOk === 'não').length;
+
+  if (resumo){
+    resumo.innerHTML = `<div class="ocup-resumo" style="margin:14px 0">
+      <div class="ocup-resumo-card"><span class="ocup-resumo-label">Faturamento total</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
+      <div class="ocup-resumo-card"><span class="ocup-resumo-label">Pedidos faturados</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${linhas.length}</span></div></div>
+      <div class="ocup-resumo-card ${semCobranca?'patios-resumo-alerta':''}"><span class="ocup-resumo-label">Sem cobrança confirmada</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${semCobranca}</span></div></div>
+    </div>`;
+  }
+
+  // agrupa
+  const grupos = {};
+  linhas.forEach(l => { const k = l[grupoCampo] || '—'; (grupos[k] = grupos[k] || []).push(l); });
+  const chaves = Object.keys(grupos).sort((a,b)=> grupos[b].reduce((s,l)=>s+l.frete,0) - grupos[a].reduce((s,l)=>s+l.frete,0));
+
+  cont.innerHTML = chaves.map(k => {
+    const itens = grupos[k];
+    const sub = itens.reduce((s,l)=>s+l.frete,0);
+    return `<div class="hist-motorista">
+      <div class="hist-mot-cab">
+        <strong>${k}</strong>
+        <span class="text-muted">${itens.length} pedido(s) · R$ ${sub.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+      </div>
+      <table class="corr-tabela">
+        <thead><tr><th>ID</th><th>CTe</th><th>Data</th><th>Cliente</th><th>Categoria</th><th>Motorista</th><th>Cegonha</th><th>Veículo</th><th>Trecho</th><th>Frete</th><th>Cobrança</th></tr></thead>
+        <tbody>${itens.map(l => `<tr class="corr-tr">
+          <td class="ct-id">#${l.id}</td>
+          <td>${l.cteNumero?'🧾 '+l.cteNumero:'—'}</td>
+          <td>${l.dataCte ? new Date(l.dataCte+'T12:00').toLocaleDateString('pt-BR') : '—'}</td>
+          <td class="ct-cli">${l.cliente}</td>
+          <td>${l.tipoCliente}</td>
+          <td>${l.motorista}</td>
+          <td class="ct-placa">${l.cegonha}</td>
+          <td class="ct-modelo">${l.veiculo}</td>
+          <td class="ct-rota">${l.trecho}</td>
+          <td class="ct-frete">R$ ${l.frete.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+          <td>${l.cobrado==='sim'?'✅':'<span style="color:#f87171">pendente</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+function exportarRelatorioFaturamento(){
+  const linhas = _relatFatCache || [];
+  if (linhas.length === 0){ alert('Gere o relatório primeiro.'); return; }
+  const cab = ['ID','CTe','Data emissão','Cliente','Categoria','Motorista','Cegonha','Veículo','Trecho','Frete','Cobrança','CTe OK'];
+  const linhasCsv = linhas.map(l => [l.id, l.cteNumero||'', l.dataCte, l.cliente, l.tipoCliente, l.motorista, l.cegonha, l.veiculo, l.trecho, String(l.frete).replace('.',','), l.cobrado, l.cteOk]);
+  const total = linhas.reduce((s,l)=>s+l.frete,0);
+  linhasCsv.push([]);
+  linhasCsv.push(['','','','','','','','','TOTAL', String(total).replace('.',','),'','']);
+  const csv = [cab, ...linhasCsv].map(r => r.map(c => `"${String(c==null?'':c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const de = document.getElementById('relatFatDe')?.value || '';
+  const ate = document.getElementById('relatFatAte')?.value || '';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `faturamento_${de}_a_${ate}.csv`;
+  a.click();
+}
+
+// ============================================================
+// AUDITORIA DE REMUNERAÇÃO DO MOTORISTA (no fechamento)
+// Mostra o valor da tabela por pedido e destaca trechos PENDENTES (fora da tabela)
+// ============================================================
+function renderizarRemuneracaoMotorista(){
+  const cont = document.getElementById('remuneracaoWrap');
+  if (!cont) return;
+  const linhas = _relatFatCache || [];
+  if (linhas.length === 0){
+    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Gere o relatório de faturamento primeiro (mesmo período).</p>';
+    return;
+  }
+  // reusa os pedidos do período; recalcula o valor do motorista
+  const dados = linhas.map(l => {
+    const p = (pedidosGlobais||[]).find(x => String(x.id) === String(l.id));
+    const vm = p ? valorMotoristaPedido(p) : { valor:null, origem:'pendente' };
+    return { ...l, valorMot: vm.valor, origemMot: vm.origem, p };
+  });
+  const pendentes = dados.filter(d => d.origemMot === 'pendente');
+  const totalTabela = dados.reduce((s,d)=>s+(d.valorMot||0),0);
+  const totalFrete = dados.reduce((s,d)=>s+d.frete,0);
+  const bonus = totalFrete - totalTabela;
+
+  const selo = o => o==='pedido' ? '<span class="rem-selo rem-selo-ped">ajuste do pedido</span>'
+    : o==='tabela' ? '<span class="rem-selo rem-selo-tab">tabela</span>'
+    : o==='manual' ? '<span class="rem-selo rem-selo-man">manual do trecho</span>'
+    : '<span class="rem-selo rem-selo-pend">⚠️ fora da tabela</span>';
+
+  cont.innerHTML = `
+    <div class="ocup-resumo" style="margin:14px 0">
+      <div class="ocup-resumo-card"><span class="ocup-resumo-label">Total tabela (motoristas)</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">R$ ${totalTabela.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
+      <div class="ocup-resumo-card"><span class="ocup-resumo-label">Bônus/abatimento empresa</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num" style="color:${bonus>=0?'#4ade80':'#f87171'}">R$ ${bonus.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
+      <div class="ocup-resumo-card ${pendentes.length?'patios-resumo-alerta':''}"><span class="ocup-resumo-label">Trechos fora da tabela</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${pendentes.length}</span></div></div>
+    </div>
+    ${pendentes.length ? `<div class="rem-alerta">⚠️ <strong>${pendentes.length} trecho(s) fora da tabela</strong> — informe o valor abaixo (o botão 💾 salva para todos os pedidos do mesmo trecho).</div>` : ''}
+    <table class="corr-tabela">
+      <thead><tr><th>ID</th><th>Motorista</th><th>Trecho</th><th>Categoria</th><th>Frete</th><th>Valor motorista</th><th>Origem</th><th>Ação</th></tr></thead>
+      <tbody>${dados.map(d => {
+        const cat = (d.p?.categoriaVeiculo || d.p?.categoria_veiculo || '—');
+        const pend = d.origemMot === 'pendente';
+        return `<tr class="corr-tr ${pend?'rem-tr-pend':''}">
+          <td class="ct-id">#${d.id}</td>
+          <td>${d.motorista}</td>
+          <td class="ct-rota">${d.trecho}</td>
+          <td>${cat}</td>
+          <td class="ct-frete">R$ ${d.frete.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+          <td class="ct-frete">${d.valorMot!=null ? 'R$ '+d.valorMot.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—'}</td>
+          <td>${selo(d.origemMot)}</td>
+          <td class="ct-acoes">
+            ${pend
+              ? `<input type="text" id="remTrecho_${d.id}" placeholder="valor" style="width:90px" class="ocup-busca"><button class="btn btn-sm btn-primary" onclick="_salvarValorManualTrecho(${d.id})" title="Vale para todos deste trecho">💾</button>`
+              : `<button class="btn btn-sm btn-secondary" onclick="_abrirAjustePedido(${d.id})" title="Pagar valor diferente só neste pedido">✏️</button>`}
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+// Salva valor manual do trecho (vale pra todos os pedidos do mesmo trecho)
+async function _salvarValorManualTrecho(pedidoId){
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  if (!['financeiro','admin'].includes(perfil)){ alert('Apenas o Financeiro pode informar valores.'); return; }
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p) return;
+  const val = valorMoedaParaFloat(document.getElementById('remTrecho_'+pedidoId)?.value || '0');
+  if (!val){ alert('Informe um valor.'); return; }
+  const cat = (p.categoriaVeiculo || p.categoria_veiculo || '').toLowerCase();
+  const faixaSuv = ['suv','caminhonete'].includes(cat);
+  try {
+    const usuario = document.getElementById('usuarioLogado')?.textContent || null;
+    // upsert: se já existe o trecho, atualiza a faixa; senão cria
+    const existente = (precosManuaisTrechoGlobais||[]).find(x =>
+      _cidadeIgual(x.cidade_origem, p.cidadeOrigem) && _cidadeIgual(x.cidade_destino, p.cidadeDestino));
+    if (existente){
+      const upd = faixaSuv ? { valor_suv: val } : { valor_comum: val };
+      await supabase.from('precos_manuais_trecho').update(upd).eq('id', existente.id);
+      if (faixaSuv) existente.valor_suv = val; else existente.valor_comum = val;
+    } else {
+      const novo = { cidade_origem: p.cidadeOrigem, cidade_destino: p.cidadeDestino,
+        valor_comum: faixaSuv ? 0 : val, valor_suv: faixaSuv ? val : 0, criado_por: usuario };
+      const { data } = await supabase.from('precos_manuais_trecho').insert(novo).select();
+      if (data && data[0]) precosManuaisTrechoGlobais.push(data[0]);
+    }
+    renderizarRemuneracaoMotorista();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFaturamento', `Valor do trecho ${p.cidadeOrigem}→${p.cidadeDestino} salvo.`, 'success');
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// Ajuste pontual por pedido (vence a tabela)
+async function _abrirAjustePedido(pedidoId){
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  if (!['financeiro','admin'].includes(perfil)){ alert('Apenas o Financeiro pode ajustar valores.'); return; }
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p) return;
+  const atual = p.valorMotoristaManual != null ? p.valorMotoristaManual : (p.valor_motorista_manual || '');
+  const nv = prompt(`Valor do motorista SÓ para o pedido #${pedidoId} (${p.cidadeOrigem}→${p.cidadeDestino}).\nDeixe vazio para voltar ao valor da tabela.`, atual || '');
+  if (nv === null) return;
+  const val = nv.trim() === '' ? null : valorMoedaParaFloat(nv);
+  try {
+    await supabase.from('pedidos').update({ valor_motorista_manual: val }).eq('id', pedidoId);
+    p.valorMotoristaManual = val; p.valor_motorista_manual = val;
+    renderizarRemuneracaoMotorista();
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// ============================================================
+// COLETA no lançamento (combinado do vendedor)
+// ============================================================
+function _toggleColetaCampos(){
+  const forma = document.getElementById('formaColeta')?.value;
+  const gP = document.getElementById('grupoPatioColeta');
+  const gE = document.getElementById('grupoEquipeColeta');
+  if (gP) gP.style.display = (forma === 'patio') ? '' : 'none';
+  if (gE) gE.style.display = (forma === 'coletador') ? '' : 'none';
+  // popula pátios
+  if (forma === 'patio'){
+    const sel = document.getElementById('patioColeta');
+    if (sel && !sel.options.length){
+      sel.innerHTML = '<option value="">Selecione o pátio...</option>' +
+        (typeof PATIOS_FIXOS!=='undefined'?PATIOS_FIXOS:[]).map(p=>`<option value="${p}">${p}</option>`).join('');
+    }
+  }
+  // popula equipes
+  if (forma === 'coletador'){
+    const sel = document.getElementById('equipeColeta');
+    if (sel){
+      const eqs = (equipesEntregaGlobais||[]).filter(e=>e.ativo!==false);
+      sel.innerHTML = eqs.length
+        ? '<option value="">Selecione a equipe...</option>'+eqs.map(e=>`<option value="${e.id}">${e.nome}${e.cidade_base?' — '+e.cidade_base:''}</option>`).join('')
+        : '<option value="">Cadastre uma equipe primeiro</option>';
+    }
+  }
+}
+
+// ============================================================
+// ROMANEIO DE CARREGAMENTO
+// Mostra os carros da carga divididos: prontos no pátio × aguardando coleta.
+// Logística fecha e envia; motorista vê no perfil dele.
+// ============================================================
+function _romaneioDados(rotaId){
+  const rota = (rotasGlobais||[]).find(r => String(r.id) === String(rotaId));
+  if (!rota) return null;
+  const carros = (pedidosGlobais||[]).filter(p =>
+    String(p.rotaId||p.rota_id) === String(rotaId) && p.status !== 'Cancelado');
+  const prontos = carros.filter(p => p.patioAtual || p.coletaEquipeEm || p.formaColeta === 'motorista');
+  const aguardando = carros.filter(p => !p.patioAtual && !p.coletaEquipeEm && p.formaColeta !== 'motorista');
+  return { rota, carros, prontos, aguardando };
+}
+
+function _romaneioHTML(rotaId){
+  const d = _romaneioDados(rotaId);
+  if (!d) return '<p class="text-muted">Carga não encontrada.</p>';
+  const { rota, prontos, aguardando } = d;
+  const linha = (p, pronto) => {
+    let ondeColeta = '';
+    if (!pronto){
+      if (p.equipeColetaId){
+        const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(p.equipeColetaId));
+        ondeColeta = eq ? `equipe ${eq.nome}` : 'equipe de coleta';
+      } else if (p.formaColeta === 'coletador'){ ondeColeta = 'coletador'; }
+      else { ondeColeta = 'aguardando'; }
+    }
+    const local = pronto
+      ? (p.patioAtual ? `🅿️ ${p.patioAtual}` : (p.formaColeta==='motorista' ? '🚚 você coleta direto' : '✅ pronto'))
+      : `⏳ ${ondeColeta}`;
+    return `<tr class="corr-tr">
+      <td class="ct-id">#${p.id}</td>
+      <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+      <td class="ct-modelo">${p.modelo||'—'}</td>
+      <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+      <td class="ct-cli">${p.cliente||'—'}</td>
+      <td>${local}</td>
+      ${p.obsColeta ? `<td style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">${p.obsColeta}</td>` : '<td>—</td>'}
+    </tr>`;
+  };
+  const tabela = (titulo, arr, pronto, vazio) => `
+    <h4 style="margin:1rem 0 .5rem;font-size:.9rem">${titulo} <span class="text-muted">(${arr.length})</span></h4>
+    ${arr.length ? `<table class="corr-tabela">
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Situação</th><th>Obs. coleta</th></tr></thead>
+      <tbody>${arr.map(p => linha(p, pronto)).join('')}</tbody></table>` : `<p class="text-muted" style="font-size:.85rem">${vazio}</p>`}`;
+  return `
+    <div class="romaneio-cab">
+      <div><strong>🚛 ${rota.placa_cegonha||'—'}</strong>${rota.motorista_1?' · 👤 '+rota.motorista_1:''}${rota.data_saida?' · 🕒 '+new Date(rota.data_saida+'T12:00').toLocaleDateString('pt-BR'):''}</div>
+      <div class="text-muted" style="font-size:.85rem">${rota.nome||''}${rota.carga_enviada_em?' · ✅ enviada '+new Date(rota.carga_enviada_em).toLocaleString('pt-BR'):''}</div>
+    </div>
+    ${tabela('✅ Prontos no pátio (pode carregar)', prontos, true, 'Nenhum carro pronto ainda.')}
+    ${tabela('⏳ Aguardando coleta (equipe vai trazer)', aguardando, false, 'Nada pendente de coleta. 👌')}`;
+}
+
+// Logística: abre o romaneio e envia a carga
+function abrirFecharEnviarCarga(rotaId){
+  if (typeof bloquearSeNaoLogistica === 'function' && bloquearSeNaoLogistica('fechar e enviar a carga')) return;
+  const old = document.getElementById('modalRomaneio'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalRomaneio';
+  div.className = 'modal-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:760px;width:95%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h2 style="margin:0">📋 Romaneio de carregamento</h2>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalRomaneio').remove()">✕</button>
+      </div>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Confira a carga e envie ao motorista. Ele verá esta lista no app dele.</p>
+      <div id="romaneioConteudo">${_romaneioHTML(rotaId)}</div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1" onclick="_enviarCargaMotorista(${rotaId})">📤 Fechar e enviar ao motorista</button>
+        <button class="btn btn-secondary" onclick="window.print()">🖨️ Imprimir</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _enviarCargaMotorista(rotaId){
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    await supabase.from('rotas_planejadas').update({
+      carga_enviada_em: new Date().toISOString(), carga_enviada_por: usuario
+    }).eq('id', rotaId);
+    const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
+    if (rota){ rota.carga_enviada_em = new Date().toISOString(); rota.carga_enviada_por = usuario; }
+    document.getElementById('modalRomaneio')?.remove();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', '📤 Carga enviada ao motorista — ele já pode ver o romaneio no app.', 'success');
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+  } catch(e){ alert('Erro ao enviar: '+(e.message||e)); }
+}
+
+// Motorista: minhas cargas (romaneios enviados)
+function renderizarRomaneiosMotorista(){
+  const cont = document.getElementById('romaneiosMotoristaWrap');
+  if (!cont) return;
+  let minhas = [];
+  if (typeof nomesDoMotoristaLogado === 'function'){
+    const { nomes } = nomesDoMotoristaLogado();
+    minhas = (rotasGlobais||[]).filter(r => r.carga_enviada_em && r.status !== 'concluida' && r.status !== 'cancelada' &&
+      nomes.has((r.motorista_1||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()));
+  }
+  if (minhas.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhuma carga enviada para você no momento.</p>'; return; }
+  cont.innerHTML = minhas.map(r => `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:12px;padding:14px;margin-bottom:12px">${_romaneioHTML(r.id)}</div>`).join('');
 }
