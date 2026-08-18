@@ -560,14 +560,6 @@ function mostrarTelaMotorista() {
                 <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">O que já está pronto no pátio e o que a equipe ainda vai coletar para a sua carga.</p>
                 <div id="romaneiosMotoristaWrap"><p class="text-muted">Carregando...</p></div>
             </div>
-            <div class="card" id="cardExtratoMotorista">
-                <div class="painel-header-bar">
-                    <h2>📄 Meu extrato</h2>
-                    <button class="btn btn-secondary btn-sm" onclick="carregarExtratoMotorista()">↻ Atualizar</button>
-                </div>
-                <div id="extratoMotoristaResumo" class="extrato-resumo"></div>
-                <div id="extratoMotoristaLista"><p class="text-muted">Carregando…</p></div>
-            </div>
             <div class="card" id="cardSolicitacaoEPI" style="display:none">
                 <h2>🦺 Solicitar EPI / Uniforme</h2>
                 <div class="epi-motorista-form">
@@ -595,7 +587,7 @@ function mostrarTelaMotorista() {
                 <h3 style="margin-top:1.2rem">Minhas solicitações</h3>
                 <div id="listaMinhasEPI"><p class="text-muted">Carregando...</p></div>
             </div>
-            <div class="card" id="cardDocsMotorista">
+            <div class="card card-minimizavel" id="cardDocsMotorista">
                 <div class="painel-header-bar">
                     <h2>📄 Documentos da viagem (manifesto / CTe)</h2>
                     <button class="btn btn-secondary btn-sm" onclick="renderizarDocsMotorista()">↻ Atualizar</button>
@@ -603,18 +595,18 @@ function mostrarTelaMotorista() {
                 <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Documentos enviados pelo fiscal para a sua viagem atual. Somem quando a viagem é finalizada.</p>
                 <div id="docsMotoristaWrap"><p class="text-muted">Carregando...</p></div>
             </div>
-            <div class="card" id="cardViagensMotorista">
+            <div class="card card-minimizavel" id="cardViagensMotorista">
                 <div class="painel-header-bar">
-                    <h2>📚 Minhas viagens (histórico)</h2>
+                    <h2>📚 Minhas viagens & extrato</h2>
                     <button class="btn btn-secondary btn-sm" onclick="renderizarViagensMotorista()">↻ Atualizar</button>
                 </div>
-                <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Viagens que você já concluiu, com os carros de cada uma. (Somente visualização.)</p>
+                <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Suas viagens concluídas e o que você recebe por elas (pela tabela). Clique numa viagem para ver os carros. (Somente visualização.)</p>
                 <div id="viagensMotoristaWrap"><p class="text-muted">Carregando...</p></div>
             </div>`;
-        setTimeout(() => { if (typeof carregarExtratoMotorista === 'function') carregarExtratoMotorista(); }, 700);
         setTimeout(() => { if (typeof renderizarRomaneiosMotorista === 'function') renderizarRomaneiosMotorista(); }, 750);
         setTimeout(() => { if (typeof renderizarDocsMotorista === 'function') renderizarDocsMotorista(); }, 800);
         setTimeout(() => { if (typeof renderizarViagensMotorista === 'function') renderizarViagensMotorista(); }, 850);
+        setTimeout(() => { if (typeof _initCardsMinimizaveis === 'function') _initCardsMinimizaveis(); }, 950);
         // Importante: existem 2 ".main-content" (telaAdmin e appPrincipal).
         // A tela do motorista precisa ir no main do appPrincipal, que é o visível.
         document.querySelector('#appPrincipal .main-content')?.appendChild(sec);
