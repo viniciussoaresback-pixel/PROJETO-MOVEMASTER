@@ -15,6 +15,7 @@ let equipesEntregaGlobais = [];
 let tabelaPrecosGlobais = [];
 let _corridorRotaCtx = null;
 let precosManuaisTrechoGlobais = [];
+let documentosRotaGlobais = [];
 let entregasLastMileGlobais = [];
 let estadosBrasil = [];
 let cidadesPorEstado = {};
@@ -226,7 +227,7 @@ async function carregarDadosDoSupabase(opts) {
         // Rotas planejadas (tabela opcional — se não existir, segue sem quebrar)
         // Carrega TODAS as tabelas secundárias em paralelo (antes era em fila = lento)
         const [
-          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn, resTab, resTabM
+          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn, resTab, resTabM, resDocs
         ] = await Promise.all([
           supabase.from('rotas_planejadas').select('*').order('data_saida', { ascending: true }),
           supabase.from('agendamentos_manutencao').select('*').order('data_hora', { ascending: true }),
@@ -238,7 +239,8 @@ async function carregarDadosDoSupabase(opts) {
           supabase.from('equipes_entrega').select('*').order('nome'),
           supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false }),
           supabase.from('tabela_precos').select('*').order('cidade_origem'),
-          supabase.from('precos_manuais_trecho').select('*')
+          supabase.from('precos_manuais_trecho').select('*'),
+          supabase.from('documentos_rota').select('*').order('enviado_em', { ascending:false })
         ].map(q => q.then(r => r).catch(() => ({ data: null }))));
 
         rotasGlobais = resRotas.data || [];
@@ -253,6 +255,7 @@ async function carregarDadosDoSupabase(opts) {
         entregasLastMileGlobais = resEn.data || [];
         tabelaPrecosGlobais = resTab.data || [];
         precosManuaisTrechoGlobais = resTabM.data || [];
+        documentosRotaGlobais = resDocs.data || [];
 
         // Folgas (tabela opcional) — mantém sua própria função
         if (typeof carregarFolgas === 'function') { try { await carregarFolgas(); } catch(e){} }
@@ -8128,6 +8131,19 @@ async function mudarStatusRota(rotaId, novoStatus) {
         const { error } = await supabase.from('rotas_planejadas')
             .update({ status: novoStatus }).eq('id', rotaId);
         if (error) throw error;
+        // Ao concluir, limpa os documentos (manifesto/CTe) da rota — controle do que está em aberto
+        if (novoStatus === 'concluida'){
+            const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(rotaId));
+            for (const d of docs){
+                try {
+                    await supabase.from('documentos_rota').delete().eq('id', d.id);
+                    // tenta remover o arquivo do storage (caminho após o domínio público)
+                    const m = (d.url||'').split('/movemaster-arquivos/')[1];
+                    if (m) await supabase.storage.from('movemaster-arquivos').remove([m]);
+                } catch(_){}
+            }
+            documentosRotaGlobais = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)!==String(rotaId));
+        }
         await carregarDadosDoSupabase();
         renderizarRotas();
     } catch (e) {
@@ -11917,8 +11933,8 @@ function renderizarAvancarPedidos(){
 // Estados: a_cobrar -> cobrado -> pago -> confirmado
 // ============================================================
 let _cobFiltro = '';
-const _COB_LABEL = { a_cobrar:'A cobrar', cobrado:'Cobrado', pago:'Pago', confirmado:'Confirmado' };
-const _COB_COR   = { a_cobrar:'#fbbf24', cobrado:'#60a5fa', pago:'#a78bfa', confirmado:'#4ade80' };
+const _COB_LABEL = { a_cobrar:'A cobrar', cobrado:'Cobrado', pago:'Pago', confirmado:'Confirmado', nao_cobro:'Financeiro cobra', cortesia:'Cortesia' };
+const _COB_COR   = { a_cobrar:'#fbbf24', cobrado:'#60a5fa', pago:'#a78bfa', confirmado:'#4ade80', nao_cobro:'#fb923c', cortesia:'#9ca3af' };
 
 function filtrarCobranca(status, btn){
   _cobFiltro = status;
@@ -11940,24 +11956,38 @@ function renderizarCobranca(){
   const ehComercial  = ['comercial','admin'].includes(typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
   const busca = _norm(document.getElementById('cobrancaBusca')?.value || '');
 
-  // só pedidos que já geram receita (entregues ou com frete definido), não cancelados
-  let lista = (pedidosGlobais || []).filter(p => (p.status !== 'Cancelado') && Number(p.valorFrete||0) > 0);
+  // Cortesia sai da receita: não aparece na cobrança nem nos totais (fica só auditável em filtro próprio)
+  let lista = (pedidosGlobais || []).filter(p => (p.status !== 'Cancelado') && Number(p.valorFrete||0) > 0 && (p.cobrancaStatus||'a_cobrar') !== 'cortesia');
   if (_cobFiltro) lista = lista.filter(p => (p.cobrancaStatus||'a_cobrar') === _cobFiltro);
   if (busca) lista = lista.filter(p =>
     _norm(`${p.cliente||''} ${p.placa||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} #${p.id}`).includes(busca));
+  // filtro por período (data de entrega/solicitação)
+  const fDe = document.getElementById('cobDataDe')?.value || '';
+  const fAte = document.getElementById('cobDataAte')?.value || '';
+  const dataDoPedido = p => (p.dataEntregaReal || p.data_entrega_real || p.dataSolicitacao || '').slice(0,10);
+  if (fDe) lista = lista.filter(p => { const d = dataDoPedido(p); return d && d >= fDe; });
+  if (fAte) lista = lista.filter(p => { const d = dataDoPedido(p); return d && d <= fAte; });
+  // filtro por categoria de cliente
+  const fCat = document.getElementById('cobCategoria')?.value || '';
+  if (fCat){
+    const tipoPorCliente = {};
+    (clientesGlobais||[]).forEach(c => { if (c.nome) tipoPorCliente[c.nome] = c.tipo_cliente || ''; });
+    lista = lista.filter(p => (tipoPorCliente[p.cliente]||'') === fCat);
+  }
 
-  // resumo por status
+  // resumo por status (cortesia fora — não gera receita)
   const soma = {};
-  (pedidosGlobais||[]).filter(p => p.status!=='Cancelado' && Number(p.valorFrete||0)>0)
+  (pedidosGlobais||[]).filter(p => p.status!=='Cancelado' && Number(p.valorFrete||0)>0 && (p.cobrancaStatus||'a_cobrar')!=='cortesia')
     .forEach(p => { const s = p.cobrancaStatus||'a_cobrar'; soma[s] = (soma[s]||0) + Number(p.valorFrete||0); });
-  const resumo = ['a_cobrar','cobrado','pago','confirmado'].map(s =>
+  const resumo = ['a_cobrar','nao_cobro','cobrado','pago','confirmado'].map(s =>
     `<span class="cob-resumo-item">${_cobPill(s)} R$ ${Number(soma[s]||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>`).join('');
 
-  // Alerta de atrasadas: entregue há +15 dias e ainda não confirmado (mesma régua da Conferência de Receitas)
+  // Alerta de atrasadas: entregue há +15 dias e ainda não confirmado (ignora cortesia)
   const ATRASO = 15;
   const atrasadas = (pedidosGlobais||[]).filter(p => {
     if (p.status !== 'Entregue') return false;
-    if ((p.cobrancaStatus||'a_cobrar') === 'confirmado' || p.receitaConfirmada) return false;
+    const st = p.cobrancaStatus||'a_cobrar';
+    if (st === 'confirmado' || st === 'cortesia' || p.receitaConfirmada) return false;
     const d = p.dataEntregaReal || p.data_entrega_real || p.dataSolicitacao;
     return d && (Date.now() - new Date(d).getTime())/86400000 >= ATRASO;
   });
@@ -11979,8 +12009,14 @@ function renderizarCobranca(){
         // Comercial conduz até "pago"; Financeiro confirma
         if (ehComercial && st === 'a_cobrar') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'cobrado')">Marcar cobrado</button>`;
         if (ehComercial && st === 'cobrado') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'pago')">Marcar pago</button>`;
+        // Comercial passa a cobrança pro financeiro
+        if (ehComercial && st === 'a_cobrar') acoes += `<button class="btn btn-sm btn-secondary" onclick="marcarCobranca(${p.id},'nao_cobro')" title="Eu não cobro este cliente — o financeiro cobra">🟠 Não cobro</button>`;
+        // Financeiro assume os "não cobro"
+        if (ehFinanceiro && st === 'nao_cobro') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'cobrado')" title="Financeiro assume a cobrança">Assumir cobrança</button>`;
         if (ehFinanceiro && st === 'pago') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'confirmado')">✅ Confirmar recebimento</button>`;
-        if ((ehComercial || ehFinanceiro) && st !== 'a_cobrar') acoes += `<button class="btn btn-sm btn-secondary" onclick="marcarCobranca(${p.id},'_voltar')" title="Voltar um passo">↩️</button>`;
+        if ((ehComercial || ehFinanceiro) && !['a_cobrar','cortesia'].includes(st)) acoes += `<button class="btn btn-sm btn-secondary" onclick="marcarCobranca(${p.id},'_voltar')" title="Voltar um passo">↩️</button>`;
+        // Cortesia (discreto): só comercial, só quando ainda a cobrar
+        if (ehComercial && st === 'a_cobrar') acoes += `<button class="btn btn-sm" style="opacity:.55;font-size:.72rem" onclick="marcarCobranca(${p.id},'cortesia')" title="Cortesia — serviço gratuito, não gera receita">cortesia</button>`;
         return `<tr class="corr-tr">
           <td class="ct-id">#${p.id}</td>
           <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
@@ -11998,19 +12034,27 @@ function renderizarCobranca(){
 async function marcarCobranca(pedidoId, novo){
   const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
   if (!p || !supabase) return;
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  // Só o comercial marca "não cobro" e "cortesia"
+  if ((novo === 'nao_cobro' || novo === 'cortesia') && !['comercial','admin'].includes(perfil)){
+    alert('Apenas o Comercial pode marcar esta opção.'); return;
+  }
+  if (novo === 'cortesia' && !confirm(`Marcar #${p.id} como CORTESIA?\n\nServiço gratuito — sai da receita e não será cobrado. Use apenas em casos raros.`)) return;
   const fluxo = ['a_cobrar','cobrado','pago','confirmado'];
   let alvo = novo;
   if (novo === '_voltar'){
-    const i = fluxo.indexOf(p.cobrancaStatus||'a_cobrar');
-    alvo = fluxo[Math.max(0, i-1)];
+    const st = p.cobrancaStatus||'a_cobrar';
+    if (st === 'nao_cobro') alvo = 'a_cobrar'; // devolve pro comercial
+    else { const i = fluxo.indexOf(st); alvo = fluxo[Math.max(0, i-1)]; }
   }
   const usuario = document.getElementById('usuarioLogado')?.textContent || '';
-  const upd = { cobranca_status: alvo };
   const agora = new Date().toISOString();
+  const upd = { cobranca_status: alvo };
+  if (alvo === 'nao_cobro'){ upd.cobrado_por = usuario; } // registra quem passou pro financeiro
+  if (alvo === 'cortesia'){ upd.cobrado_por = usuario; }
   if (alvo === 'cobrado'){ upd.cobrado_em = agora; upd.cobrado_por = usuario; }
   if (alvo === 'pago'){ upd.pago_em = agora; upd.pago_por = usuario; }
   if (alvo === 'confirmado'){ upd.pagto_confirmado_em = agora; upd.pagto_confirmado_por = usuario;
-    // Sincroniza com a Conferência de Receitas (mesma verdade: dinheiro recebido)
     upd.receita_confirmada = true; upd.receita_confirmada_em = agora; upd.receita_confirmada_por = usuario;
   }
   try {
@@ -13057,6 +13101,7 @@ async function carregarRelatorioFaturamento(){
         const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pid));
         if (!p) return;
         if ((p.status||'') !== 'Entregue') return; // só entregues
+        if ((p.cobrancaStatus||'') === 'cortesia') return; // cortesia não gera receita
         linhas.push({
           id: p.id, cteNumero: e.cte_numero, dataCte,
           cliente: p.cliente || '—', tipoCliente: TIPOS_CLIENTE[tipoPorCliente[p.cliente]] || '—',
@@ -13469,4 +13514,144 @@ function _renderRotaVeiculosEditor(rotaId){
   cont.innerHTML = `
     <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 .6rem">${carros.length} veículo(s). Abra o romaneio para marcar quais estão no pátio, informar onde está cada carro e gerar o PDF do motorista.</p>
     <button type="button" class="btn btn-secondary btn-sm" onclick="abrirFecharEnviarCarga(${rotaId})">📋 Abrir romaneio / localização dos carros</button>`;
+}
+
+// ============================================================
+// ÁREA DO MOTORISTA: documentos (manifesto/CTe) + histórico de viagens
+// ============================================================
+// Documentos da viagem ATIVA do motorista (some quando a rota é finalizada)
+function renderizarDocsMotorista(){
+  const cont = document.getElementById('docsMotoristaWrap');
+  if (!cont) return;
+  let rotasAtivas = [];
+  if (typeof nomesDoMotoristaLogado === 'function'){
+    const { nomes } = nomesDoMotoristaLogado();
+    rotasAtivas = (rotasGlobais||[]).filter(r =>
+      r.status !== 'concluida' && r.status !== 'cancelada' &&
+      nomes.has((r.motorista_1||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()));
+  }
+  const rotaIds = rotasAtivas.map(r => String(r.id));
+  const docs = (documentosRotaGlobais||[]).filter(d => rotaIds.includes(String(d.rota_id)));
+  if (docs.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhum documento na sua viagem atual.</p>'; return; }
+  cont.innerHTML = docs.map(d => {
+    const rota = rotasAtivas.find(r => String(r.id)===String(d.rota_id));
+    const icone = d.tipo === 'cte' ? '🧾' : '📋';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:10px;margin-bottom:8px">
+      <span style="font-size:1.4rem">${icone}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${d.tipo === 'cte' ? 'CTe' : 'Manifesto'}${rota?' · '+(rota.nome||('rota #'+rota.id)):''}</div>
+        <div style="font-size:.78rem;color:var(--text-secondary,#9ca3af)">${d.nome_arquivo||''} · enviado ${d.enviado_em?new Date(d.enviado_em).toLocaleDateString('pt-BR'):''}</div>
+      </div>
+      <a class="btn btn-primary btn-sm" href="${d.url}" target="_blank" rel="noopener">📄 Abrir</a>
+    </div>`;
+  }).join('');
+}
+
+// Histórico de viagens do motorista (concluídas) — só leitura
+function renderizarViagensMotorista(){
+  const cont = document.getElementById('viagensMotoristaWrap');
+  if (!cont) return;
+  let viagens = [];
+  if (typeof nomesDoMotoristaLogado === 'function'){
+    const { nomes } = nomesDoMotoristaLogado();
+    viagens = (rotasGlobais||[]).filter(r =>
+      r.status === 'concluida' &&
+      nomes.has((r.motorista_1||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()));
+  }
+  if (viagens.length === 0){ cont.innerHTML = '<p class="text-muted">Você ainda não tem viagens concluídas.</p>'; return; }
+  viagens.sort((a,b)=>(b.data_saida||'').localeCompare(a.data_saida||''));
+  cont.innerHTML = viagens.map(r => {
+    const carros = (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id)===String(r.id));
+    const aberto = _viagensMotAbertas.has(String(r.id));
+    return `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:10px;margin-bottom:8px">
+      <div onclick="_toggleViagemMot('${r.id}')" style="cursor:pointer;padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--accent,#ff6a00)">${aberto?'▾':'▸'}</span>
+        <span>📅 ${r.data_saida?new Date(r.data_saida+'T12:00').toLocaleDateString('pt-BR'):'—'}</span>
+        <span>🚛 <strong>${r.placa_cegonha||'—'}</strong></span>
+        <span class="text-muted">${r.nome||''}</span>
+        <span class="text-muted" style="margin-left:auto">${carros.length} carro(s)</span>
+      </div>
+      ${aberto ? `<table class="corr-tabela"><thead><tr><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
+        <tbody>${carros.map(p=>`<tr class="corr-tr">
+          <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
+          <td class="ct-modelo">${p.modelo||'—'}</td>
+          <td class="ct-rota">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></td>
+          <td class="ct-cli">${p.cliente||'—'}</td>
+        </tr>`).join('')}</tbody></table>` : ''}
+    </div>`;
+  }).join('');
+}
+let _viagensMotAbertas = new Set();
+function _toggleViagemMot(id){
+  const k = String(id);
+  if (_viagensMotAbertas.has(k)) _viagensMotAbertas.delete(k); else _viagensMotAbertas.add(k);
+  renderizarViagensMotorista();
+}
+
+// ============================================================
+// FISCAL: enviar manifesto/CTe (PDF) ao motorista da rota
+// ============================================================
+function renderizarEnvioDocsFiscal(){
+  const cont = document.getElementById('envioDocsFiscalWrap');
+  if (!cont) return;
+  // rotas ativas (planejada ou em andamento) com motorista definido
+  const rotas = (rotasGlobais||[]).filter(r =>
+    (r.status === 'planejada' || r.status === 'em_andamento') && r.placa_cegonha);
+  if (rotas.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhuma rota ativa para enviar documentos.</p>'; return; }
+  cont.innerHTML = rotas.map(r => {
+    const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(r.id));
+    const temMan = docs.find(d => d.tipo==='manifesto');
+    const temCte = docs.find(d => d.tipo==='cte');
+    return `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:10px;padding:12px 14px;margin-bottom:10px">
+      <div style="font-weight:600;margin-bottom:4px">🚛 ${r.placa_cegonha} · ${r.nome||('rota #'+r.id)}${r.motorista_1?' · 👤 '+r.motorista_1:''}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+        <div>
+          <label style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">📋 Manifesto (PDF) ${temMan?'✅':''}</label><br>
+          <input type="file" id="docMan_${r.id}" accept="application/pdf" style="font-size:.8rem">
+          <button class="btn btn-sm btn-primary" onclick="_enviarDocRota(${r.id},'manifesto')">Enviar</button>
+          ${temMan?`<a href="${temMan.url}" target="_blank" class="btn btn-sm btn-secondary">ver</a> <button class="btn btn-sm btn-secondary" onclick="_excluirDocRota(${temMan.id})">🗑️</button>`:''}
+        </div>
+        <div>
+          <label style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">🧾 CTe (PDF) ${temCte?'✅':''}</label><br>
+          <input type="file" id="docCte_${r.id}" accept="application/pdf" style="font-size:.8rem">
+          <button class="btn btn-sm btn-primary" onclick="_enviarDocRota(${r.id},'cte')">Enviar</button>
+          ${temCte?`<a href="${temCte.url}" target="_blank" class="btn btn-sm btn-secondary">ver</a> <button class="btn btn-sm btn-secondary" onclick="_excluirDocRota(${temCte.id})">🗑️</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function _enviarDocRota(rotaId, tipo){
+  const input = document.getElementById((tipo==='cte'?'docCte_':'docMan_')+rotaId);
+  const arquivo = input?.files?.[0];
+  if (!arquivo){ alert('Escolha um arquivo PDF.'); return; }
+  if (arquivo.type !== 'application/pdf'){ alert('O arquivo deve ser PDF.'); return; }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Fiscal';
+  try {
+    const nomeArq = `documentos/${rotaId}/${tipo}_${Date.now()}.pdf`;
+    const { error: upErr } = await supabase.storage.from('movemaster-arquivos').upload(nomeArq, arquivo, { upsert: true });
+    if (upErr) throw upErr;
+    const { data: urlData } = supabase.storage.from('movemaster-arquivos').getPublicUrl(nomeArq);
+    const url = urlData?.publicUrl || '';
+    // remove doc anterior do mesmo tipo (só um manifesto e um CTe por rota)
+    const anterior = (documentosRotaGlobais||[]).find(d => String(d.rota_id)===String(rotaId) && d.tipo===tipo);
+    if (anterior){ await supabase.from('documentos_rota').delete().eq('id', anterior.id); documentosRotaGlobais = documentosRotaGlobais.filter(d=>d.id!==anterior.id); }
+    const { data, error } = await supabase.from('documentos_rota').insert({
+      rota_id: rotaId, tipo, nome_arquivo: arquivo.name, url, enviado_por: usuario
+    }).select();
+    if (error) throw error;
+    if (data && data[0]) documentosRotaGlobais.push(data[0]);
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFiscal', `📄 ${tipo==='cte'?'CTe':'Manifesto'} enviado ao motorista.`, 'success');
+    renderizarEnvioDocsFiscal();
+  } catch(e){ alert('Erro ao enviar: '+(e.message||e)); }
+}
+
+async function _excluirDocRota(docId){
+  if (!confirm('Remover este documento?')) return;
+  try {
+    await supabase.from('documentos_rota').delete().eq('id', docId);
+    documentosRotaGlobais = documentosRotaGlobais.filter(d=>d.id!==docId);
+    renderizarEnvioDocsFiscal();
+  } catch(e){ alert('Erro: '+(e.message||e)); }
 }
