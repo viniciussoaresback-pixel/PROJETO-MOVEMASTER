@@ -8556,3 +8556,30 @@ input:focus, select:focus, textarea:focus {
 /* Romaneio de carregamento */
 .romaneio-cab { padding:10px 14px; background:var(--surface-2,rgba(255,255,255,.04)); border-radius:10px; margin-bottom:6px; }
 .romaneio-cab strong { font-size:1rem; }
+
+/* Cards minimizáveis */
+.card-chevron { color: var(--accent, #ff6a00); font-size: .85em; }
+.card-recolhido { padding-bottom: 14px; }
+
+/* Jornada do carro — timeline vertical */
+.jornada-tl { position:relative; padding-left:8px; }
+.jornada-ev { display:flex; gap:12px; align-items:flex-start; position:relative; padding-bottom:16px; }
+.jornada-ev:not(:last-child)::before { content:''; position:absolute; left:15px; top:32px; bottom:-4px; width:2px; background:var(--border,rgba(255,255,255,.12)); }
+.jornada-ic { flex:0 0 32px; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; z-index:1; }
+.jornada-ct { flex:1; min-width:0; padding-top:3px; }
+.jornada-tit { font-weight:600; font-size:.9rem; }
+.jornada-det { font-size:.8rem; color:var(--text-secondary,#9ca3af); margin-top:2px; }
+.jornada-data { font-size:.72rem; color:var(--text-tertiary,#6b7280); margin-top:2px; }
+
+/* Dropdown de status estilo planilha */
+.status-planilha-sel {
+  background: var(--surface-1, #1a1c20);
+  border: 1.5px solid #8886;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: .74rem;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 150px;
+}
+.status-planilha-sel:hover { filter: brightness(1.15); }
