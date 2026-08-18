@@ -1285,7 +1285,7 @@ function renderizarPedidosDrag() {
             <div class="drag-card-detalhe">🚗 ${p.modelo || ''} · ${p.placa || ''}${p.referencia ? ` <span class="badge-ref" title="Referência: ${p.referencia}">🔖 ${p.referencia}</span>` : ''}</div>
             ${badgePrazoEntrega(p) ? `<div class="drag-card-detalhe">${badgePrazoEntrega(p)}</div>` : ''}
             <div class="drag-card-bottom" draggable="false">
-                ${cfgStatus?.proximos?.length > 0 ? `<button draggable="false" class="btn-acao-principal" onclick="event.stopPropagation();event.preventDefault();abrirModalStatus(${p.id})">Avançar</button>` : '<span></span>'}
+                ${statusDropdownHTML(p)}
                 ${montarMenuAcoes(p.id, [
                     p.status === 'Pendente' ? { label: 'A definir', icone: '⏳', onclick: `registrarIntencaoADefinir(${p.id})` } : null,
                     { label: 'Histórico', icone: '🕘', onclick: `abrirHistorico(${p.id})` },
@@ -11429,7 +11429,7 @@ function _renderCarteiraGrupos(){
         <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead>
         <tbody>${itens.map(p => {
           // Situação: mostra a cegonha quando alocado / transportando; ou o corredor direcionado
-          let sit = _statusPill(p.status);
+          let sit = statusDropdownHTML(p);
           if (p.placaCegonha){
             sit += ` <span class="corredor-tag-comrota" title="Cegonha alocada">🚛 ${p.placaCegonha}</span>`;
           } else if (p.rotaId || p.rota_id){
@@ -11742,9 +11742,8 @@ function _corredorPedidoLinha(p, c, paradasStr){
     <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
     <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
     <td class="ct-frete">R$ ${frete}</td>
-    <td class="ct-status">${_statusPill(p.status)} ${rotaTag}</td>
+    <td class="ct-status">${statusDropdownHTML(p)} ${rotaTag}</td>
     <td class="ct-acoes">
-      ${podeAvancarPedido(p) ? `<button class="btn-kanban-patio" onclick="abrirModalStatus(${p.id})" title="Avançar status">▶</button>` : ''}
       ${podeAgir ? `
       ${ehManual
         ? `<button class="btn-kanban-patio" onclick="tirarDoCorredorManual(${p.id})" title="Tirar deste corredor">✕</button>`
@@ -12007,7 +12006,7 @@ function renderizarAvancarPedidos(){
             <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
             <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
             <td class="ct-modelo">${p.placaCegonha || '—'}</td>
-            <td class="ct-acoes">${podeAvancarPedido(p) ? `<button class="btn btn-primary btn-sm" onclick="abrirModalStatus(${p.id})">▶ Avançar</button>` : '<span class="text-muted">acompanhando</span>'}</td>
+            <td class="ct-acoes">${statusDropdownHTML(p)}</td>
           </tr>`).join('')}</tbody>
         </table>
       </div>`;
