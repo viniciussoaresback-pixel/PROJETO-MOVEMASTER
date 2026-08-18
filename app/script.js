@@ -4743,25 +4743,14 @@ async function confirmarSairPatio() {
 // #3 · Mostra o botão de avançar SE o passo é do seu setor; senão, mostra
 // um selo "⏳ Aguardando comercial/logística" (didático, bate-volta visível).
 function acaoOuAguardando(p) {
-    const cfg = FLUXO_STATUS[p.status || 'Pendente'];
-    if (!cfg || !cfg.proximos || cfg.proximos.length === 0) return '';
-    let dono = (cfg.perfis || []).filter(x => x !== 'admin')[0] || 'logistica';
-    // Item: pedido criado pela logística não precisa de aprovação do comercial —
-    // a própria logística conduz (ela já está no controle).
-    if (p.origemLancamento === 'logistica' && dono === 'comercial') dono = 'logistica';
+    // Status agora é livre (dropdown). Não há mais "Avançar" nem selo de espera.
+    // Mantém apenas a ação específica de transbordo (definir próxima cegonha).
     const viewer = (typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin');
-    const podeAgir = viewer === 'admin' || viewer === dono;
-    const seloEspera = `<span class="selo-aguardando selo-aguardando-${dono}">⏳ Aguardando ${dono === 'comercial' ? 'comercial' : 'logística'}</span>`;
-
-    // Transbordo: ação direta "sair do pátio → próxima cegonha", sem repetir intenção/coleta
-    if (p.status === 'Transbordo') {
-        return podeAgir
-            ? `<button class="btn-kanban-status btn-sair-patio" onclick="abrirSairPatio(${p.id})" title="Definir a próxima cegonha/motorista e seguir direto para Em Transporte">🚚 Sair do pátio</button>`
-            : seloEspera;
+    const podeAgir = viewer === 'admin' || viewer === 'logistica';
+    if (p.status === 'Transbordo' && podeAgir) {
+        return `<button class="btn-kanban-status btn-sair-patio" onclick="abrirSairPatio(${p.id})" title="Definir a próxima cegonha/motorista e seguir direto para Em Transporte">🚚 Sair do pátio</button>`;
     }
-
-    if (podeAgir) return `<button class="btn-kanban-status" onclick="abrirModalStatus(${p.id})">Avançar</button>`;
-    return seloEspera;
+    return '';
 }
 
 function montarListaComGrupos(pedidos, linhaFn, colspan, mostrarAvancar) {
@@ -4785,9 +4774,7 @@ function montarListaComGrupos(pedidos, linhaFn, colspan, mostrarAvancar) {
             membros.forEach(m => { const st = m.status || 'Pendente'; _cont[st] = (_cont[st] || 0) + 1; });
             const _statusPred = Object.keys(_cont).sort((a, b) => _cont[b] - _cont[a])[0];
             const _temProximo = (FLUXO_STATUS[_statusPred]?.proximos?.length || 0) > 0;
-            const btnAvancar = (mostrarAvancar && _temProximo)
-                ? `<button class="grupo-avancar" onclick="event.stopPropagation(); abrirModalStatusGrupo('${gid}')" title="Avançar o status de todos os carros da carga fechada">⏩ Avançar todos</button>`
-                : '';
+            const btnAvancar = '';
             out.push(`<tr class="grupo-header ${aberto ? 'aberto' : ''}" onclick="toggleGrupo('${gid}')">
                 <td colspan="${colspan}">
                     <span class="grupo-toggle">${aberto ? '▼' : '▶'}</span>
@@ -5422,9 +5409,6 @@ function renderizarAcompanhamento() {
                 ${p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.15);color:#fb923c">🔁 transbordo ${p.cidadeTransbordo}</span>` : ''}</td>
             <td class="acomp-acoes">
                 ${acaoOuAguardando(p)}
-                <button class="btn-kanban-editar" onclick="abrirEdicaoPedido(${p.id})" title="Editar pedido (logística edita sem mudar o status)">✏️</button>
-                ${p.placaCegonha && p.status !== 'Cancelado' ? `<button class="btn-kanban-trechos" onclick="abrirEdicaoTrechos(${p.id})" title="Dividir frete / editar trechos e motoristas da viagem">🛣️</button>` : ''}
-                <button class="btn-kanban-ocorr" onclick="abrirRegistrarOcorrencia(${p.id})" title="Registrar ocorrência (vai para o comercial responsável)">⚠️</button>
                 <button class="btn-kanban-hist" onclick="_toggleJornada(${p.id})" title="Ver a jornada completa deste carro">📜 Jornada</button>
             </td>
         </tr>
@@ -8392,7 +8376,6 @@ function abrirDetalheCarroPatio(pedidoId) {
             <div class="detalhe-carro-acoes">
                 <button class="btn btn-primary" onclick="document.getElementById('modalDetalheCarro').remove();abrirModalPatio(${p.id})">🅿️ ${p.patioAtual ? 'Alterar Pátio' : 'Informar Pátio'}</button>
                 ${p.patioAtual ? `<button class="btn-patio-sair" style="flex:0 0 auto;padding:0 1rem" onclick="retirarDoPatio(${p.id})">📤 Retirar do Pátio</button>` : ''}
-                <button class="btn btn-secondary" onclick="document.getElementById('modalDetalheCarro').remove();abrirModalStatus(${p.id})">Avançar Status</button>
                 <button class="btn btn-secondary" onclick="document.getElementById('modalDetalheCarro').remove();abrirHistorico(${p.id})">Histórico</button>
             </div>
         </div>`;
@@ -10667,7 +10650,7 @@ function renderizarConfirmacaoComercial(){
         <span class="confirma-rota">#${p.id} · ${p.cliente} · ${p.cidadeOrigem}/${p.ufOrigem} → ${p.cidadeDestino}/${p.ufDestino}</span>
         <span>🚛 ${p.placaCegonha || 'A definir'}</span>
         ${aviso}
-        <button class="btn btn-sm btn-primary" onclick="abrirModalStatus(${p.id})">Revisar e confirmar</button>
+        <button class="btn btn-sm btn-primary" onclick="mudarStatusPlanilha(${p.id}, 'Enviado coleta')">✅ Confirmar (libera coleta)</button>
       </div>`;
     }).join('')}
   </div>`;
@@ -11623,7 +11606,7 @@ function _carrosSemCorredorHTML(corredores, vivos){
           <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
           <td>${p.patioAtual ? '🅿️ '+p.patioAtual.split('/')[0] : (p.cidadeOrigem||'—')}</td>
           <td class="ct-rota"><strong>${p.cidadeDestino||'—'}</strong></td>
-          <td class="ct-status">${_statusPill(p.status)}</td>
+          <td class="ct-status">${_statusPillPlanilha(p)}</td>
           <td class="ct-acoes">
             <button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>
             <button class="btn-kanban-patio" onclick="abrirModalPatio(${p.id})" title="Informar pátio">🅿️</button>
@@ -11960,6 +11943,13 @@ function _statusPill(status){
   return `<span class="status-pill-cor" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${s}</span>`;
 }
 
+// Pill de status no MESMO padrão do dropdown planilha (mesmo texto e cor em todo o sistema)
+function _statusPillPlanilha(p){
+  const rotulo = (typeof statusPlanilhaDoPedido === 'function') ? statusPlanilhaDoPedido(p) : (p.status||'—');
+  const cor = (typeof STATUS_PLANILHA !== 'undefined' && STATUS_PLANILHA[rotulo]?.cor) || '#888';
+  return `<span class="status-pill-cor" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${rotulo}</span>`;
+}
+
 // ============================================================
 // Aba "Avançar Pedidos" — esteira por status (logística)
 // Lista tudo que pode avançar, agrupado por status, com 1 clique.
@@ -11982,21 +11972,21 @@ function renderizarAvancarPedidos(){
 
   // agrupa por status atual, na ordem do fluxo
   const grupos = {};
-  lista.forEach(p => { const s = p.status || 'Pendente'; (grupos[s] = grupos[s] || []).push(p); });
-  const ordem = ['Pendente','Intenção Agendada','Aguardando Confirmação','Em Coleta','Em Transporte','Transbordo'];
+  lista.forEach(p => { const s = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : (p.status || 'Pendente'); (grupos[s] = grupos[s] || []).push(p); });
+  const ordem = (typeof STATUS_PLANILHA_LISTA !== 'undefined') ? STATUS_PLANILHA_LISTA : [];
   const chaves = Object.keys(grupos).sort((a,b) => ordem.indexOf(a) - ordem.indexOf(b));
 
   cont.innerHTML = `
-    <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">▶️ Tudo que está esperando um próximo passo, agrupado por status. Clique em <strong>Avançar</strong> para levar o pedido à próxima etapa.</p>
+    <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">📋 Todos os pedidos agrupados por status. Use o seletor de status em cada linha para alterar livremente.</p>
     <div class="carteira-topo">
       <input type="text" id="avancarBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, placa, cidade..." oninput="renderizarAvancarPedidos()" value="${busca.replace(/"/g,'&quot;')}">
       <span class="text-muted">${lista.length} pedido(s) para avançar</span>
     </div>
     ${chaves.length === 0 ? '<p class="text-muted" style="padding:1rem 0">Nada para avançar agora. 👌</p>' : chaves.map(s => {
       const itens = grupos[s];
-      const prox = (FLUXO_STATUS[s]?.proximos || []).join(' / ');
+      const corG = (typeof STATUS_PLANILHA !== 'undefined' && STATUS_PLANILHA[s]?.cor) || '#888';
       return `<div class="carteira-grupo">
-        <div class="carteira-grupo-tit">${_statusPill(s)} <span class="text-muted" style="font-size:.8rem">→ ${prox}</span> <span class="carteira-badge">${itens.length}</span></div>
+        <div class="carteira-grupo-tit"><span class="status-pill-cor" style="background:${corG}22;color:${corG};border:1px solid ${corG}55">${s}</span> <span class="carteira-badge">${itens.length}</span></div>
         <table class="corr-tabela">
           <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Cegonha</th><th></th></tr></thead>
           <tbody>${itens.map(p => `<tr class="corr-tr">
@@ -12538,10 +12528,10 @@ function abrirAvancarStatusRota(rotaId){
     const prox = (FLUXO_STATUS[p.status||'Pendente']?.proximos||[])[0] || '';
     return `<tr class="corr-tr">
       <td><input type="checkbox" class="avr-check" value="${p.id}" checked></td>
-      <td class="ct-id">#${p.id}</td>
+
       <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
       <td class="ct-modelo">${p.modelo||'—'}</td>
-      <td class="ct-status">${_statusPill(p.status)}</td>
+      <td class="ct-status">${_statusPillPlanilha(p)}</td>
       <td class="ct-rota"><span class="cpl-seta">→</span> <strong>${prox}</strong></td>
     </tr>`;
   }).join('') : '';
