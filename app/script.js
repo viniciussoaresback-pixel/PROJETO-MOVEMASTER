@@ -131,6 +131,7 @@ function trocarAba(event) {
         if (typeof renderizarLiberacoesComercial === 'function') renderizarLiberacoesComercial();
         if (typeof renderizarOcorrenciasComercial === 'function') renderizarOcorrenciasComercial();
     }
+    if (typeof _initCardsMinimizaveis === 'function') setTimeout(() => _initCardsMinimizaveis(secao), 200);
 }
 
 // ============================================
@@ -297,6 +298,7 @@ async function carregarDadosDoSupabase(opts) {
                 dataPrevColeta: p.data_prev_coleta,
                 dataPrevEntrega: p.data_prev_entrega,
                 cidadeTransbordo: p.cidade_transbordo || null,
+                statusPlanilha: p.status_planilha || null,
                 transbordoEm: p.transbordo_em || null,
                 patioAtual: p.patio_atual || null,
                 corredorManualId: p.corredor_manual_id || null,
@@ -483,6 +485,10 @@ function adicionarVeiculoExtra() {
                 <label>Placa *</label>
                 <input type="text" class="veiculo-extra-placa" placeholder="Ex: XYZ9876" maxlength="8" style="text-transform:uppercase">
             </div>
+            <div class="form-group" style="max-width:200px">
+                <label>Referência deste carro <span class="label-opcional">(opcional)</span></label>
+                <input type="text" class="veiculo-extra-referencia" placeholder="Se vazio, usa a geral">
+            </div>
             <div class="form-group" style="max-width:180px">
                 <label>Categoria *</label>
                 <select class="veiculo-extra-categoria">
@@ -541,6 +547,7 @@ function coletarVeiculosExtras() {
         const endColeta  = linha.querySelector('.veiculo-extra-end-coleta')?.value.trim() || '';
         const endEntrega = linha.querySelector('.veiculo-extra-end-entrega')?.value.trim() || '';
         const categoria = linha.querySelector('.veiculo-extra-categoria')?.value || '';
+        const referencia = linha.querySelector('.veiculo-extra-referencia')?.value.trim() || '';
         if (!modelo && !placa) continue; // linha vazia, ignora
         if (!modelo || !placa) return null; // linha incompleta
         veiculos.push({
@@ -548,6 +555,7 @@ function coletarVeiculosExtras() {
             placa,
             categoriaVeiculo: categoria || null,
             valorFrete: valorStr ? valorMoedaParaFloat(valorStr) : null,
+            referencia: referencia || null,   // vazio = herda a geral
             enderecoColeta: endColeta,   // vazio = herda do 1º
             enderecoEntrega: endEntrega  // vazio = herda do 1º
         });
@@ -587,7 +595,7 @@ async function salvarPedidoComercial(event) {
         enderecoEntrega: document.getElementById('enderecoEntrega').value,
         valorFrete: valorMoedaParaFloat(document.getElementById('valorFrete').value),
         responsavelComercial: _getResponsavelComercial(),
-        referencia: document.getElementById('referenciaPedido')?.value.trim() || null,
+        referencia: (document.getElementById('referenciaVeiculo1')?.value.trim() || document.getElementById('referenciaPedido')?.value.trim() || null),
         observacao: document.getElementById('observacaoPedido')?.value.trim() || null
     };
 
@@ -675,6 +683,7 @@ async function salvarPedidoComercial(event) {
                         placa: v.placa,
                         categoria_veiculo: v.categoriaVeiculo || dadosParaSalvar.categoria_veiculo || null,
                         valor_frete: _valoresCarro[i + 1],
+                        referencia: v.referencia || dadosParaSalvar.referencia,
                         endereco_coleta:  v.enderecoColeta  || dadosParaSalvar.endereco_coleta,
                         endereco_entrega: v.enderecoEntrega || dadosParaSalvar.endereco_entrega,
                         grupo_id: grupoId
@@ -3649,6 +3658,79 @@ const FLUXO_STATUS = {
     }
 };
 
+// ============================================================
+// STATUS ESTILO PLANILHA (#3) — preparação
+// Lista fixa que o usuário altera livremente. Mapeada sobre os status
+// internos para não quebrar faturamento/cobrança/equipes.
+// _para_interno: como cada status planilha é guardado internamente.
+// ============================================================
+const STATUS_PLANILHA = {
+  'Aguardando coleta': { cor:'#ef4444', interno:'Aguardando Confirmação' },
+  'Não liberado':      { cor:'#a78bfa', interno:'Aguardando Confirmação' },
+  'Enviado coleta':    { cor:'#eab308', interno:'Em Coleta' },
+  'Coletado':          { cor:'#84cc16', interno:'Em Coleta' },
+  'Em transporte':     { cor:'#34d399', interno:'Em Transporte' },
+  'Entregue':          { cor:'#4ade80', interno:'Entregue' }
+};
+const STATUS_PLANILHA_LISTA = Object.keys(STATUS_PLANILHA);
+
+// Status planilha "visível" a partir do estado real do pedido.
+// Guarda o rótulo escolhido em p.statusPlanilha (coluna status_planilha);
+// se não houver, deduz do status interno.
+function statusPlanilhaDoPedido(p){
+  if (!p) return 'Aguardando coleta';
+  if (p.statusPlanilha && STATUS_PLANILHA[p.statusPlanilha]) return p.statusPlanilha;
+  // dedução a partir do interno
+  const st = p.status || 'Pendente';
+  if (st === 'Entregue') return 'Entregue';
+  if (st === 'Em Transporte') return 'Em transporte';
+  if (st === 'Transbordo') return 'Coletado';
+  if (st === 'Em Coleta') return p.patioAtual ? 'Coletado' : 'Enviado coleta';
+  return 'Aguardando coleta';
+}
+
+// Dropdown de status estilo planilha — altera em qualquer tela, sem ordem obrigatória
+function statusDropdownHTML(p){
+  const atual = statusPlanilhaDoPedido(p);
+  const cor = STATUS_PLANILHA[atual]?.cor || '#888';
+  return `<select class="status-planilha-sel" style="border-color:${cor}66;color:${cor}"
+    onchange="mudarStatusPlanilha(${p.id}, this.value)" onclick="event.stopPropagation()">
+    ${STATUS_PLANILHA_LISTA.map(s => `<option value="${s}" ${s===atual?'selected':''}>${s}</option>`).join('')}
+  </select>`;
+}
+
+// Aplica a mudança de status planilha: grava o rótulo + reflete no status interno
+async function mudarStatusPlanilha(pedidoId, novoRotulo){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p || !STATUS_PLANILHA[novoRotulo]) return;
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  if (!['logistica','admin','comercial'].includes(perfil)){ alert('Você não tem permissão para alterar o status.'); renderizarAcompanhamento(); return; }
+  const interno = STATUS_PLANILHA[novoRotulo].interno;
+  const statusAntes = p.status;
+  const rotuloAntes = statusPlanilhaDoPedido(p);
+  try {
+    await supabase.from('pedidos').update({ status: interno, status_planilha: novoRotulo }).eq('id', parseInt(pedidoId));
+    p.status = interno; p.statusPlanilha = novoRotulo;
+    // registra no histórico (mantém a jornada completa)
+    try {
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId),
+        status_anterior: rotuloAntes,
+        status_novo: novoRotulo,
+        usuario_nome: document.getElementById('usuarioLogado')?.textContent || '',
+        usuario_perfil: perfil,
+        observacao: '✏️ status alterado (planilha)'
+      });
+    } catch(_){}
+    if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
+    if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+  } catch(e){
+    alert('Erro ao alterar status: ' + (e.message||e));
+    if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
+  }
+}
+
+
 const ORDEM_STATUS = [
     'Pendente',
     'Intenção Agendada',
@@ -5281,8 +5363,10 @@ function renderizarAcompanhamento() {
 
     if (fStatus === '') {
         lista = lista.filter(p => !['Entregue', 'Cancelado'].includes(p.status)); // Em andamento
+    } else if (fStatus === 'Cancelado') {
+        lista = lista.filter(p => p.status === 'Cancelado');
     } else if (fStatus !== '__todos') {
-        lista = lista.filter(p => p.status === fStatus);
+        lista = lista.filter(p => statusPlanilhaDoPedido(p) === fStatus);
     }
     if (fCam) lista = lista.filter(p => p.placaCegonha === fCam);
 
@@ -5333,16 +5417,18 @@ function renderizarAcompanhamento() {
                 ${p.placaCegonha ? `<strong>${p.placaCegonha}</strong>` : '<span class="tag-adefinir">A DEFINIR</span>'}
                 ${p.motorista1 ? `<br><span style="color:var(--text-tertiary);font-size:0.75rem">👤 ${p.motorista1}</span>` : ''}
             </td>
-            <td><span class="status-badge-inline" style="background:${cor}20;color:${cor};border:1px solid ${cor}40;padding:0.15rem 0.5rem;border-radius:5px;font-size:0.7rem;white-space:nowrap">${p.status}</span>
-                ${p.patioAtual ? `<br><span class="badge-patio" style="margin:0.2rem 0 0">🅿️ ${p.patioAtual}</span>` : ''}</td>
+            <td>${statusDropdownHTML(p)}
+                ${p.patioAtual ? `<br><span class="badge-patio" style="margin:0.2rem 0 0">🅿️ ${p.patioAtual}</span>` : ''}
+                ${p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.15);color:#fb923c">🔁 transbordo ${p.cidadeTransbordo}</span>` : ''}</td>
             <td class="acomp-acoes">
                 ${acaoOuAguardando(p)}
                 <button class="btn-kanban-editar" onclick="abrirEdicaoPedido(${p.id})" title="Editar pedido (logística edita sem mudar o status)">✏️</button>
                 ${p.placaCegonha && p.status !== 'Cancelado' ? `<button class="btn-kanban-trechos" onclick="abrirEdicaoTrechos(${p.id})" title="Dividir frete / editar trechos e motoristas da viagem">🛣️</button>` : ''}
                 <button class="btn-kanban-ocorr" onclick="abrirRegistrarOcorrencia(${p.id})" title="Registrar ocorrência (vai para o comercial responsável)">⚠️</button>
-                <button class="btn-kanban-hist" onclick="abrirHistorico(${p.id})">Hist.</button>
+                <button class="btn-kanban-hist" onclick="_toggleJornada(${p.id})" title="Ver a jornada completa deste carro">📜 Jornada</button>
             </td>
-        </tr>`;
+        </tr>
+        <tr id="jornadaRow_${p.id}" style="display:none"><td colspan="7" style="padding:0;background:var(--surface-2,rgba(255,255,255,.02))"><div id="jornadaBox_${p.id}" style="padding:14px 18px"></div></td></tr>`;
     };
 
     corpo.innerHTML = montarListaComGrupos(lista, _linhaAcompanhamento, 7, true);
@@ -7743,7 +7829,6 @@ function renderizarRotas() {
                 ${r.status === 'planejada' ? `<button class="btn btn-secondary btn-sm" onclick="abrirEditarRota(${r.id})" title="Alterar dados antes de iniciar a viagem">✏️ Editar</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-primary btn-sm" onclick="mudarStatusRota(${r.id}, 'em_andamento')">▶️ Iniciar viagem</button>` : ''}
                 ${r.status === 'planejada' ? `<button class="btn btn-secondary btn-sm" onclick="abrirFecharEnviarCarga(${r.id})" title="Ver o romaneio e enviar a carga ao motorista">📋 Fechar e enviar carga</button>` : ''}
-                ${(r.status === 'planejada' || r.status === 'em_andamento') ? `<button class="btn btn-secondary btn-sm" onclick="abrirAvancarStatusRota(${r.id})" title="Avançar o status dos carros desta rota">⏩ Avançar status</button>` : ''}
                 ${r.status === 'em_andamento' ? `<button class="btn btn-primary btn-sm" onclick="abrirRegistrarChegada(${r.id})" title="Marcar chegada dos carros (motorista ou pátio)">🏁 Registrar chegada</button>` : ''}
                 <button class="btn btn-secondary btn-sm" onclick="mudarStatusRota(${r.id}, 'cancelada')">Cancelar rota</button>
             </div>
@@ -11619,9 +11704,9 @@ function _corredorCardHTML(c, vivos, ci){
                 <div class="corredor-drop-tit">${label} <span class="carteira-badge">${itens.length} carro(s)</span></div>
                 <table class="corr-tabela">
                   <thead><tr>
-                    <th></th><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Ações</th>
+                    <th></th><th>ID</th><th>Solicitado</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Ações</th>
                   </tr></thead>
-                  <tbody>${itens.map(p => _corredorPedidoLinha(p, c, paradasStr)).join('')}</tbody>
+                  <tbody>${[...itens].sort((a,b)=>(a.dataSolicitacao||'').localeCompare(b.dataSolicitacao||'')).map(p => _corredorPedidoLinha(p, c, paradasStr)).join('')}</tbody>
                 </table>
               </div>`;
             }).join('');
@@ -11651,6 +11736,7 @@ function _corredorPedidoLinha(p, c, paradasStr){
   return `<tr class="corr-tr">
     <td>${podeAgir ? `<input type="checkbox" class="corr-check" data-corr="${c.id}" value="${p.id}" ${semR ? 'checked' : ''} onchange="_atualizarContadorCorredor('${c.id}')">` : ''}</td>
     <td class="ct-id">#${p.id}</td>
+    <td class="ct-data">${_fmtDataSolic(p.dataSolicitacao)}</td>
     <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${typeof selCTEDoPedido==='function' ? selCTEDoPedido(p.id) : ''}</td>
     <td class="ct-modelo">${p.modelo||'—'}</td>
     <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
@@ -12793,6 +12879,20 @@ function renderizarKanbanDemanda(){
 // ============================================================
 let _vagasRotaAberta = new Set();
 
+// Formata a data de solicitação do frete (curta) para as listas de priorização
+function _fmtDataSolic(iso){
+  if (!iso) return '—';
+  try {
+    const d = new Date(String(iso).length <= 10 ? iso+'T12:00' : iso);
+    if (isNaN(d)) return '—';
+    const dias = Math.floor((Date.now() - d.getTime())/86400000);
+    const txt = d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
+    // destaca em laranja se está esperando há mais de 3 dias
+    if (dias >= 3) return `<span style="color:#fb923c;font-weight:600" title="há ${dias} dias">${txt}</span>`;
+    return txt;
+  } catch(e){ return '—'; }
+}
+
 function _pedidosQueEncaixamNaRota(r){
   // pedidos ainda não roteirizados cujo origem→destino casa com as paradas da rota
   const seq = (Array.isArray(r.paradas) && r.paradas.length >= 2) ? r.paradas : [];
@@ -12862,9 +12962,10 @@ function renderizarVagasPorRota(){
           <span onclick="_toggleVagasRota('${chave}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ver carros</span>
         </div>
         ${aberto ? `<table class="corr-tabela" style="margin-top:10px">
-          <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
-          <tbody>${c.pedidos.map(p => `<tr class="corr-tr">
+          <thead><tr><th>ID</th><th>Solicitado</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
+          <tbody>${[...c.pedidos].sort((a,b)=>(a.dataSolicitacao||'').localeCompare(b.dataSolicitacao||'')).map(p => `<tr class="corr-tr">
             <td class="ct-id">#${p.id}</td>
+            <td class="ct-data">${_fmtDataSolic(p.dataSolicitacao)}</td>
             <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
             <td class="ct-modelo">${p.modelo||'—'}</td>
             <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
@@ -12906,9 +13007,10 @@ function renderizarVagasPorRota(){
           ${d.encaixam.length > 0 ? `<span onclick="_toggleVagasRota('${r.id}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ${d.encaixam.length} pedido(s) que encaixam</span>` : '<span style="font-size:12px;color:var(--text-secondary,#9ca3af)">sem pedidos soltos que encaixam</span>'}
         </div>
         ${aberto && d.encaixam.length ? `<table class="corr-tabela" style="margin-top:10px">
-          <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
-          <tbody>${d.encaixam.map(p => `<tr class="corr-tr">
+          <thead><tr><th>ID</th><th>Solicitado</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
+          <tbody>${[...d.encaixam].sort((a,b)=>(a.dataSolicitacao||'').localeCompare(b.dataSolicitacao||'')).map(p => `<tr class="corr-tr">
             <td class="ct-id">#${p.id}</td>
+            <td class="ct-data">${_fmtDataSolic(p.dataSolicitacao)}</td>
             <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
             <td class="ct-modelo">${p.modelo||'—'}</td>
             <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
@@ -13560,7 +13662,22 @@ function renderizarViagensMotorista(){
   }
   if (viagens.length === 0){ cont.innerHTML = '<p class="text-muted">Você ainda não tem viagens concluídas.</p>'; return; }
   viagens.sort((a,b)=>(b.data_saida||'').localeCompare(a.data_saida||''));
-  cont.innerHTML = viagens.map(r => {
+  // Resumo: viagens concluídas + faturamento (pela tabela de preços do motorista)
+  let totalCarros = 0, totalFat = 0;
+  viagens.forEach(r => {
+    const carros = (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id)===String(r.id));
+    totalCarros += carros.length;
+    carros.forEach(p => {
+      const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null};
+      totalFat += (vm.valor||0);
+    });
+  });
+  const resumo = `<div class="ocup-resumo" style="margin-bottom:14px">
+    <div class="ocup-resumo-card"><span class="ocup-resumo-label">Viagens concluídas</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${viagens.length}</span></div></div>
+    <div class="ocup-resumo-card"><span class="ocup-resumo-label">Carros transportados</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${totalCarros}</span></div></div>
+    <div class="ocup-resumo-card"><span class="ocup-resumo-label">Faturamento (tabela)</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">R$ ${totalFat.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
+  </div>`;
+  cont.innerHTML = resumo + viagens.map(r => {
     const carros = (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id)===String(r.id));
     const aberto = _viagensMotAbertas.has(String(r.id));
     return `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:10px;margin-bottom:8px">
@@ -13571,13 +13688,16 @@ function renderizarViagensMotorista(){
         <span class="text-muted">${r.nome||''}</span>
         <span class="text-muted" style="margin-left:auto">${carros.length} carro(s)</span>
       </div>
-      ${aberto ? `<table class="corr-tabela"><thead><tr><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
-        <tbody>${carros.map(p=>`<tr class="corr-tr">
+      ${aberto ? `<table class="corr-tabela"><thead><tr><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Valor (tabela)</th></tr></thead>
+        <tbody>${carros.map(p=>{
+          const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null};
+          return `<tr class="corr-tr">
           <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
           <td class="ct-modelo">${p.modelo||'—'}</td>
           <td class="ct-rota">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></td>
           <td class="ct-cli">${p.cliente||'—'}</td>
-        </tr>`).join('')}</tbody></table>` : ''}
+          <td class="ct-frete">${vm.valor!=null?'R$ '+vm.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}</td>
+        </tr>`;}).join('')}</tbody></table>` : ''}
     </div>`;
   }).join('');
 }
@@ -13654,4 +13774,125 @@ async function _excluirDocRota(docId){
     documentosRotaGlobais = documentosRotaGlobais.filter(d=>d.id!==docId);
     renderizarEnvioDocsFiscal();
   } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// ============================================================
+// Cards minimizáveis (clique no título recolhe/expande o conteúdo)
+// Uso: adicionar class="card-minimizavel" no .card; o 1º h2/h3 vira o toggle.
+// ============================================================
+function _initCardsMinimizaveis(scope){
+  const root = scope || document;
+  root.querySelectorAll('.card-minimizavel').forEach(card => {
+    if (card._minInit) return; card._minInit = true;
+    const titulo = card.querySelector('h2, h3');
+    if (!titulo) return;
+    titulo.style.cursor = 'pointer';
+    titulo.style.userSelect = 'none';
+    const chev = document.createElement('span');
+    chev.className = 'card-chevron';
+    chev.textContent = ' ▾';
+    titulo.appendChild(chev);
+    titulo.addEventListener('click', () => {
+      const recolhido = card.classList.toggle('card-recolhido');
+      chev.textContent = recolhido ? ' ▸' : ' ▾';
+      // recolhe tudo do card menos a barra do título
+      Array.from(card.children).forEach(ch => {
+        if (ch === titulo || ch.contains(titulo)) return;
+        ch.style.display = recolhido ? 'none' : '';
+      });
+    });
+  });
+}
+
+// ============================================================
+// JORNADA DO CARRO — timeline completa (expande na linha do acompanhamento)
+// Reúne: histórico de status (cada mudança) + coleta/entrega por equipe
+// + pernas de transbordo (motorista/cegonha de cada trecho).
+// ============================================================
+const _jornadaAbertas = new Set();
+async function _toggleJornada(pedidoId){
+  const row = document.getElementById('jornadaRow_'+pedidoId);
+  const box = document.getElementById('jornadaBox_'+pedidoId);
+  if (!row || !box) return;
+  const k = String(pedidoId);
+  if (_jornadaAbertas.has(k)){
+    _jornadaAbertas.delete(k); row.style.display = 'none'; return;
+  }
+  _jornadaAbertas.add(k); row.style.display = '';
+  box.innerHTML = '<p class="text-muted" style="font-size:.85rem">Carregando jornada...</p>';
+  try {
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+    // 1) histórico de status
+    let hist = [];
+    try {
+      const { data } = await supabase.from('historico_status').select('*').eq('pedido_id', parseInt(pedidoId)).order('created_at', { ascending: true });
+      hist = data || [];
+    } catch(_){}
+    // 2) pernas de transbordo
+    let trechos = [];
+    try {
+      const { data } = await supabase.from('pedido_trechos').select('*').eq('pedido_id', parseInt(pedidoId)).order('ordem', { ascending: true });
+      trechos = data || [];
+    } catch(_){}
+    box.innerHTML = _montarJornadaHTML(p, hist, trechos);
+  } catch(e){
+    box.innerHTML = '<p class="text-muted" style="font-size:.85rem">Não consegui carregar a jornada.</p>';
+  }
+}
+
+function _montarJornadaHTML(p, hist, trechos){
+  const eventos = [];
+  const fmt = iso => iso ? new Date(iso).toLocaleString('pt-BR') : '';
+  // Criação
+  if (p?.dataSolicitacao || p?.createdAt){
+    eventos.push({ icone:'📝', cor:'#9ca3af', quando: p.createdAt || (p.dataSolicitacao+'T12:00'),
+      titulo:'Pedido criado', detalhe: `${p.cliente||''}${p.responsavelComercial?' · resp. '+p.responsavelComercial:''}` });
+  }
+  // Cada mudança de status
+  (hist||[]).forEach(h => {
+    const cor = FLUXO_STATUS[h.status_novo]?.cor || '#4ade80';
+    eventos.push({ icone:'🔄', cor, quando: h.created_at,
+      titulo: `${h.status_anterior||'—'} → ${h.status_novo}`,
+      detalhe: [h.usuario_nome?('👤 '+h.usuario_nome):'', h.usuario_perfil?('('+h.usuario_perfil+')'):'', h.observacao||''].filter(Boolean).join(' ') });
+  });
+  // Coleta pela equipe
+  if (p?.coletaEquipeEm){
+    eventos.push({ icone:'📥', cor:'#60a5fa', quando: p.coletaEquipeEm,
+      titulo:'Coletado pela equipe', detalhe: p.coletaEquipePor?('👤 '+p.coletaEquipePor):'' });
+  }
+  // Pernas de transbordo (cada trecho: motorista + cegonha)
+  (trechos||[]).forEach((t, i) => {
+    eventos.push({ icone:'🚛', cor:'#fb923c', quando: t.created_at,
+      titulo:`Trecho ${t.ordem||i+1}: ${t.origem_cidade||'?'}${t.origem_uf?'/'+t.origem_uf:''} → ${t.destino_cidade||'?'}${t.destino_uf?'/'+t.destino_uf:''}`,
+      detalhe: [t.placa_cegonha?('🚛 '+t.placa_cegonha):'', t.motorista_nome?('👤 '+t.motorista_nome):'', t.km?(t.km+' km'):''].filter(Boolean).join(' · ') });
+  });
+  // Transbordo (marco)
+  if (p?.cidadeTransbordo){
+    eventos.push({ icone:'🔁', cor:'#fbbf24', quando: null,
+      titulo:`Transbordo em ${p.cidadeTransbordo}`, detalhe:'troca de cegonha' });
+  }
+  // Entrega pela equipe
+  if (p?.entregaEquipeEm){
+    eventos.push({ icone:'📤', cor:'#4ade80', quando: p.entregaEquipeEm,
+      titulo:'Entregue pela equipe', detalhe: p.entregaEquipePor?('👤 '+p.entregaEquipePor):'' });
+  }
+  // Ordena por data (eventos sem data vão pro fim, mantendo ordem)
+  eventos.sort((a,b) => {
+    if (!a.quando && !b.quando) return 0;
+    if (!a.quando) return 1;
+    if (!b.quando) return -1;
+    return new Date(a.quando) - new Date(b.quando);
+  });
+  if (eventos.length === 0) return '<p class="text-muted" style="font-size:.85rem">Sem eventos registrados ainda.</p>';
+  return `<div class="jornada-tl">
+    ${eventos.map(e => `
+      <div class="jornada-ev">
+        <div class="jornada-ic" style="background:${e.cor}22;color:${e.cor};border:1px solid ${e.cor}55">${e.icone}</div>
+        <div class="jornada-ct">
+          <div class="jornada-tit">${e.titulo}</div>
+          ${e.detalhe?`<div class="jornada-det">${e.detalhe}</div>`:''}
+          ${e.quando?`<div class="jornada-data">${fmt(e.quando)}</div>`:''}
+        </div>
+      </div>`).join('')}
+  </div>`;
 }
