@@ -595,16 +595,26 @@ function mostrarTelaMotorista() {
                 <h3 style="margin-top:1.2rem">Minhas solicitações</h3>
                 <div id="listaMinhasEPI"><p class="text-muted">Carregando...</p></div>
             </div>
-            <div class="card">
-                <h2>Meus Pedidos</h2>
-                <div id="pedidosMotoristaLista" class="motorista-pedidos-lista">
-                    <p class="text-center text-muted">Carregando pedidos...</p>
+            <div class="card" id="cardDocsMotorista">
+                <div class="painel-header-bar">
+                    <h2>📄 Documentos da viagem (manifesto / CTe)</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="renderizarDocsMotorista()">↻ Atualizar</button>
                 </div>
+                <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Documentos enviados pelo fiscal para a sua viagem atual. Somem quando a viagem é finalizada.</p>
+                <div id="docsMotoristaWrap"><p class="text-muted">Carregando...</p></div>
+            </div>
+            <div class="card" id="cardViagensMotorista">
+                <div class="painel-header-bar">
+                    <h2>📚 Minhas viagens (histórico)</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="renderizarViagensMotorista()">↻ Atualizar</button>
+                </div>
+                <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Viagens que você já concluiu, com os carros de cada uma. (Somente visualização.)</p>
+                <div id="viagensMotoristaWrap"><p class="text-muted">Carregando...</p></div>
             </div>`;
-        // Carregar pedidos do motorista
-        setTimeout(() => carregarPedidosMotorista(), 300);
         setTimeout(() => { if (typeof carregarExtratoMotorista === 'function') carregarExtratoMotorista(); }, 700);
         setTimeout(() => { if (typeof renderizarRomaneiosMotorista === 'function') renderizarRomaneiosMotorista(); }, 750);
+        setTimeout(() => { if (typeof renderizarDocsMotorista === 'function') renderizarDocsMotorista(); }, 800);
+        setTimeout(() => { if (typeof renderizarViagensMotorista === 'function') renderizarViagensMotorista(); }, 850);
         // Importante: existem 2 ".main-content" (telaAdmin e appPrincipal).
         // A tela do motorista precisa ir no main do appPrincipal, que é o visível.
         document.querySelector('#appPrincipal .main-content')?.appendChild(sec);
@@ -648,13 +658,22 @@ function mostrarTelaFiscal() {
                         </tbody>
                     </table>
                 </div>
+            </div>
+            <div class="card" id="cardEnviarDocsFiscal">
+                <div class="card-header-row" style="margin-bottom:0.8rem">
+                    <h3 style="font-size:0.95rem">📄 Enviar Manifesto / CTe ao motorista</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="renderizarEnvioDocsFiscal()">↻ Atualizar</button>
+                </div>
+                <p class="text-muted" style="font-size:.85rem;margin:-0.2rem 0 1rem">Anexe o PDF do manifesto e do CTe da viagem. O motorista vê no app dele; os documentos somem quando a rota é finalizada.</p>
+                <div id="envioDocsFiscalWrap"><p class="text-muted">Carregando...</p></div>
             </div>`;
-        // Correção: a seção era criada mas nunca inserida no DOM (faltava o appendChild)
         document.querySelector('#appPrincipal .main-content')?.appendChild(sec);
         carregarDadosFiscal();
+        setTimeout(() => { if (typeof renderizarEnvioDocsFiscal === 'function') renderizarEnvioDocsFiscal(); }, 300);
     } else {
         sec.classList.add('active');
         carregarDadosFiscal();
+        setTimeout(() => { if (typeof renderizarEnvioDocsFiscal === 'function') renderizarEnvioDocsFiscal(); }, 300);
     }
 }
 
