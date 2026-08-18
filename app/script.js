@@ -13,6 +13,7 @@ let episPendentesGlobais = [];
 let paramReservaTimerMin = 120;
 let equipesEntregaGlobais = [];
 let tabelaPrecosGlobais = [];
+let _corridorRotaCtx = null;
 let precosManuaisTrechoGlobais = [];
 let entregasLastMileGlobais = [];
 let estadosBrasil = [];
@@ -10466,7 +10467,10 @@ function gerarSugestoesRota(){
   _sugestoesCache = sugestoes;
 
   wrap.innerHTML = `<div class="sugestoes-box">
-    <div class="sugestoes-titulo">🧭 Sugestões de rota por corredor (${sugestoes.length}) — para validação da Logística</div>
+    <div class="sugestoes-titulo sugestoes-toggle" onclick="_toggleSugestoes()" style="cursor:pointer;user-select:none">
+      <span id="sugChevron">${_sugestoesAbertas?'▾':'▸'}</span> 🧭 Sugestões de rota por corredor (${sugestoes.length}) — para validação da Logística
+    </div>
+    <div id="sugestoesLista" style="display:${_sugestoesAbertas?'block':'none'}">
     ${sugestoes.map((s, idx) => {
       const ocup = Math.min(100, Math.round((s.itens.length / _CEGONHA_CAP_REF) * 100));
       const corPct = ocup >= 80 ? '#4ade80' : ocup >= 50 ? '#fbbf24' : '#fb923c';
@@ -10490,8 +10494,16 @@ function gerarSugestoesRota(){
         ${(typeof podeAlocarOuTransbordar === 'function' && podeAlocarOuTransbordar()) ? `<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="criarRotaDaSugestao(${idx})">🛣️ Criar rota e alocar ${s.itens.length} carro(s)</button>` : ''}
       </div>`;
     }).join('')}
+    </div>
   </div>`;
   _espelharSugPainel();
+}
+
+let _sugestoesAbertas = false;
+function _toggleSugestoes(){
+  _sugestoesAbertas = !_sugestoesAbertas;
+  document.querySelectorAll('#sugestoesLista').forEach(el => el.style.display = _sugestoesAbertas ? 'block' : 'none');
+  document.querySelectorAll('#sugChevron').forEach(el => el.textContent = _sugestoesAbertas ? '▾' : '▸');
 }
 
 // Espelha as sugestões de rota também no Painel de Acompanhamento
@@ -11238,33 +11250,10 @@ async function criarRotaDaSugestao(idx){
   const s = _sugestoesCache[idx];
   if (!s || !supabase) return;
   const seqCidades = (s.seq || []).filter(Boolean);
-  if (!confirm(`Criar rota "${s.cor.nome}" e alocar ${s.itens.length} carro(s) sugerido(s)?`)) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
-  try {
-    // 1) cria a rota planejada a partir do corredor
-    const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
-      nome: s.cor.nome,
-      corredor_id: s.cor.id || null,
-      paradas: seqCidades,
-      status: 'planejada',
-      criado_por: usuario
-    }).select();
-    if (e1) throw e1;
-    const rotaId = nova && nova[0] && nova[0].id;
-    if (!rotaId) throw new Error('Falha ao criar a rota.');
-
-    // 2) vincula os pedidos sugeridos à rota (mesma coluna do vincular manual)
-    const ids = s.itens.map(p => parseInt(p.id));
-    const { error: e2 } = await supabase.from('pedidos').update({ rota_id: rotaId }).in('id', ids);
-    if (e2) throw e2;
-
-    await recarregarPedidos();
-    if (typeof renderizarRotas === 'function') renderizarRotas();
-    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
-      `✅ Rota "${s.cor.nome}" criada com ${ids.length} carro(s). Agora é só definir a cegonha na aba Gestão Logística.`, 'success');
-  } catch(e){
-    alert('Erro ao criar rota: ' + (e.message || e));
-  }
+  const ids = s.itens.map(p => parseInt(p.id));
+  // Abre o mesmo modal de escolha de cegonha/motorista usado na criação por seleção
+  _corridorRotaCtx = { corredorId: s.cor.id, ids, nome: s.cor.nome, seq: seqCidades };
+  _abrirModalCegonhaRotaCorr(s.cor.nome, ids.length);
 }
 
 // ============================================================
@@ -11775,19 +11764,23 @@ async function criarRotaDoCorredorSelec(corredorId){
   if (!dados || !supabase) return;
   const ids = _checksCorredor(corredorId).filter(c => c.checked).map(c => parseInt(c.value));
   if (ids.length === 0){ alert('Selecione ao menos um carro.'); return; }
-  // Abre modal para escolher a cegonha (motorista padrão vem junto)
   _corridorRotaCtx = { corredorId, ids, nome: dados.nome, seq: dados.seq || [] };
+  _abrirModalCegonhaRotaCorr(dados.nome, ids.length);
+}
+
+// Modal reutilizável de escolha de cegonha/motorista ao criar rota do corredor
+function _abrirModalCegonhaRotaCorr(nome, qtd){
   const cegonhas = (veiculosGlobais||[]).filter(v => (v.tipo === 'cegonha' || v.categoria === 'cegonha' || (v.capacidade||0) > 1) && v.ativo !== false);
   const old = document.getElementById('modalCriarRotaCorr'); if (old) old.remove();
   const div = document.createElement('div');
   div.id = 'modalCriarRotaCorr';
   div.className = 'modal-overlay';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
-  const aviso = ids.length > 11 ? `<p class="cont-excede" style="margin:.3rem 0">⚠️ ${ids.length} carros (acima de 11). Se for guincho/carga maior, tudo bem.</p>` : '';
+  const aviso = qtd > 11 ? `<p class="cont-excede" style="margin:.3rem 0">⚠️ ${qtd} carros (acima de 11). Se for guincho/carga maior, tudo bem.</p>` : '';
   div.innerHTML = `
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:92%;border-radius:14px;padding:22px">
-      <h2 style="margin:0 0 4px">🛣️ Criar rota — ${dados.nome}</h2>
-      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} carro(s) selecionado(s). Escolha a cegonha — o motorista padrão dela já vem junto (pode trocar).</p>
+      <h2 style="margin:0 0 4px">🛣️ Criar rota — ${nome}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${qtd} carro(s). Escolha a cegonha — o motorista padrão dela já vem junto (pode trocar).</p>
       ${aviso}
       <div class="form-group">
         <label>Cegonha / Guincho</label>
@@ -11809,7 +11802,6 @@ async function criarRotaDoCorredorSelec(corredorId){
   document.body.appendChild(div);
 }
 
-let _corridorRotaCtx = null;
 function _rotaCorrPreencheMotorista(){
   const sel = document.getElementById('rotaCorrCegonha');
   const opt = sel?.options[sel.selectedIndex];
@@ -13423,7 +13415,6 @@ async function _salvarLocaisRomaneio(rotaId, enviar){
 function _gerarPdfRomaneio(rotaId){
   const d = _romaneioDados(rotaId);
   if (!d) return;
-  // lê os valores atuais dos campos (se o modal estiver aberto)
   const carros = d.carros.map(p => {
     const noPatio = document.getElementById('rmPatio_'+p.id)?.checked ?? (p.noPatio || !!p.patioAtual);
     const local = document.getElementById('rmLocal_'+p.id)?.value ?? (p.localCarro || p.patioAtual || '');
@@ -13436,24 +13427,20 @@ function _gerarPdfRomaneio(rotaId){
       <td style="text-align:center">${p._noPatio?'✅ Sim':'⏳ Não'}</td>
       <td>${p._local||'—'}</td>
     </tr>`).join('');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Romaneio ${d.rota.nome||''}</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:24px;color:#111}
-      h1{font-size:18px;margin:0 0 4px} .sub{color:#555;font-size:13px;margin-bottom:16px}
-      table{width:100%;border-collapse:collapse;font-size:13px}
-      th,td{border:1px solid #ccc;padding:7px 9px;text-align:left}
-      th{background:#f3f3f3}
-    </style></head><body>
-    <h1>📋 Romaneio de carregamento</h1>
-    <div class="sub">🚛 ${d.rota.placa_cegonha||'—'}${d.rota.motorista_1?' · Motorista: '+d.rota.motorista_1:''}${d.rota.nome?' · '+d.rota.nome:''}<br>Emitido em ${new Date().toLocaleString('pt-BR')}</div>
-    <table><thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>No pátio?</th><th>Onde está o carro</th></tr></thead>
-    <tbody>${linhas}</tbody></table>
-    <p style="margin-top:18px;font-size:12px;color:#555">Total: ${carros.length} veículo(s) · ${carros.filter(c=>c._noPatio).length} no pátio · ${carros.filter(c=>!c._noPatio).length} a coletar/localizar.</p>
-    </body></html>`;
-  const w = window.open('', '_blank');
-  if (!w){ alert('Permita pop-ups para gerar o PDF.'); return; }
-  w.document.write(html); w.document.close();
-  setTimeout(() => w.print(), 400);
+  const corpo = `
+    <div class="resumo">
+      <strong>🚛 Cegonha:</strong> ${d.rota.placa_cegonha||'—'}
+      ${d.rota.motorista_1?' &nbsp;·&nbsp; <strong>👤 Motorista:</strong> '+d.rota.motorista_1:''}
+      ${d.rota.nome?' &nbsp;·&nbsp; <strong>Rota:</strong> '+d.rota.nome:''}
+    </div>
+    <h3>Veículos da carga</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>No pátio?</th><th>Onde está o carro</th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>
+    <div class="totalgeral">Total: ${carros.length} veículo(s) — ${carros.filter(c=>c._noPatio).length} no pátio · ${carros.filter(c=>!c._noPatio).length} a coletar/localizar</div>`;
+  if (typeof _abrirPDF === 'function') _abrirPDF('Romaneio de Carregamento', corpo);
+  else alert('Gerador de PDF indisponível.');
 }
 
 // Motorista: minhas cargas (romaneios enviados)
