@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movemaster | Controle Logístico e Comercial</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="refinamento.css">
-    <link rel="stylesheet" href="refinamento-2.css">
-    <link rel="stylesheet" href="refinamento-3.css">
-
 
     <!-- PWA: permite instalar na tela de início do celular -->
     <link rel="manifest" href="manifest.json">
@@ -403,15 +399,6 @@
                                     <input type="date" id="dataSolicitacao" required>
                                 </div>
                             </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="tipoEntregaPedido">Tipo de entrega</label>
-                                    <select id="tipoEntregaPedido">
-                                        <option value="patio">Pátio</option>
-                                        <option value="estabelecimento">Estabelecimento</option>
-                                    </select>
-                                </div>
-                            </div>
                             <div class="form-row" style="background:rgba(255,255,255,.03);border-radius:10px;padding:10px 12px;margin-bottom:10px">
                                 <div class="form-group">
                                     <label for="formaColeta">📥 Como será a coleta? (combinado do vendedor)</label>
@@ -471,6 +458,10 @@
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
+                                    <label for="referenciaVeiculo1">Referência deste carro <span class="label-opcional">(opcional — se vazio, usa a referência geral)</span></label>
+                                    <input type="text" id="referenciaVeiculo1" placeholder="Ex: REQ-4521 (só deste carro)">
+                                </div>
+                                <div class="form-group">
                                     <label for="categoriaVeiculo">Categoria *</label>
                                     <select id="categoriaVeiculo" required>
                                         <option value="">Selecione...</option>
@@ -481,7 +472,6 @@
                                         <option value="moto">Moto</option>
                                     </select>
                                 </div>
-                                <div class="form-group"></div>
                             </div>
                             <div id="veiculosExtras"></div>
                             <button type="button" class="btn-add-veiculo" onclick="adicionarVeiculoExtra()">
@@ -576,8 +566,8 @@
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="referenciaPedido">Referência (OC, ID, Solicitação)</label>
-                                    <input type="text" id="referenciaPedido" placeholder="Ex: OC 12345, ID cliente, nº solicitação...">
+                                    <label for="referenciaPedido">Referência geral (OC, ID, Solicitação) <span class="label-opcional">— vale para todos os carros, exceto onde você informar uma específica</span></label>
+                                    <input type="text" id="referenciaPedido" placeholder="Ex: OC 12345 — padrão de todos os carros deste lançamento">
                                 </div>
                                 <div class="form-group">
                                     <label for="observacaoPedido">Observações</label>
@@ -590,6 +580,16 @@
                                     </select>
                                     <span class="text-muted" style="font-size:.78rem">Os corredores que combinam com a origem → destino aparecem marcados com ✅. Deixe em branco para o encaixe automático.</span>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="form-row" style="background:rgba(255,255,255,.03);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+                            <div class="form-group">
+                                <label for="tipoEntregaPedido">📍 Onde entrega?</label>
+                                <select id="tipoEntregaPedido">
+                                    <option value="patio">Pátio</option>
+                                    <option value="estabelecimento">Estabelecimento</option>
+                                </select>
                             </div>
                         </div>
 
@@ -1039,11 +1039,11 @@
                                 <label>Status</label>
                                 <select id="acompFiltroStatus" class="filtro-select" onchange="renderizarAcompanhamento()">
                                     <option value="">Em andamento</option>
-                                    <option value="Intenção Agendada">Intenção Agendada</option>
-                                    <option value="Aguardando Confirmação">Aguard. Confirmação</option>
-                                    <option value="Em Coleta">Em Coleta</option>
-                                    <option value="Em Transporte">Em Transporte</option>
-                                    <option value="Transbordo">Transbordo</option>
+                                    <option value="Aguardando coleta">Aguardando coleta</option>
+                                    <option value="Não liberado">Não liberado</option>
+                                    <option value="Enviado coleta">Enviado coleta</option>
+                                    <option value="Coletado">Coletado</option>
+                                    <option value="Em transporte">Em transporte</option>
                                     <option value="Entregue">Entregue</option>
                                     <option value="Cancelado">Cancelado</option>
                                     <option value="__todos">Todos (inclui finalizados)</option>
@@ -1364,7 +1364,7 @@
             </section>
 
             <section id="faturamento" class="tab-content">
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>🦺 Solicitações de EPI / Uniforme (Compras)</h2>
                         <button class="btn btn-secondary btn-sm" onclick="renderizarSolicitacoesEPI()">↻ Atualizar</button>
@@ -1375,7 +1375,7 @@
                     </p>
                     <div id="listaSolicitacoesEPI"><p class="text-muted">Clique em Atualizar para carregar.</p></div>
                 </div>
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>💰 Receitas — conferência de recebimentos</h2>
                         <button class="btn btn-secondary btn-sm" onclick="renderizarReceitas()">↻ Atualizar</button>
@@ -1401,7 +1401,7 @@
                     <div id="resumoReceitas" class="resumo-receitas"></div>
                     <div id="listaReceitas"><p class="text-center text-muted">Clique em Atualizar para carregar.</p></div>
                 </div>
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>🔎 Auditoria — CTE emitido × faturado</h2>
                         <button class="btn btn-secondary btn-sm" id="btnCarregarAuditoria" onclick="renderAuditoriaFaturamento()">↻ Atualizar</button>
@@ -1410,7 +1410,7 @@
                     <p class="text-muted text-sm" style="margin:-0.3rem 0 0.8rem">Cargas com CTE emitido pelo fiscal. As pendentes ainda não foram marcadas como faturadas — não esqueça de faturar.</p>
                     <div id="auditoriaFaturamento"><p class="text-center text-muted">Clique em Atualizar para carregar.</p></div>
                 </div>
-                <div class="card">
+                <div class="card card-minimizavel">
                     <h2>Faturamento — por motorista e por caminhão</h2>
                     <p class="text-muted text-sm" style="margin:-0.3rem 0 0.8rem">Somado dos trechos executados (cada perna: motorista · caminhão · valor). Reflete os transbordos.</p>
                     <div class="filter-section fat-filtros">
@@ -1462,7 +1462,7 @@
                         </table>
                     </div>
                 </div>
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>💵 Tabela de Preços (remuneração do motorista por trecho)</h2>
                         <button class="btn btn-secondary btn-sm" onclick="renderizarTabelaPrecos()">↻ Atualizar</button>
@@ -1488,14 +1488,14 @@
                     </div>
                     <div id="listaTabelaPrecos"><p class="text-muted">Nenhum trecho cadastrado.</p></div>
                 </div>
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>📊 Relatório de Faturamento (fechamento 25→25)</h2>
                     </div>
                     <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Considera <strong>CTe emitido no período</strong> de pedidos já <strong>entregues</strong>. Agrupe por cliente, categoria, motorista, caminhão, veículo ou trecho. Exporta para Excel.</p>
                     <div id="relatFatWrap"></div>
                 </div>
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>👤 Remuneração do Motorista (tabela × frete)</h2>
                         <button class="btn btn-secondary btn-sm" onclick="renderizarRemuneracaoMotorista()">↻ Atualizar</button>
@@ -1504,7 +1504,7 @@
                     <div id="mensagemFaturamento" class="message"></div>
                     <div id="remuneracaoWrap"><p class="text-muted">Gere o relatório de faturamento acima para ver a remuneração.</p></div>
                 </div>
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>📚 Histórico de Cargas por Motorista</h2>
                         <button class="btn btn-secondary btn-sm" onclick="renderizarHistoricoCargas()">↻ Atualizar</button>
@@ -1515,7 +1515,7 @@
             </section>
 
             <section id="cobranca" class="tab-content">
-                <div class="card">
+                <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>💰 Cobrança</h2>
                         <button class="btn btn-secondary btn-sm" onclick="renderizarCobranca()">↻ Atualizar</button>
@@ -1527,7 +1527,20 @@
                         <button class="ocup-chip" data-cob="cobrado" onclick="filtrarCobranca('cobrado', this)">Cobrado</button>
                         <button class="ocup-chip" data-cob="pago" onclick="filtrarCobranca('pago', this)">Pago</button>
                         <button class="ocup-chip" data-cob="confirmado" onclick="filtrarCobranca('confirmado', this)">Confirmado</button>
+                        <button class="ocup-chip" data-cob="nao_cobro" onclick="filtrarCobranca('nao_cobro', this)">🟠 Financeiro cobra</button>
                         <input type="text" id="cobrancaBusca" class="ocup-busca" placeholder="🔍 Cliente, placa, cidade..." oninput="renderizarCobranca()">
+                    </div>
+                    <div class="cobranca-filtros" style="margin-top:6px">
+                        <label class="hist-data">De <input type="date" id="cobDataDe" onchange="renderizarCobranca()"></label>
+                        <label class="hist-data">Até <input type="date" id="cobDataAte" onchange="renderizarCobranca()"></label>
+                        <select id="cobCategoria" class="ocup-busca" style="max-width:200px" onchange="renderizarCobranca()">
+                            <option value="">Todas as categorias</option>
+                            <option value="empresa">Empresa</option>
+                            <option value="concessionaria">Concessionária</option>
+                            <option value="locadora">Locadora</option>
+                            <option value="garagista">Garagista</option>
+                            <option value="particular">Particular</option>
+                        </select>
                     </div>
                     <div id="cobrancaWrap"></div>
                 </div>
