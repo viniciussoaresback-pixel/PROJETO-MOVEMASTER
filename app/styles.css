@@ -6658,13 +6658,13 @@ tr.rec-linha-atrasada td { background: rgba(239,68,68,0.04); }
 .log-passo {
     display: inline-flex !important; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 50%;
-    background: #ff6a00 !important; color: #ffffff !important;
+    background: #fb923c !important; color: #ffffff !important;
     font-size: 0.75rem; font-weight: 800;
     margin-right: 0.4rem; vertical-align: middle;
     box-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
 html[data-tema="claro"] .log-passo,
-[data-tema="claro"] .log-passo { background: #ea580c !important; color: #ffffff !important; }
+[data-tema="claro"] .log-passo { background: #fb923c !important; color: #ffffff !important; }
 .log-grupo-rotulo { color: var(--text-primary, #e5e7eb); font-weight: 700; }
 html[data-tema="claro"] .log-grupo-rotulo,
 [data-tema="claro"] .log-grupo-rotulo { color: #1f2937 !important; }
@@ -8610,7 +8610,7 @@ input:focus, select:focus, textarea:focus {
 html .log-grupo-rotulo span.log-passo,
 html[data-tema="claro"] .log-grupo-rotulo span.log-passo,
 html[data-tema="claro"] span.log-passo {
-    background-color: #ea580c !important;
+    background-color: #fb923c !important;
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
     opacity: 1 !important;
