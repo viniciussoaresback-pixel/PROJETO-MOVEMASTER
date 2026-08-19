@@ -8320,7 +8320,7 @@ async function desvincularPedidoRota(pedidoId) {
 }
 
 async function mudarStatusRota(rotaId, novoStatus) {
-    const labels = { em_andamento: 'iniciar a viagem desta rota', concluida: 'concluir esta rota', cancelada: 'cancelar esta rota' };
+    const labels = { em_andamento: 'iniciar a viagem desta rota', concluida: 'concluir esta rota', cancelada: 'cancelar esta rota (os carros voltam à etapa anterior — a viagem não aconteceu)' };
     if (novoStatus === 'em_andamento'){
         const carros = (pedidosGlobais||[]).filter(p =>
             String(p.rotaId || p.rota_id) === String(rotaId) &&
@@ -8350,6 +8350,33 @@ async function mudarStatusRota(rotaId, novoStatus) {
         const { error } = await supabase.from('rotas_planejadas')
             .update({ status: novoStatus }).eq('id', rotaId);
         if (error) throw error;
+
+        // Ao CANCELAR a rota: a viagem não aconteceu — os carros voltam à etapa anterior.
+        if (novoStatus === 'cancelada'){
+            const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+            const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
+            const carros = (pedidosGlobais||[]).filter(p =>
+                String(p.rotaId || p.rota_id) === String(rotaId) &&
+                !['Entregue','Cancelado'].includes(p.status||''));
+            for (const p of carros){
+                // Se já estava rodando (Em Transporte/Transbordo), volta para "Coletado" (estava pronto no pátio).
+                // Se ainda não tinha saído, volta para "Enviado coleta".
+                const rodando = ['Em Transporte','Transbordo'].includes(p.status||'');
+                const rotuloAntes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
+                const novoRotulo = rodando ? 'Coletado' : 'Enviado coleta';
+                const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo]) ? STATUS_PLANILHA[novoRotulo].interno : 'Em Coleta';
+                try {
+                    await supabase.from('pedidos').update({ status: interno, status_planilha: novoRotulo }).eq('id', p.id);
+                    p.status = interno; p.statusPlanilha = novoRotulo;
+                    await supabase.from('historico_status').insert({
+                        pedido_id: p.id, status_anterior: rotuloAntes, status_novo: novoRotulo,
+                        usuario_nome: usuario, usuario_perfil: perfil,
+                        observacao: '↩️ rota cancelada — a viagem não aconteceu, carro voltou à etapa anterior.'
+                    });
+                } catch(_){}
+            }
+        }
+
         // Ao concluir, limpa os documentos (manifesto/CTe) da rota — controle do que está em aberto
         if (novoStatus === 'concluida'){
             const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(rotaId));
@@ -12021,7 +12048,7 @@ function _abrirModalCegonhaRotaCorr(nome, qtd){
   div.innerHTML = `
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:92%;border-radius:14px;padding:22px">
       <h2 style="margin:0 0 4px">🛣️ Criar rota — ${nome}</h2>
-      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${qtd} carro(s). Escolha a cegonha — o motorista padrão dela já vem junto (pode trocar).</p>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${qtd} carro(s). Escolha a cegonha — o motorista padrão dela já vem junto (pode trocar). <strong>Ou deixe em branco</strong> para criar a rota como <strong>"A definir"</strong> e escolher o caminhão depois.</p>
       ${aviso}
       <div class="form-group">
         <label>Cegonha / Guincho</label>
@@ -12056,6 +12083,9 @@ async function _confirmarCriarRotaCorr(){
   if (!ctx || !supabase) return;
   const cegonha = document.getElementById('rotaCorrCegonha')?.value || null;
   const motorista = document.getElementById('rotaCorrMotorista')?.value.trim() || null;
+  if (!cegonha){
+    if (!confirm('Criar a rota SEM cegonha? Ela ficará como "A definir" e aparecerá na seção "Rotas a definir" das Vagas por Rota, até você escolher o caminhão.')) return;
+  }
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
     const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
@@ -13163,6 +13193,30 @@ function renderizarVagasPorRota(){
             <td class="ct-cli">${p.cliente||'—'}</td>
           </tr>`).join('')}</tbody>
         </table>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // ===== Seção 3: ROTAS A DEFINIR — criadas sem cegonha ainda =====
+  let rotasADefinir = (rotasGlobais||[]).filter(r =>
+    r.status !== 'cancelada' && r.status !== 'concluida' && !r.placa_cegonha);
+  if (busca) rotasADefinir = rotasADefinir.filter(r => _norm(`${r.nome||''} ${r.motorista_1||''}`).includes(busca));
+  html += `<h3 style="font-size:.9rem;color:var(--text-secondary,#9ca3af);margin:1.4rem 0 .8rem;text-transform:uppercase;letter-spacing:.4px">🅿️ Rotas a definir <span class="text-muted" style="text-transform:none">(criadas sem caminhão — escolha a cegonha)</span></h3>`;
+  if (rotasADefinir.length === 0){
+    html += '<p class="text-muted" style="padding:.3rem 0">Nenhuma rota pendente de caminhão.</p>';
+  } else {
+    html += rotasADefinir.map(r => {
+      const carros = _veiculosNaRota(r.id);
+      return `<div style="background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.1));border-left:3px solid #a78bfa;border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:600">${r.nome||'—'}</div>
+            <div style="font-size:12px;color:var(--text-secondary,#9ca3af);margin-top:3px">
+              ⏳ sem cegonha${r.motorista_1?' · 👤 '+r.motorista_1+' (motorista já indicado)':' · motorista a definir'} · ${carros.length} carro(s)
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="abrirEditarRota(${r.id})" title="Escolher a cegonha e o motorista">🚛 Definir caminhão</button>
+        </div>
       </div>`;
     }).join('');
   }
