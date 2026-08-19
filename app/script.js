@@ -8409,25 +8409,31 @@ async function mudarStatusRota(rotaId, novoStatus) {
                 String(p.rotaId || p.rota_id) === String(rotaId) &&
                 !['Entregue','Cancelado'].includes(p.status||''));
             for (const p of carros){
-                // Se já estava rodando (Em Transporte/Transbordo), volta para "Coletado" (estava pronto no pátio).
-                // Se ainda não tinha saído, volta para "Enviado coleta".
-                const rodando = ['Em Transporte','Transbordo'].includes(p.status||'');
                 const rotuloAntes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
-                const novoRotulo = rodando ? 'Coletado' : 'Enviado coleta';
-                const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo]) ? STATUS_PLANILHA[novoRotulo].interno : 'Em Coleta';
+                // Cancelou a rota = como se o planejamento nunca tivesse existido.
+                // Volta ao estado inicial: "Aguardando coleta" e SEM nenhum vínculo de motorista/cegonha/rota/pátio.
+                const novoRotulo = 'Aguardando coleta';
+                const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo]) ? STATUS_PLANILHA[novoRotulo].interno : 'Aguardando Confirmação';
                 try {
                     await supabase.from('pedidos').update({
                         status: interno, status_planilha: novoRotulo,
-                        rota_id: null,            // desvincula da rota cancelada
-                        placa_cegonha: null,      // solta a cegonha
-                        corredor_manual_id: null  // volta a encaixar automaticamente nos corredores
+                        rota_id: null,                 // desvincula da rota
+                        placa_cegonha: null,           // solta a cegonha
+                        motorista_1: null, motorista_2: null,        // solta os motoristas
+                        percent_motorista_1: null, percent_motorista_2: null,
+                        corredor_manual_id: null,      // volta a encaixar automaticamente
+                        patio_atual: null, patio_desde: null  // não está mais em pátio nenhum
                     }).eq('id', p.id);
-                    p.status = interno; p.statusPlanilha = novoRotulo;
-                    p.rotaId = null; p.rota_id = null; p.placaCegonha = null; p.corredorManualId = null;
+                    Object.assign(p, {
+                        status: interno, statusPlanilha: novoRotulo,
+                        rotaId: null, rota_id: null, placaCegonha: null,
+                        motorista1: null, motorista2: null,
+                        corredorManualId: null, patioAtual: null
+                    });
                     await supabase.from('historico_status').insert({
                         pedido_id: p.id, status_anterior: rotuloAntes, status_novo: novoRotulo,
                         usuario_nome: usuario, usuario_perfil: perfil,
-                        observacao: '↩️ rota cancelada — a viagem não aconteceu, carro voltou para os corredores.'
+                        observacao: '↩️ rota cancelada — pedido voltou ao estado inicial (sem motorista/cegonha/rota).'
                     });
                 } catch(_){}
             }
