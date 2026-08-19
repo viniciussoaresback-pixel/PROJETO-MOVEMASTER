@@ -298,6 +298,7 @@ async function carregarDadosDoSupabase(opts) {
                 dataPrevColeta: p.data_prev_coleta,
                 dataPrevEntrega: p.data_prev_entrega,
                 cidadeTransbordo: p.cidade_transbordo || null,
+                transbordoPrevisto: p.transbordo_previsto || null,
                 statusPlanilha: p.status_planilha || null,
                 transbordoEm: p.transbordo_em || null,
                 patioAtual: p.patio_atual || null,
@@ -5585,7 +5586,8 @@ function renderizarAcompanhamento() {
             <td>${statusDropdownHTML(p)}
                 <button class="btn-voltar-etapa" onclick="voltarUmaEtapa(${p.id})" title="Voltar 1 etapa (corrigir)">↩️</button>
                 ${p.patioAtual ? `<br><span class="badge-patio" style="margin:0.2rem 0 0">🅿️ ${p.patioAtual}</span>` : ''}
-                ${p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.15);color:#fb923c">🔁 transbordo ${p.cidadeTransbordo}</span>` : ''}</td>
+                ${p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.15);color:#fb923c">🔁 transbordo ${p.cidadeTransbordo}</span>` : ''}
+                ${p.transbordoPrevisto && !p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.1);color:#fb923c;border:1px dashed rgba(251,146,60,.5)">🔁 previsto em ${p.transbordoPrevisto}</span>` : ''}</td>
             <td class="acomp-acoes">
                 ${acaoOuAguardando(p)}
                 <button class="btn-kanban-hist" onclick="_toggleJornada(${p.id})" title="Ver a jornada completa deste carro">📜 Jornada</button>
@@ -7977,10 +7979,17 @@ function renderizarRotas() {
                     ? '<p class="text-muted text-sm">Nenhum pedido vinculado ainda.</p>'
                     : vinculados.map(p => {
                         const encaixe = _classificarEncaixePedido(p, paradas);
+                        const paradasMeio = paradas.slice(1, -1); // paradas intermediárias (onde pode transbordar)
+                        const selTransb = paradasMeio.length > 0 ? `
+                            <select class="sel-transb-prev" onchange="_setTransbordoPrevisto(${p.id}, this.value)" title="Planejar transbordo nesta parada" onclick="event.stopPropagation()">
+                                <option value="">🔁 transbordo previsto?</option>
+                                ${paradasMeio.map(par => `<option value="${par.replace(/"/g,'&quot;')}" ${p.transbordoPrevisto===par?'selected':''}>🔁 transbordar em ${par}</option>`).join('')}
+                            </select>` : '';
                         return `
                         <div class="rota-pedido-item">
                             <span>#${p.id} · <strong>${p.cliente || ''}</strong> · ${p.modelo || ''} ${p.placa || ''} ${selCTEDoPedido(p.id)}</span>
-                            <span class="rota-pedido-rota">${p.cidadeOrigem}/${p.ufOrigem} → ${p.cidadeDestino}/${p.ufDestino} ${encaixe.selo}</span>
+                            <span class="rota-pedido-rota">${p.cidadeOrigem}/${p.ufOrigem} → ${p.cidadeDestino}/${p.ufDestino} ${encaixe.selo}${p.transbordoPrevisto?` <span class="selo-transb-prev">🔁 ${p.transbordoPrevisto}</span>`:''}</span>
+                            ${selTransb}
                             <button class="btn-kanban-cancelar" onclick="desvincularPedidoRota(${p.id})" title="Tirar desta rota">✕</button>
                         </div>`;
                     }).join('')}
@@ -14287,4 +14296,17 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
       `🔁 #${pedidoId} em transbordo no pátio de ${patio}${corredorId?' e direcionado ao corredor':''}. ${corredorId?'':'Veja em "Aguardando transbordo".'}`, 'success');
   } catch(e){ alert('Erro ao registrar transbordo: '+(e.message||e)); }
+}
+
+// Marca (planejamento) que um pedido vai transbordar em determinada parada — só um lembrete visual
+async function _setTransbordoPrevisto(pedidoId, cidade){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const valor = cidade || null;
+  try {
+    await supabase.from('pedidos').update({ transbordo_previsto: valor }).eq('id', parseInt(pedidoId));
+    p.transbordoPrevisto = valor;
+    if (typeof renderizarRotas === 'function') renderizarRotas();
+    if (typeof exibirMensagem === 'function' && valor) exibirMensagem('mensagemLogistica', `🔁 #${pedidoId}: transbordo planejado em ${valor}.`, 'success');
+  } catch(e){ alert('Erro: '+(e.message||e)); }
 }
