@@ -3748,6 +3748,32 @@ async function _aplicarStatusPlanilha(pedidoId, novoRotulo, rotuloAntes, perfil,
     } catch(_){}
     if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
     if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+
+    // Se marcou Entregue e ERA o último carro da rota, sugere concluir (opção B — só sugere, nunca automático)
+    if (novoRotulo === 'Entregue'){
+      const rotaId = p.rotaId || p.rota_id;
+      if (rotaId){
+        const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
+        if (rota && rota.status !== 'concluida' && rota.status !== 'cancelada'){
+          // Carros em Transbordo "saíram" desta rota (seguem a jornada em outra perna/caminhão),
+          // então NÃO contam para a conclusão. Só contam os que ainda pertencem a esta perna.
+          const carrosRota = (pedidosGlobais||[]).filter(x =>
+            String(x.rotaId||x.rota_id)===String(rotaId) &&
+            x.status !== 'Cancelado' && x.status !== 'Transbordo');
+          const todosEntregues = carrosRota.length > 0 && carrosRota.every(x => (x.status||'') === 'Entregue');
+          if (todosEntregues){
+            const qtdTransb = (pedidosGlobais||[]).filter(x =>
+              String(x.rotaId||x.rota_id)===String(rotaId) && x.status === 'Transbordo').length;
+            const avisoTransb = qtdTransb > 0 ? `\n\n(${qtdTransb} carro(s) fizeram transbordo e seguem em outra perna — não dependem desta rota.)` : '';
+            setTimeout(() => {
+              if (confirm(`✅ Todos os ${carrosRota.length} carro(s) desta perna foram entregues.\n\nDeseja CONCLUIR a rota "${rota.nome||('#'+rota.id)}"?${avisoTransb}\n\n(Se ainda vai adicionar mais carros, clique em Cancelar e conclua depois.)`)){
+                mudarStatusRota(rotaId, 'concluida');
+              }
+            }, 300);
+          }
+        }
+      }
+    }
   } catch(e){
     alert('Erro ao alterar status: ' + (e.message||e));
     if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
