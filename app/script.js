@@ -3670,6 +3670,7 @@ const STATUS_PLANILHA = {
   'Enviado coleta':    { cor:'#eab308', interno:'Em Coleta' },
   'Coletado':          { cor:'#84cc16', interno:'Em Coleta' },
   'Em transporte':     { cor:'#34d399', interno:'Em Transporte' },
+  'Transbordo':        { cor:'#fb923c', interno:'Transbordo' },
   'Entregue':          { cor:'#4ade80', interno:'Entregue' }
 };
 const STATUS_PLANILHA_LISTA = Object.keys(STATUS_PLANILHA);
@@ -3684,7 +3685,7 @@ function statusPlanilhaDoPedido(p){
   const st = p.status || 'Pendente';
   if (st === 'Entregue') return 'Entregue';
   if (st === 'Em Transporte') return 'Em transporte';
-  if (st === 'Transbordo') return 'Coletado';
+  if (st === 'Transbordo') return 'Transbordo';
   if (st === 'Em Coleta') return p.patioAtual ? 'Coletado' : 'Enviado coleta';
   return 'Aguardando coleta';
 }
@@ -3701,7 +3702,7 @@ function statusDropdownHTML(p){
 
 // Aplica a mudança de status planilha: grava o rótulo + reflete no status interno
 // Ordem oficial dos status planilha (para detectar pulos)
-const STATUS_PLANILHA_ORDEM = ['Aguardando coleta','Não liberado','Enviado coleta','Coletado','Em transporte','Entregue'];
+const STATUS_PLANILHA_ORDEM = ['Aguardando coleta','Não liberado','Enviado coleta','Coletado','Em transporte','Transbordo','Entregue'];
 // Etapas que geram DADO de auditoria e que, se puladas, precisam ser preenchidas
 const STATUS_ETAPAS_DADOS = ['Coletado','Em transporte'];
 
@@ -3711,6 +3712,14 @@ async function mudarStatusPlanilha(pedidoId, novoRotulo){
   const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
   if (!['logistica','admin','comercial'].includes(perfil)){ alert('Você não tem permissão para alterar o status.'); renderizarAcompanhamento(); return; }
   const rotuloAntes = statusPlanilhaDoPedido(p);
+
+  // Transbordo tem fluxo próprio: escolher pátio → sugerir/escolher corredor da próxima perna
+  if (novoRotulo === 'Transbordo'){
+    _abrirModalTransbordoStatus(pedidoId, rotuloAntes);
+    if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
+    return;
+  }
+
   // Detecta pulo: se avança mais de 1 etapa para frente, cobra os dados intermediários
   const iAntes = STATUS_PLANILHA_ORDEM.indexOf(rotuloAntes);
   const iNovo = STATUS_PLANILHA_ORDEM.indexOf(novoRotulo);
@@ -14156,4 +14165,115 @@ function _montarJornadaHTML(p, hist, trechos){
         </div>
       </div>`).join('')}
   </div>`;
+}
+
+// ============================================================
+// TRANSBORDO via dropdown de status: escolher pátio → sugerir corredor da próxima perna
+// ============================================================
+function _abrirModalTransbordoStatus(pedidoId, rotuloAntes){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const old = document.getElementById('modalTransbStatus'); if (old) old.remove();
+  const patios = (typeof PATIOS_FIXOS !== 'undefined') ? PATIOS_FIXOS : [];
+  const div = document.createElement('div');
+  div.id = 'modalTransbStatus';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 6px">🔁 Transbordo do #${p.id}</h2>
+      <p class="text-muted" style="font-size:.86rem;margin:.2rem 0 1rem">${p.placa||''} · ${p.modelo||''} · destino final <strong>${p.cidadeDestino||'—'}</strong>. O carro sai do caminhão atual e aguarda a próxima perna.</p>
+      <div class="pulo-etapa">
+        <div class="pulo-etapa-tit">🅿️ Em qual pátio vai ficar?</div>
+        <label>Pátio de transbordo</label>
+        <select id="transbPatio" onchange="_transbSugereCorredor()">
+          <option value="">Selecione o pátio...</option>
+          ${patios.map(pt => `<option value="${pt}">${pt}</option>`).join('')}
+        </select>
+        <label style="margin-top:10px">Direcionar para qual corredor? (próxima perna)</label>
+        <select id="transbCorredor">
+          <option value="">— escolher depois (fica em Aguardando transbordo) —</option>
+        </select>
+        <div id="transbSugestao" style="font-size:.8rem;color:#4ade80;margin-top:6px"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1" onclick="_confirmarTransbordoStatus(${pedidoId}, '${rotuloAntes.replace(/'/g,"\\'")}')">✅ Confirmar transbordo</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalTransbStatus').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+// Sugere o corredor que melhor encaixa a próxima perna (a partir do pátio escolhido → destino final)
+function _transbSugereCorredor(){
+  const patio = document.getElementById('transbPatio')?.value || '';
+  const sel = document.getElementById('transbCorredor');
+  const sug = document.getElementById('transbSugestao');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— escolher depois (fica em Aguardando transbordo) —</option>';
+  if (!patio){ if (sug) sug.textContent = ''; return; }
+  const cidadePatio = patio.split('/')[0].trim().toLowerCase();
+  // corredores cujas paradas incluem o pátio e seguem em frente
+  const corredores = (corredoresGlobais||[]).filter(c => {
+    const paradas = (c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino];
+    return paradas.some(cid => (cid||'').split('/')[0].trim().toLowerCase() === cidadePatio);
+  });
+  corredores.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id; opt.textContent = c.nome;
+    sel.appendChild(opt);
+  });
+  // melhor sugestão: corredor que também passa pelo destino final do carro
+  if (sug){
+    const destino = null;
+    if (corredores.length === 1){ sel.value = corredores[0].id; sug.textContent = `💡 Sugestão: ${corredores[0].nome} (parte de ${patio.split('/')[0]}).`; }
+    else if (corredores.length > 1){ sug.textContent = `💡 ${corredores.length} corredores partem de ${patio.split('/')[0]}. Escolha o que leva ao destino.`; }
+    else { sug.textContent = `Nenhum corredor cadastrado partindo de ${patio.split('/')[0]}. O carro ficará em "Aguardando transbordo".`; }
+  }
+}
+
+async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const patio = document.getElementById('transbPatio')?.value || '';
+  const corredorId = document.getElementById('transbCorredor')?.value || null;
+  if (!patio){ alert('Selecione o pátio onde o carro vai ficar.'); return; }
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || '';
+  const cegonhaAnterior = p.placaCegonha || '';
+  try {
+    const upd = {
+      status: 'Transbordo',
+      status_planilha: 'Transbordo',
+      cidade_transbordo: patio,
+      transbordo_em: new Date().toISOString(),
+      patio_atual: patio,
+      patio_desde: new Date().toISOString(),
+      // sai do caminhão/rota atual — renasce no pátio para a próxima perna
+      placa_cegonha: null, motorista_1: null, motorista_2: null,
+      percent_motorista_1: null, percent_motorista_2: null,
+      rota_id: null,
+      corredor_manual_id: corredorId ? parseInt(corredorId) : null
+    };
+    await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    Object.assign(p, {
+      status:'Transbordo', statusPlanilha:'Transbordo', cidadeTransbordo:patio,
+      patioAtual:patio, placaCegonha:null, motorista1:null, rotaId:null,
+      corredorManualId: corredorId ? parseInt(corredorId) : null
+    });
+    // registra a perna que acabou (para os trechos automáticos usarem depois)
+    try {
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId), status_anterior: rotuloAntes, status_novo: 'Transbordo',
+        usuario_nome: usuario, usuario_perfil: perfil,
+        observacao: `🔁 Transbordo no pátio de ${patio}${cegonhaAnterior?' — chegou com '+cegonhaAnterior:''}${corredorId?' — direcionado a um corredor':' — aguardando definição de corredor'}`
+      });
+    } catch(_){}
+    document.getElementById('modalTransbStatus')?.remove();
+    await recarregarPedidos();
+    if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
+    if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+    if (typeof renderizarVagasPorRota === 'function') renderizarVagasPorRota();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
+      `🔁 #${pedidoId} em transbordo no pátio de ${patio}${corredorId?' e direcionado ao corredor':''}. ${corredorId?'':'Veja em "Aguardando transbordo".'}`, 'success');
+  } catch(e){ alert('Erro ao registrar transbordo: '+(e.message||e)); }
 }
