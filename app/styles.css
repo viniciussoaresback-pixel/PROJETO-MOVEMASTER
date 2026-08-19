@@ -8482,7 +8482,7 @@ input:focus, select:focus, textarea:focus {
 /* ===== Tabela de carros no corredor ===== */
 .corr-tabela { width: 100%; border-collapse: collapse; font-size: .84rem; margin-top: 4px; }
 .corr-tabela thead th { text-align: left; font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted, #9ca3af); font-weight: 700; padding: 4px 8px; border-bottom: 1px solid var(--border, rgba(255,255,255,.12)); white-space: nowrap; }
-.corr-tabela td { padding: 8px; border-bottom: 1px solid var(--border-soft, rgba(255,255,255,.05)); vertical-align: middle; }
+.corr-tabela td { padding: 5px 8px; border-bottom: 1px solid var(--border-soft, rgba(255,255,255,.05)); vertical-align: middle; }
 .corr-tr:hover { background: rgba(255,255,255,.03); }
 .corr-tabela .corr-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent, #ff6a00); }
 .ct-id { color: var(--text-muted, #9ca3af); font-weight: 700; white-space: nowrap; }
@@ -8491,7 +8491,7 @@ input:focus, select:focus, textarea:focus {
 .ct-rota { white-space: nowrap; font-size: .88rem; }
 .ct-rota strong { color: var(--text-primary); }
 .ct-rota .cpl-seta { color: var(--accent, #ff6a00); font-weight: 700; }
-.ct-cli { font-weight: 600; }
+.ct-cli { font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ct-frete { color: #4ade80; font-weight: 700; white-space: nowrap; }
 .ct-status { white-space: nowrap; }
 .ct-acoes { white-space: nowrap; text-align: right; }
@@ -8583,3 +8583,14 @@ input:focus, select:focus, textarea:focus {
   max-width: 150px;
 }
 .status-planilha-sel:hover { filter: brightness(1.15); }
+
+/* Botão voltar 1 etapa */
+.btn-voltar-etapa { background:transparent; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:6px; padding:2px 6px; cursor:pointer; font-size:.8rem; margin-left:4px; opacity:.7; }
+.btn-voltar-etapa:hover { opacity:1; border-color:#fb923c; }
+
+/* Modal de pulo de etapas */
+.pulo-etapa { border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+.pulo-etapa-tit { font-weight:700; margin-bottom:8px; }
+.pulo-etapa label { display:block; font-size:.78rem; color:var(--text-secondary,#9ca3af); margin:8px 0 3px; }
+.pulo-etapa select, .pulo-etapa input { width:100%; padding:8px 10px; border-radius:8px; background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid var(--border,rgba(255,255,255,.12)); color:inherit; }
+.pulo-transbordo-aviso { background:rgba(251,146,60,.12); border:1px solid rgba(251,146,60,.4); color:#fb923c; padding:10px 14px; border-radius:10px; font-size:.84rem; margin-bottom:14px; }
