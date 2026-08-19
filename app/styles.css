@@ -8354,7 +8354,8 @@ input:focus, select:focus, textarea:focus {
 .corredor-chevron { opacity: .6; font-size: .8rem; }
 .corredor-paradas-linha { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 8px 14px; font-size: .82rem; border-top: 1px solid var(--border-soft, rgba(255,255,255,.06)); }
 .corredor-parada { background: var(--accent-soft, rgba(249,115,22,.12)); color: var(--accent, #ff6a00); padding: 1px 8px; border-radius: 6px; font-weight: 600; }
-.corredor-pedidos { padding: 4px 14px 12px; }
+.corredor-pedidos { padding: 4px 14px 12px; overflow-x: auto; }
+.corredor-pedidos .corr-tabela { min-width: 900px; }
 .corredor-pedido-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--border-soft, rgba(255,255,255,.06)); font-size: .86rem; }
 .status-pill-mini { font-size: .72rem; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.08); }
 .corredor-tag-semrota { font-size: .72rem; font-weight: 700; color: #fbbf24; margin-left: auto; }
