@@ -7803,7 +7803,10 @@ function normalizarCidade(s) {
 }
 
 function pedidoEncaixaNaRota(p, paradas) {
-    const origem  = normalizarCidade(`${p.cidadeOrigem}/${p.ufOrigem}`);
+    // Origem = onde o carro está AGORA (pátio atual, se houver) — importante para transbordo.
+    // Um carro parado no pátio de transbordo parte dali para a próxima perna.
+    const origemBase = p.patioAtual ? p.patioAtual : `${p.cidadeOrigem}/${p.ufOrigem}`;
+    const origem  = normalizarCidade(origemBase);
     const destino = normalizarCidade(`${p.cidadeDestino}/${p.ufDestino}`);
     const lista = paradas.map(normalizarCidade);
     const iO = lista.indexOf(origem);
@@ -13218,6 +13221,36 @@ function renderizarVagasPorRota(){
             </div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="abrirEditarRota(${r.id})" title="Escolher a cegonha e o motorista">🚛 Definir caminhão</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ===== Seção 4: AGUARDANDO TRANSBORDO — carros parados no pátio esperando a próxima perna =====
+  let transb = (pedidosGlobais||[]).filter(p =>
+    p.status === 'Transbordo' && !['Entregue','Cancelado'].includes(p.status||''));
+  if (busca) transb = transb.filter(p => _norm(`${p.cliente||''} ${p.placa||''} ${p.patioAtual||''} ${p.cidadeDestino||''}`).includes(busca));
+  html += `<h3 style="font-size:.9rem;color:var(--text-secondary,#9ca3af);margin:1.4rem 0 .8rem;text-transform:uppercase;letter-spacing:.4px">🔁 Aguardando transbordo <span class="text-muted" style="text-transform:none">(no pátio esperando a próxima cegonha)</span></h3>`;
+  if (transb.length === 0){
+    html += '<p class="text-muted" style="padding:.3rem 0">Nenhum carro aguardando transbordo.</p>';
+  } else {
+    html += transb.map(p => {
+      const tempo = (typeof tempoNoPatio==='function' && p.patioDesde) ? tempoNoPatio(p.patioDesde) : null;
+      const chegouCom = p.placaCegonha || '—';
+      return `<div style="background:var(--surface-2,rgba(255,255,255,.04));border:1px solid var(--border,rgba(255,255,255,.1));border-left:3px solid #fb923c;border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:600">🚗 ${p.placa||'—'} · ${p.modelo||''} <span class="text-muted" style="font-weight:400">#${p.id}</span></div>
+            <div style="font-size:12px;color:var(--text-secondary,#9ca3af);margin-top:3px">
+              🅿️ no pátio de <strong>${p.patioAtual||p.cidadeTransbordo||'—'}</strong>${tempo?' ('+tempo+')':''}
+              · 🚛 chegou com <strong>${chegouCom}</strong>
+              · 🏁 destino final <strong>${p.cidadeDestino||'—'}</strong>
+            </div>
+            <div style="font-size:12px;color:#fb923c;margin-top:3px">${p.cliente||''}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="abrirJogarCorredor(${p.id})" title="Encaixar num corredor a partir do pátio atual (próxima perna)">➡️ Próxima perna</button>
+          </div>
         </div>
       </div>`;
     }).join('');
