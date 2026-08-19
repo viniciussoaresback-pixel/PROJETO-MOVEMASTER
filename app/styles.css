@@ -6656,16 +6656,18 @@ tr.rec-linha-atrasada td { background: rgba(239,68,68,0.04); }
    Passos numerados na gestão logística (didático)
    ============================================================ */
 .log-passo {
-    display: inline-flex; align-items: center; justify-content: center;
+    display: inline-flex !important; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 50%;
-    background: #ff6a00; color: #ffffff;
+    background: #ff6a00 !important; color: #ffffff !important;
     font-size: 0.75rem; font-weight: 800;
     margin-right: 0.4rem; vertical-align: middle;
     box-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
-[data-tema="claro"] .log-passo { background: #ea580c; color: #ffffff; }
+html[data-tema="claro"] .log-passo,
+[data-tema="claro"] .log-passo { background: #ea580c !important; color: #ffffff !important; }
 .log-grupo-rotulo { color: var(--text-primary, #e5e7eb); font-weight: 700; }
-[data-tema="claro"] .log-grupo-rotulo { color: #1f2937; }
+html[data-tema="claro"] .log-grupo-rotulo,
+[data-tema="claro"] .log-grupo-rotulo { color: #1f2937 !important; }
 .log-grupo-planejamento .log-tab-btn { background: rgba(96,165,250,0.08); border-color: rgba(96,165,250,0.28); }
 .log-grupo-planejamento .log-tab-btn:hover { border-color: #60a5fa; }
 .log-grupo-planejamento .log-tab-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
@@ -8603,3 +8605,17 @@ input:focus, select:focus, textarea:focus {
 /* Transbordo previsto (planejamento) */
 .selo-transb-prev { background:rgba(251,146,60,.15); color:#fb923c; font-size:.7rem; font-weight:700; padding:1px 7px; border-radius:999px; white-space:nowrap; }
 .sel-transb-prev { background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid rgba(251,146,60,.4); color:#fb923c; border-radius:6px; padding:2px 6px; font-size:.72rem; cursor:pointer; margin-left:6px; }
+
+/* ===== FIX FORTE: número das etapas da logística sempre visível (dark e claro) ===== */
+html .log-grupo-rotulo span.log-passo,
+html[data-tema="claro"] .log-grupo-rotulo span.log-passo,
+html[data-tema="claro"] span.log-passo {
+    background-color: #ea580c !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    opacity: 1 !important;
+    text-shadow: none !important;
+}
+html span.log-passo {
+    -webkit-text-fill-color: #ffffff !important;
+}
