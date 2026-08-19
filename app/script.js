@@ -3700,18 +3700,42 @@ function statusDropdownHTML(p){
 }
 
 // Aplica a mudança de status planilha: grava o rótulo + reflete no status interno
+// Ordem oficial dos status planilha (para detectar pulos)
+const STATUS_PLANILHA_ORDEM = ['Aguardando coleta','Não liberado','Enviado coleta','Coletado','Em transporte','Entregue'];
+// Etapas que geram DADO de auditoria e que, se puladas, precisam ser preenchidas
+const STATUS_ETAPAS_DADOS = ['Coletado','Em transporte'];
+
 async function mudarStatusPlanilha(pedidoId, novoRotulo){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p || !STATUS_PLANILHA[novoRotulo]) return;
   const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
   if (!['logistica','admin','comercial'].includes(perfil)){ alert('Você não tem permissão para alterar o status.'); renderizarAcompanhamento(); return; }
-  const interno = STATUS_PLANILHA[novoRotulo].interno;
-  const statusAntes = p.status;
   const rotuloAntes = statusPlanilhaDoPedido(p);
+  // Detecta pulo: se avança mais de 1 etapa para frente, cobra os dados intermediários
+  const iAntes = STATUS_PLANILHA_ORDEM.indexOf(rotuloAntes);
+  const iNovo = STATUS_PLANILHA_ORDEM.indexOf(novoRotulo);
+  const saltou = (iNovo - iAntes) > 1;
+  const etapasCobrar = saltou ? STATUS_PLANILHA_ORDEM.slice(iAntes+1, iNovo+1).filter(s => STATUS_ETAPAS_DADOS.includes(s)) : [];
+
+  if (etapasCobrar.length > 0){
+    // Abre o modal de cobrança de dados das etapas puladas
+    _abrirModalPuloEtapas(pedidoId, rotuloAntes, novoRotulo, etapasCobrar);
+    // reverte o dropdown visualmente até confirmar
+    if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
+    return;
+  }
+
+  await _aplicarStatusPlanilha(pedidoId, novoRotulo, rotuloAntes, perfil, '✏️ status alterado');
+}
+
+// Aplica de fato a mudança de status (usado direto ou após preencher o pulo)
+async function _aplicarStatusPlanilha(pedidoId, novoRotulo, rotuloAntes, perfil, obs){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const interno = STATUS_PLANILHA[novoRotulo].interno;
   try {
     await supabase.from('pedidos').update({ status: interno, status_planilha: novoRotulo }).eq('id', parseInt(pedidoId));
     p.status = interno; p.statusPlanilha = novoRotulo;
-    // registra no histórico (mantém a jornada completa)
     try {
       await supabase.from('historico_status').insert({
         pedido_id: parseInt(pedidoId),
@@ -3719,7 +3743,7 @@ async function mudarStatusPlanilha(pedidoId, novoRotulo){
         status_novo: novoRotulo,
         usuario_nome: document.getElementById('usuarioLogado')?.textContent || '',
         usuario_perfil: perfil,
-        observacao: '✏️ status alterado (planilha)'
+        observacao: obs || '✏️ status alterado'
       });
     } catch(_){}
     if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
@@ -3729,6 +3753,125 @@ async function mudarStatusPlanilha(pedidoId, novoRotulo){
     if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
   }
 }
+
+// Voltar 1 etapa (desfazer) — volta ao status imediatamente anterior na ordem
+async function voltarUmaEtapa(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  if (!['logistica','admin','comercial'].includes(perfil)){ alert('Sem permissão.'); return; }
+  const atual = statusPlanilhaDoPedido(p);
+  const i = STATUS_PLANILHA_ORDEM.indexOf(atual);
+  if (i <= 0){ alert('Já está na primeira etapa — não há para onde voltar.'); return; }
+  const anterior = STATUS_PLANILHA_ORDEM[i-1];
+  if (!confirm(`↩️ Voltar o pedido #${pedidoId} de "${atual}" para "${anterior}"?`)) return;
+  await _aplicarStatusPlanilha(pedidoId, anterior, atual, perfil, '↩️ voltou 1 etapa (correção)');
+}
+
+// Modal que cobra os dados das etapas puladas (obrigatório)
+function _abrirModalPuloEtapas(pedidoId, rotuloAntes, novoRotulo, etapas){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const temTransbordo = !!p.cidadeTransbordo;
+  const old = document.getElementById('modalPulo'); if (old) old.remove();
+  const hoje = new Date().toISOString().slice(0,10);
+  const campoEtapa = (et) => {
+    if (et === 'Coletado'){
+      return `<div class="pulo-etapa">
+        <div class="pulo-etapa-tit">📥 Coletado</div>
+        <label>Quem coletou?</label>
+        <select id="puloColetaQuem">
+          <option value="">Selecione...</option>
+          <option value="equipe">Equipe de coleta</option>
+          <option value="motorista">Motorista (direto)</option>
+          <option value="cliente">Cliente levou ao pátio</option>
+        </select>
+        <label>Quando?</label>
+        <input type="date" id="puloColetaData" value="${hoje}">
+      </div>`;
+    }
+    if (et === 'Em transporte'){
+      const cegonhas = (veiculosGlobais||[]).filter(v => (v.tipo==='cegonha'||v.categoria==='cegonha'||(v.capacidade||0)>1));
+      return `<div class="pulo-etapa">
+        <div class="pulo-etapa-tit">🚛 Em transporte</div>
+        <label>Qual cegonha transportou?</label>
+        <select id="puloTranspCegonha">
+          <option value="">Selecione...</option>
+          ${p.placaCegonha?`<option value="${p.placaCegonha}" selected>${p.placaCegonha} (atual)</option>`:''}
+          ${cegonhas.filter(v=>v.placa!==p.placaCegonha).map(v=>`<option value="${v.placa}">${v.placa}${v.modelo?' · '+v.modelo:''}</option>`).join('')}
+        </select>
+        <label>Qual motorista?</label>
+        <input type="text" id="puloTranspMotorista" value="${(p.motorista1||'').replace(/"/g,'&quot;')}" placeholder="Motorista" list="puloMotoristas">
+        <datalist id="puloMotoristas">${(motoristasGlobais||[]).map(m=>`<option value="${m.nome||m}">`).join('')}</datalist>
+        <label>Quando saiu?</label>
+        <input type="date" id="puloTranspData" value="${hoje}">
+      </div>`;
+    }
+    return '';
+  };
+  const div = document.createElement('div');
+  div.id = 'modalPulo';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 6px">⚠️ Você pulou etapas</h2>
+      <p class="text-muted" style="font-size:.86rem;margin:.2rem 0 1rem">De <strong>${rotuloAntes}</strong> para <strong>${novoRotulo}</strong>. Para a conferência ficar correta (inclusive o valor do motorista), registre o que realmente aconteceu nas etapas puladas:</p>
+      ${temTransbordo ? `<div class="pulo-transbordo-aviso">🔁 Este carro tem <strong>transbordo em ${p.cidadeTransbordo}</strong>. Depois de registrar, confira as pernas (motorista/cegonha de cada trecho) na tela de <strong>🛣️ Trechos</strong> — é de lá que sai o valor por perna.</div>` : ''}
+      ${etapas.map(campoEtapa).join('')}
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1" onclick="_confirmarPuloEtapas(${pedidoId}, '${rotuloAntes.replace(/'/g,"\\'")}', '${novoRotulo.replace(/'/g,"\\'")}', ${JSON.stringify(etapas).replace(/"/g,'&quot;')})">✅ Registrar e aplicar</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalPulo').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _confirmarPuloEtapas(pedidoId, rotuloAntes, novoRotulo, etapas){
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || '';
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  // valida obrigatórios
+  const registros = [];
+  if (etapas.includes('Coletado')){
+    const quem = document.getElementById('puloColetaQuem')?.value;
+    const data = document.getElementById('puloColetaData')?.value;
+    if (!quem || !data){ alert('Preencha quem coletou e quando.'); return; }
+    const label = quem==='equipe'?'equipe de coleta':(quem==='motorista'?'motorista (direto)':'cliente levou ao pátio');
+    registros.push({ etapa:'Coletado', obs:`📥 Coletado por ${label} em ${new Date(data+'T12:00').toLocaleDateString('pt-BR')} (registrado retroativamente)` });
+  }
+  if (etapas.includes('Em transporte')){
+    const cegonha = document.getElementById('puloTranspCegonha')?.value;
+    const mot = document.getElementById('puloTranspMotorista')?.value.trim();
+    const data = document.getElementById('puloTranspData')?.value;
+    if (!cegonha || !mot || !data){ alert('Preencha cegonha, motorista e data do transporte.'); return; }
+    registros.push({ etapa:'Em transporte', obs:`🚛 Transportado por ${cegonha} / ${mot} desde ${new Date(data+'T12:00').toLocaleDateString('pt-BR')} (registrado retroativamente)` });
+    // atualiza cegonha/motorista do pedido se não tinha
+    try {
+      const upd = {};
+      if (!p.placaCegonha) upd.placa_cegonha = cegonha;
+      if (!p.motorista1) upd.motorista_1 = mot;
+      if (Object.keys(upd).length){ await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+        if (upd.placa_cegonha) p.placaCegonha = cegonha; if (upd.motorista_1) p.motorista1 = mot; }
+    } catch(_){}
+  }
+  // grava cada etapa pulada no histórico (a verdade da auditoria)
+  for (const r of registros){
+    try {
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId),
+        status_anterior: rotuloAntes,
+        status_novo: r.etapa,
+        usuario_nome: usuario, usuario_perfil: perfil,
+        observacao: r.obs
+      });
+    } catch(_){}
+  }
+  document.getElementById('modalPulo')?.remove();
+  // aplica o status final
+  await _aplicarStatusPlanilha(pedidoId, novoRotulo, registros.length?registros[registros.length-1].etapa:rotuloAntes, perfil, `⏩ avançou para ${novoRotulo} (etapas puladas registradas)`);
+}
+
 
 
 const ORDEM_STATUS = [
@@ -5405,6 +5548,7 @@ function renderizarAcompanhamento() {
                 ${p.motorista1 ? `<br><span style="color:var(--text-tertiary);font-size:0.75rem">👤 ${p.motorista1}</span>` : ''}
             </td>
             <td>${statusDropdownHTML(p)}
+                <button class="btn-voltar-etapa" onclick="voltarUmaEtapa(${p.id})" title="Voltar 1 etapa (corrigir)">↩️</button>
                 ${p.patioAtual ? `<br><span class="badge-patio" style="margin:0.2rem 0 0">🅿️ ${p.patioAtual}</span>` : ''}
                 ${p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.15);color:#fb923c">🔁 transbordo ${p.cidadeTransbordo}</span>` : ''}</td>
             <td class="acomp-acoes">
@@ -11430,7 +11574,7 @@ function _renderCarteiraGrupos(){
           <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${typeof selCTEDoPedido==='function'?selCTEDoPedido(p.id):''}</td>
           <td class="ct-modelo">${p.modelo||'—'}</td>
           <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-          <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+          <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
           <td class="ct-status">${sit}</td>
           <td class="ct-acoes">
             ${(podeJogar && !jaAlocado) ? `<button class="btn-kanban-patio" onclick="abrirJogarCorredor(${p.id})" title="Jogar num corredor">➡️</button>` : ''}
@@ -11603,7 +11747,7 @@ function _carrosSemCorredorHTML(corredores, vivos){
           <td class="ct-id">#${p.id}</td>
           <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
           <td class="ct-modelo">${p.modelo||'—'}</td>
-          <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+          <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
           <td>${p.patioAtual ? '🅿️ '+p.patioAtual.split('/')[0] : (p.cidadeOrigem||'—')}</td>
           <td class="ct-rota"><strong>${p.cidadeDestino||'—'}</strong></td>
           <td class="ct-status">${_statusPillPlanilha(p)}</td>
@@ -11723,7 +11867,7 @@ function _corredorPedidoLinha(p, c, paradasStr){
     <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${typeof selCTEDoPedido==='function' ? selCTEDoPedido(p.id) : ''}</td>
     <td class="ct-modelo">${p.modelo||'—'}</td>
     <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-    <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+    <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
     <td class="ct-frete">R$ ${frete}</td>
     <td class="ct-status">${statusDropdownHTML(p)} ${rotaTag}</td>
     <td class="ct-acoes">
@@ -11994,7 +12138,7 @@ function renderizarAvancarPedidos(){
             <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
             <td class="ct-modelo">${p.modelo||'—'}</td>
             <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-            <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+            <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
             <td class="ct-modelo">${p.placaCegonha || '—'}</td>
             <td class="ct-acoes">${statusDropdownHTML(p)}</td>
           </tr>`).join('')}</tbody>
@@ -12096,7 +12240,7 @@ function renderizarCobranca(){
           <td class="ct-id">#${p.id}</td>
           <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
           <td class="ct-modelo">${p.modelo||'—'}</td>
-          <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+          <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
           <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
           <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
           <td class="ct-status">${_cobPill(st)}</td>
@@ -12192,7 +12336,7 @@ function _renderInserirCarroLista(rotaId){
         <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${selCTEDoPedido(p.id)}</td>
         <td class="ct-modelo">${p.modelo||'—'}</td>
         <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-        <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+        <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
         <td>${cargaTxt}</td>
         <td class="ct-acoes"><button class="btn btn-primary btn-sm" onclick="_inserirCarroNaRota(${p.id}, ${rotaId})">${emCarga ? '🔄 Mover' : '+ Adicionar'}</button></td>
       </tr>`;
@@ -12425,7 +12569,7 @@ function renderizarEquipesPainel(){
         <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${selCTEDoPedido(p.id)}</td>
         <td class="ct-modelo">${p.modelo||'—'}</td>
         <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-        <td class="ct-cli"><strong>${p.cliente||'—'}</strong></td>
+        <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
         <td class="ct-acoes">${info}${selMembro} ${btn}</td>
       </tr>`;
     };
