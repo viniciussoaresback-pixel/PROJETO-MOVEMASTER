@@ -6656,6 +6656,12 @@ function renderizarPainelConfirmacoes() {
 function renderizarLiberacoesComercial() {
     const painel = document.getElementById('liberacoesComercial');
     if (!painel) return;
+    painel.innerHTML = ''; // fluxo de liberação/coleta aposentado — status agora é livre (dropdown)
+    return;
+}
+function _renderizarLiberacoesComercial_desativado() {
+    const painel = document.getElementById('liberacoesComercial');
+    if (!painel) return;
 
     const lista = pedidosGlobais.filter(p => p.status === 'Aguardando Confirmação')
         .sort((a, b) => {
@@ -10778,6 +10784,13 @@ function _horasAteColeta(p){
 }
 
 function renderizarConfirmacaoComercial(){
+  const wrap = document.getElementById('confirmacaoComercialWrap');
+  if (!wrap) return;
+  wrap.innerHTML = ''; // fluxo de confirmação de intenção aposentado — status agora é livre
+  if (typeof _espelharSugPainel === 'function') _espelharSugPainel();
+  return;
+}
+function _renderizarConfirmacaoComercial_desativado(){
   const wrap = document.getElementById('confirmacaoComercialWrap');
   if (!wrap) return;
   const aguardando = (pedidosGlobais||[]).filter(p => p.status === 'Aguardando Confirmação' && p.origemLancamento !== 'logistica');
