@@ -8407,12 +8407,18 @@ async function mudarStatusRota(rotaId, novoStatus) {
                 const novoRotulo = rodando ? 'Coletado' : 'Enviado coleta';
                 const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo]) ? STATUS_PLANILHA[novoRotulo].interno : 'Em Coleta';
                 try {
-                    await supabase.from('pedidos').update({ status: interno, status_planilha: novoRotulo }).eq('id', p.id);
+                    await supabase.from('pedidos').update({
+                        status: interno, status_planilha: novoRotulo,
+                        rota_id: null,            // desvincula da rota cancelada
+                        placa_cegonha: null,      // solta a cegonha
+                        corredor_manual_id: null  // volta a encaixar automaticamente nos corredores
+                    }).eq('id', p.id);
                     p.status = interno; p.statusPlanilha = novoRotulo;
+                    p.rotaId = null; p.rota_id = null; p.placaCegonha = null; p.corredorManualId = null;
                     await supabase.from('historico_status').insert({
                         pedido_id: p.id, status_anterior: rotuloAntes, status_novo: novoRotulo,
                         usuario_nome: usuario, usuario_perfil: perfil,
-                        observacao: '↩️ rota cancelada — a viagem não aconteceu, carro voltou à etapa anterior.'
+                        observacao: '↩️ rota cancelada — a viagem não aconteceu, carro voltou para os corredores.'
                     });
                 } catch(_){}
             }
@@ -8433,6 +8439,11 @@ async function mudarStatusRota(rotaId, novoStatus) {
         }
         await carregarDadosDoSupabase();
         renderizarRotas();
+        if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+        if (typeof renderizarVagasPorRota === 'function') renderizarVagasPorRota();
+        if (novoStatus === 'cancelada' && typeof exibirMensagem === 'function'){
+            exibirMensagem('mensagemLogistica', '↩️ Rota cancelada — os carros voltaram para os corredores.', 'success');
+        }
     } catch (e) {
         alert('Erro: ' + e.message);
     }
