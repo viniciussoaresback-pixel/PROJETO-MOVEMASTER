@@ -7893,9 +7893,12 @@ function renderizarRotas() {
         const corPct = pct >= 100 ? '#4ade80' : pct >= 60 ? '#fbbf24' : '#ef4444';
         const cfg = STATUS_ROTA[r.status] || STATUS_ROTA.planejada;
 
-        // Pedidos pendentes que encaixam nesta rota e ainda não estão em rota nenhuma
+        // Pedidos que encaixam nesta rota e ainda não estão em rota nenhuma
+        // (qualquer status ativo — não só o antigo 'Pendente')
         const compativeis = pedidosGlobais.filter(p =>
-            p.status === 'Pendente' && !p.rotaId && pedidoEncaixaNaRota(p, paradas)
+            !['Entregue','Cancelado'].includes(p.status||'') &&
+            !p.rotaId && !p.rota_id && !p.placaCegonha &&
+            pedidoEncaixaNaRota(p, paradas)
         );
 
         const paradasHTML = paradas.map((c, i) =>
@@ -13180,17 +13183,16 @@ function renderizarVagasPorRota(){
         </div>
         <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           ${programada ? '<span style="font-size:11px;font-weight:600;color:#60a5fa;background:rgba(96,165,250,.14);padding:2px 8px;border-radius:6px">Em planejamento</span>' : (d.vagas<=0 ? '<span style="font-size:11px;color:var(--text-secondary,#9ca3af)">aguardando programação</span>' : '')}
-          ${d.encaixam.length > 0 ? `<span onclick="_toggleVagasRota('${r.id}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ${d.encaixam.length} pedido(s) que encaixam</span>` : '<span style="font-size:12px;color:var(--text-secondary,#9ca3af)">sem pedidos soltos que encaixam</span>'}
+          ${d.ocup > 0 ? `<span onclick="_toggleVagasRota('${r.id}')" style="font-size:12px;color:var(--accent,#ff6a00);cursor:pointer;user-select:none">${aberto?'▾':'▸'} ${d.ocup} carro(s) nesta carga</span>` : '<span style="font-size:12px;color:var(--text-secondary,#9ca3af)">carga vazia — vincule carros na Rota Planejada</span>'}
         </div>
-        ${aberto && d.encaixam.length ? `<table class="corr-tabela" style="margin-top:10px">
-          <thead><tr><th>ID</th><th>Solicitado</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
-          <tbody>${[...d.encaixam].sort((a,b)=>(a.dataSolicitacao||'').localeCompare(b.dataSolicitacao||'')).map(p => `<tr class="corr-tr">
+        ${aberto && d.ocup > 0 ? `<table class="corr-tabela" style="margin-top:10px">
+          <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th></tr></thead>
+          <tbody>${_veiculosNaRota(r.id).map(p => `<tr class="corr-tr">
             <td class="ct-id">#${p.id}</td>
-            <td class="ct-data">${_fmtDataSolic(p.dataSolicitacao)}</td>
             <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
             <td class="ct-modelo">${p.modelo||'—'}</td>
             <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-            <td class="ct-cli">${p.cliente||'—'}</td>
+            <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}">${p.cliente||'—'}</td>
           </tr>`).join('')}</tbody>
         </table>` : ''}
       </div>`;
