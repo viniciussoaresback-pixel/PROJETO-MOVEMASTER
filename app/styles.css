@@ -6658,10 +6658,14 @@ tr.rec-linha-atrasada td { background: rgba(239,68,68,0.04); }
 .log-passo {
     display: inline-flex; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 50%;
-    background: var(--orange); color: var(--black-void);
-    font-size: 0.72rem; font-weight: 800;
+    background: #ff6a00; color: #ffffff;
+    font-size: 0.75rem; font-weight: 800;
     margin-right: 0.4rem; vertical-align: middle;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
+[data-tema="claro"] .log-passo { background: #ea580c; color: #ffffff; }
+.log-grupo-rotulo { color: var(--text-primary, #e5e7eb); font-weight: 700; }
+[data-tema="claro"] .log-grupo-rotulo { color: #1f2937; }
 .log-grupo-planejamento .log-tab-btn { background: rgba(96,165,250,0.08); border-color: rgba(96,165,250,0.28); }
 .log-grupo-planejamento .log-tab-btn:hover { border-color: #60a5fa; }
 .log-grupo-planejamento .log-tab-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
