@@ -1109,7 +1109,7 @@ async function abrirModalAlocacaoCarga(itens, veiculo) {
     const p0 = itens[0];
     const resumo = `${itens.length} carros · ${p0.cliente || ''}\n` +
                    `${p0.cidadeOrigem}/${p0.ufOrigem} → ${p0.cidadeDestino}/${p0.ufDestino}`;
-    if (!confirm(`Alocar a carga fechada na cegonha ${veiculo.placa}?\n\n${resumo}\n\nFicará com ${emUso + itens.length}/${capacidade} vagas ocupadas.`)) return;
+    if (!confirm(`Alocar os múltiplos veículos na cegonha ${veiculo.placa}?\n\n${resumo}\n\nFicará com ${emUso + itens.length}/${capacidade} vagas ocupadas.`)) return;
 
     const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
     const atualizacao = {
@@ -1136,7 +1136,7 @@ async function abrirModalAlocacaoCarga(itens, veiculo) {
                 status_novo: 'Intenção Agendada',
                 usuario_nome: usuarioNome,
                 usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica',
-                observacao: `📦 Alocado como carga fechada (${itens.length} carros) na cegonha ${veiculo.placa}`
+                observacao: `📦 Alocado como múltiplos veículos (${itens.length} carros) na cegonha ${veiculo.placa}`
             });
         }
 
@@ -1146,11 +1146,11 @@ async function abrirModalAlocacaoCarga(itens, veiculo) {
         if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
         notificar({
             perfil: 'comercial', nome: p0.responsavelComercial, pedidoId: p0.id, tipo: 'status',
-            titulo: `📦 Sua carga fechada foi alocada (${itens.length} carros)`,
+            titulo: `📦 Seus múltiplos veículos foram alocados (${itens.length} carros)`,
             mensagem: `${p0.cliente} · cegonha ${veiculo.placa} — só para você saber. Você será chamado para liberar a coleta.`
         });
 
-        exibirMensagem('mensagemLogistica', `✅ Carga fechada de ${itens.length} carros alocada na ${veiculo.placa}.`, 'success');
+        exibirMensagem('mensagemLogistica', `✅ Múltiplos veículos (${itens.length} carros) alocados na ${veiculo.placa}.`, 'success');
     } catch (e) {
         exibirMensagem('mensagemLogistica', 'Erro ao alocar a carga: ' + e.message, 'error');
     }
@@ -4267,7 +4267,7 @@ function abrirModalStatusGrupo(grupoId) {
     if (resumo) {
         const fora = membros.length - doStatus.length;
         resumo.insertAdjacentHTML('afterbegin',
-            `<div class="lote-aviso">⏩ Avançando <strong>${doStatus.length} carros</strong> da carga fechada juntos${fora ? ` · ${fora} em outro status ficam de fora` : ''}.</div>`);
+            `<div class="lote-aviso">⏩ Avançando <strong>${doStatus.length} carros</strong> de múltiplos veículos juntos${fora ? ` · ${fora} em outro status ficam de fora` : ''}.</div>`);
     }
 }
 
@@ -4501,7 +4501,7 @@ async function confirmarMudancaStatus() {
         // 3. Atualizar dados locais
         await carregarDadosDoSupabase();
         fecharModal('modalStatus');
-        exibirMensagem('mensagemLogistica', `✅ Status atualizado: ${statusAnterior} → ${statusNovo}${avancadosLote ? ` · +${avancadosLote} carros da carga fechada` : ''}`, 'success');
+        exibirMensagem('mensagemLogistica', `✅ Status atualizado: ${statusAnterior} → ${statusNovo}${avancadosLote ? ` · +${avancadosLote} carros do grupo` : ''}`, 'success');
         renderizarPedidosDrag();
         renderizarVeiculosDrop();
         renderizarKanban();
@@ -4957,7 +4957,7 @@ function montarListaComGrupos(pedidos, linhaFn, colspan, mostrarAvancar) {
             out.push(`<tr class="grupo-header ${aberto ? 'aberto' : ''}" onclick="toggleGrupo('${gid}')">
                 <td colspan="${colspan}">
                     <span class="grupo-toggle">${aberto ? '▼' : '▶'}</span>
-                    <span class="grupo-badge">📦 Carga fechada</span>
+                    <span class="grupo-badge">📦 ${nomenclaturaCarga(membros.length)}</span>
                     <strong>${membros.length} carros</strong>
                     <span class="grupo-cliente">${cliente}</span>
                     <span class="grupo-resp" title="Responsável comercial que fechou o frete">🧑‍💼 ${responsavel}</span>
@@ -5031,7 +5031,7 @@ function renderizarPedidosComercial() {
             <td style="font-size:0.78rem">${p.modelo || ''}<br><span style="color:var(--text-muted)">${p.placa || ''}</span></td>
             <td style="font-size:0.78rem">${p.cidadeOrigem || ''}/${p.ufOrigem || ''}${p.cidadeTransbordo ? `<br><span class="${p.status === 'Transbordo' ? 'badge-transbordo transbordo-atual' : 'badge-transbordo transbordo-feito'}" title="${p.status === 'Transbordo' ? 'Veículo no pátio aguardando nova cegonha' : 'Transbordo já realizado'}">${p.status === 'Transbordo' ? '🔁' : '✔'} ${p.cidadeTransbordo}</span>` : ''}<br>→ ${p.cidadeDestino || ''}/${p.ufDestino || ''}</td>
             <td style="color:#4ade80;font-weight:600">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-            <td><span style="font-size:0.7rem;font-weight:600;padding:0.15rem 0.5rem;border-radius:4px;background:${cor}20;color:${cor};border:1px solid ${cor}40">${p.status || '—'}</span></td>
+            <td>${typeof _statusPillPlanilha === 'function' ? _statusPillPlanilha(p) : `<span style="font-size:0.7rem;font-weight:600;padding:0.15rem 0.5rem;border-radius:4px;background:${cor}20;color:${cor};border:1px solid ${cor}40">${p.status || '—'}</span>`}</td>
             <td style="font-size:0.78rem">${p.dataSolicitacao || '—'}</td>
             <td>
                 <div style="display:flex;gap:0.3rem;flex-wrap:wrap">
@@ -5575,7 +5575,7 @@ function renderizarAcompanhamento() {
             <td>${p.cliente || '—'} ${selCTEDoPedido(p.id)}${(() => {
                 if (!p.grupoId) return '';
                 const n = pedidosGlobais.filter(x => x.grupoId === p.grupoId).length;
-                return n > 1 ? ` <span class="badge-carga-fechada" title="Carga fechada: ${n} carros do mesmo pedido">📦 ${n}</span>` : '';
+                return n > 1 ? ` <span class="badge-carga-fechada" title="${nomenclaturaCarga(n)}: ${n} carros do mesmo pedido">📦 ${n}</span>` : '';
             })()}<br><span class="ocup-resp" title="Responsável comercial">🧑‍💼 ${p.responsavelComercial || '—'}</span></td>
             <td style="font-size:0.78rem">${p.modelo || ''}<br><strong>${p.placa || ''}</strong></td>
             <td style="font-size:0.75rem">${p.cidadeOrigem || ''}/${p.ufOrigem || ''}${p.cidadeTransbordo ? ` → 🔁 ${p.cidadeTransbordo}` : ''} → ${p.cidadeDestino || ''}/${p.ufDestino || ''}</td>
@@ -10409,9 +10409,12 @@ function _conformidadeSeguranca(){
 // 1 a 9 => "Múltiplos Veículos"; 10..capacidade => "Carga Fechada".
 // Teto padrão 11; acima disso exige exceção no cadastro do veículo.
 // ============================================================
+// Nomenclatura por capacidade:
+// "Carga Fechada" SOMENTE quando fecha a capacidade cheia da cegonha (padrão 11).
+// Qualquer quantidade abaixo disso => "Múltiplos Veículos".
 function nomenclaturaCarga(qtd, capacidade){
-  const cap = Number(capacidade) || null;
-  if ((cap && qtd >= cap) || qtd >= 10) return 'Carga Fechada';
+  const cap = Number(capacidade) || 11; // capacidade cheia padrão
+  if (qtd >= cap) return 'Carga Fechada';
   return 'Múltiplos Veículos';
 }
 
@@ -11839,7 +11842,10 @@ function _carrosSemCorredorHTML(corredores, vivos){
       return (io !== -1 && id !== -1 && io < id) || (noPatioDoTronco && id === -1);
     });
   };
-  const orfaos = (vivos || []).filter(p => !encaixa(p) && !p.placaCegonha && !(p.rotaId||p.rota_id));
+  // Órfão = não encaixa em nenhum corredor E não foi jogado manualmente em um (corredorManualId)
+  // E não está já em cegonha/rota.
+  const orfaos = (vivos || []).filter(p =>
+    !encaixa(p) && !p.corredorManualId && !p.placaCegonha && !(p.rotaId||p.rota_id));
   if (orfaos.length === 0) return '';
   return `<div class="corredor-card" style="margin-top:14px">
     <div class="corredor-card-cab" onclick="toggleCorredorCard('__orfaos__')" style="cursor:pointer">
