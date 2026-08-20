@@ -105,6 +105,7 @@ async function carregarPerfilUsuario(user) {
 
 function direcionarPorPerfil(perfil, email) {
     ocultarTodasTelas();
+    const boot = document.getElementById('bootLoading'); if (boot) boot.style.display = 'none';
 
     if (perfil.perfil === 'admin') {
         mostrarTelaAdmin(email, perfil.nome);
@@ -126,6 +127,7 @@ function ocultarTodasTelas() {
 
 function mostrarLogin() {
     ocultarTodasTelas();
+    const boot = document.getElementById('bootLoading'); if (boot) boot.style.display = 'none';
     document.getElementById('telaLogin').style.display = 'flex';
 
     const form = document.getElementById('formLogin');
@@ -341,6 +343,7 @@ document.addEventListener('DOMContentLoaded', prepararTelaNovaSenha);
 
 function mostrarSemPermissao(mensagem) {
     ocultarTodasTelas();
+    const boot = document.getElementById('bootLoading'); if (boot) boot.style.display = 'none';
     document.getElementById('telaSemPermissao').style.display = 'flex';
     const el = document.getElementById('semPermissaoPerfil');
     if (el) el.textContent = mensagem || '';
