@@ -999,14 +999,15 @@ body::after {
     position: fixed;
     inset: 0;
     background:
-        radial-gradient(ellipse 600px 400px at 50% 0%, rgba(255,106,0,0.10), transparent 60%),
-        radial-gradient(ellipse 500px 400px at 50% 100%, rgba(255,106,0,0.06), transparent 55%),
-        rgba(5, 5, 7, 0.98);
+        linear-gradient(rgba(5,5,7,0.62), rgba(5,5,7,0.70)),
+        var(--hero-image, none);
+    background-size: cover, cover;
+    background-position: center, center;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 9999;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(2px);
 }
 
 .login-card {
