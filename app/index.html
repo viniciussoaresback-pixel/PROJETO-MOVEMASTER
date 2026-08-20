@@ -47,9 +47,20 @@
     </script>
 </head>
 <body>
+    <div id="bootLoading" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(5,5,7,0.92);backdrop-filter:blur(8px)">
+        <div style="text-align:center">
+            <div style="font-size:2rem;font-weight:800;letter-spacing:.5px"><span style="color:#e5e7eb">MOVE</span><span style="color:#fb923c">MASTER</span></div>
+            <div style="margin-top:14px;width:40px;height:40px;border:3px solid rgba(251,146,60,.25);border-top-color:#fb923c;border-radius:50%;animation:bootSpin .8s linear infinite;display:inline-block"></div>
+        </div>
+    </div>
+    <style>@keyframes bootSpin{to{transform:rotate(360deg)}}</style>
+    <script>
+      // Segurança: se em 6s a sessão não resolveu, remove o loading para não travar a tela.
+      setTimeout(function(){ var b=document.getElementById('bootLoading'); if(b) b.style.display='none'; }, 6000);
+    </script>
 
     <!-- TELA DE LOGIN -->
-    <div id="telaLogin" class="login-overlay">
+    <div id="telaLogin" class="login-overlay" style="display:none;">
         <div class="login-card">
             <div class="login-logo">
                 <img src="movemaster1.png" alt="Movemaster" class="login-logo-img">
@@ -2213,7 +2224,6 @@
     <script src="supabase-config.js"></script>
 
     <script src="script.js"></script>
-    <script src="graficos.js"></script>
 
     <!-- PWA: registra o service worker e mostra a dica de instalação -->
     <script>
