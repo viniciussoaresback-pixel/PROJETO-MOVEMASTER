@@ -3693,12 +3693,10 @@ function statusPlanilhaDoPedido(p){
 
 // Dropdown de status estilo planilha — altera em qualquer tela, sem ordem obrigatória
 function statusDropdownHTML(p){
-  const atual = statusPlanilhaDoPedido(p);
-  const cor = STATUS_PLANILHA[atual]?.cor || '#888';
-  return `<select class="status-planilha-sel" style="border-color:${cor}66;color:${cor}"
-    onchange="mudarStatusPlanilha(${p.id}, this.value)" onclick="event.stopPropagation()">
-    ${STATUS_PLANILHA_LISTA.map(s => `<option value="${s}" ${s===atual?'selected':''}>${s}</option>`).join('')}
-  </select>`;
+  // Princípio 2: o status é SOMENTE LEITURA nas telas de consulta.
+  // Quem muda o status são os EVENTOS (ações na tela de Viagens em Andamento).
+  // Mantém a etiqueta colorida consistente em todo o sistema.
+  return _statusPillPlanilha(p);
 }
 
 // Aplica a mudança de status planilha: grava o rótulo + reflete no status interno
@@ -5584,7 +5582,6 @@ function renderizarAcompanhamento() {
                 ${p.motorista1 ? `<br><span style="color:var(--text-tertiary);font-size:0.75rem">👤 ${p.motorista1}</span>` : ''}
             </td>
             <td>${statusDropdownHTML(p)}
-                <button class="btn-voltar-etapa" onclick="voltarUmaEtapa(${p.id})" title="Voltar 1 etapa (corrigir)">↩️</button>
                 ${p.patioAtual ? `<br><span class="badge-patio" style="margin:0.2rem 0 0">🅿️ ${p.patioAtual}</span>` : ''}
                 ${p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.15);color:#fb923c">🔁 transbordo ${p.cidadeTransbordo}</span>` : ''}
                 ${p.transbordoPrevisto && !p.cidadeTransbordo ? `<br><span class="badge-patio" style="margin:0.2rem 0 0;background:rgba(251,146,60,.1);color:#fb923c;border:1px dashed rgba(251,146,60,.5)">🔁 previsto em ${p.transbordoPrevisto}</span>` : ''}</td>
@@ -14560,19 +14557,31 @@ function _viagemModalCarros(titulo, subtitulo, carros, corBtn, textoBtn, onConfi
 async function _viagemMudarStatusCarros(ids, statusInterno, statusPlanilha, obs){
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Operador';
   const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
+  let ok = 0; const falhas = [];
   for (const id of ids){
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    if (!p) continue;
+    if (!p){ falhas.push(id+' (não encontrado)'); continue; }
     const antes = statusPlanilhaDoPedido(p);
     try {
-      await supabase.from('pedidos').update({ status: statusInterno, status_planilha: statusPlanilha }).eq('id', id);
+      const { error } = await supabase.from('pedidos').update({ status: statusInterno, status_planilha: statusPlanilha }).eq('id', id);
+      if (error) throw error;
       p.status = statusInterno; p.statusPlanilha = statusPlanilha;
-      await supabase.from('historico_status').insert({
-        pedido_id: id, status_anterior: antes, status_novo: statusPlanilha,
-        usuario_nome: usuario, usuario_perfil: perfil, observacao: obs
-      });
-    } catch(_){}
+      ok++;
+      try {
+        await supabase.from('historico_status').insert({
+          pedido_id: id, status_anterior: antes, status_novo: statusPlanilha,
+          usuario_nome: usuario, usuario_perfil: perfil, observacao: obs
+        });
+      } catch(eh){ console.warn('Histórico não gravado p/', id, eh?.message); }
+    } catch(e){
+      falhas.push('#'+id+' ('+(e?.message||'erro')+')');
+      console.error('Falha ao mudar status do pedido', id, e);
+    }
   }
+  if (falhas.length){
+    alert(`${ok} carro(s) atualizado(s). ${falhas.length} não atualizou:\n` + falhas.join('\n') + '\n\nTente novamente; se persistir, me avise a mensagem acima.');
+  }
+  return { ok, falhas };
 }
 
 async function _viagemRegistrarColeta(rota, carros){
@@ -14586,7 +14595,11 @@ async function _viagemRegistrarColeta(rota, carros){
 }
 
 async function _viagemIniciar(rota, carros){
-  const elegiveis = carros.filter(c => ['Coletado','Enviado coleta'].includes(statusPlanilhaDoPedido(c)) || c.status === 'Em Coleta');
+  const elegiveis = carros.filter(c => {
+    const rot = statusPlanilhaDoPedido(c);
+    return ['Coletado','Enviado coleta'].includes(rot)
+      || ['Em Coleta','Aguardando Confirmação'].includes(c.status||'');
+  });
   if (elegiveis.length === 0){ alert('Nenhum carro pronto para iniciar viagem (precisa estar coletado).'); return; }
   _viagemModalCarros('🛫 Iniciar Viagem', 'Confirme os carros que saíram para viagem (Em transporte).', elegiveis, '#2563eb', '✅ Confirmar saída', async (ids) => {
     await _viagemMudarStatusCarros(ids, 'Em Transporte', 'Em transporte', '🛫 Saiu para viagem (evento na viagem)');
