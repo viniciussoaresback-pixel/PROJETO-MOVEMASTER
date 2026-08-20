@@ -6656,7 +6656,7 @@ tr.rec-linha-atrasada td { background: rgba(239,68,68,0.04); }
 /* ============================================================
    Passos numerados na gestão logística (didático)
    ============================================================ */
-.log-passo {
+.log-passo-bolinha {
     display: inline-flex !important; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 50%;
     background: #fb923c !important; color: #ffffff !important;
@@ -6665,7 +6665,7 @@ tr.rec-linha-atrasada td { background: rgba(239,68,68,0.04); }
     box-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
 html[data-tema="claro"] .log-passo,
-[data-tema="claro"] .log-passo { background: #fb923c !important; color: #ffffff !important; }
+[data-tema="claro"] .log-passo-bolinha { background: #fb923c !important; color: #ffffff !important; }
 .log-grupo-rotulo { color: var(--text-primary, #e5e7eb); font-weight: 700; }
 html[data-tema="claro"] .log-grupo-rotulo,
 [data-tema="claro"] .log-grupo-rotulo { color: #1f2937 !important; }
@@ -8610,13 +8610,97 @@ input:focus, select:focus, textarea:focus {
 /* ===== FIX FORTE: número das etapas da logística sempre visível (dark e claro) ===== */
 html .log-grupo-rotulo span.log-passo,
 html[data-tema="claro"] .log-grupo-rotulo span.log-passo,
-html[data-tema="claro"] span.log-passo {
+html[data-tema="claro"] span.log-passo-bolinha {
     background-color: #fb923c !important;
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
     opacity: 1 !important;
     text-shadow: none !important;
 }
-html span.log-passo {
+html span.log-passo-bolinha {
     -webkit-text-fill-color: #ffffff !important;
 }
+
+/* ===== VIAGENS EM ANDAMENTO (Jornada da Viagem) ===== */
+.viagens-layout { display:grid; grid-template-columns:260px 1fr; gap:16px; margin-top:12px; }
+@media(max-width:820px){ .viagens-layout{ grid-template-columns:1fr; } }
+
+.viagens-lista { display:flex; flex-direction:column; gap:8px; }
+.viagens-lista-tit { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-secondary,#9ca3af); margin-bottom:2px; }
+.viagem-item { padding:10px 12px; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:10px; cursor:pointer; background:var(--surface-1,rgba(255,255,255,.03)); transition:border-color .15s,background .15s; }
+.viagem-item:hover { border-color:rgba(255,106,0,.4); }
+.viagem-item.sel { border-color:#ff6a00; background:rgba(255,106,0,.08); }
+.viagem-item-nome { font-weight:600; font-size:.9rem; }
+.viagem-item-sub { font-size:.76rem; color:var(--text-secondary,#9ca3af); margin-top:2px; }
+.viagem-item-etapa { font-size:.76rem; color:#fb923c; margin-top:3px; font-weight:600; }
+
+.viagem-detalhe { min-width:0; }
+
+/* Timeline horizontal */
+.jv-timeline { display:flex; align-items:flex-start; overflow-x:auto; padding:14px 6px 6px; gap:0; }
+.jv-etapa { display:flex; flex-direction:column; align-items:center; min-width:88px; flex:0 0 auto; text-align:center; }
+.jv-bolha { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; border:2px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-2,rgba(255,255,255,.04)); color:var(--text-secondary,#9ca3af); }
+.jv-etapa.feito .jv-bolha { background:#16a34a; border-color:#16a34a; color:#fff; }
+.jv-etapa.atual .jv-bolha { background:#2563eb; border-color:#2563eb; color:#fff; box-shadow:0 0 0 4px rgba(37,99,235,.2); }
+.jv-num { font-size:.72rem; font-weight:700; margin-top:5px; }
+.jv-label { font-size:.68rem; color:var(--text-secondary,#9ca3af); margin-top:2px; line-height:1.2; }
+.jv-etapa.atual .jv-num, .jv-etapa.atual .jv-label { color:#2563eb; }
+.jv-conector { flex:1 1 auto; height:2px; background:var(--border,rgba(255,255,255,.15)); margin-top:18px; min-width:16px; }
+.jv-conector.feito { background:#16a34a; }
+
+/* Dados da viagem */
+.jv-dados { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:14px 16px; margin-top:12px; background:var(--surface-1,rgba(255,255,255,.03)); }
+.jv-dados-tit { font-weight:700; font-size:1rem; margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.jv-badge { font-size:.7rem; font-weight:700; background:rgba(52,211,153,.15); color:#34d399; padding:2px 8px; border-radius:999px; }
+.jv-dados-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+@media(max-width:640px){ .jv-dados-grid{ grid-template-columns:repeat(2,1fr); } }
+.jv-dados-grid > div { display:flex; flex-direction:column; }
+.jv-dl { font-size:.68rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-tertiary,#6b7280); }
+.jv-dv { font-size:.9rem; font-weight:600; margin-top:2px; }
+.jv-placeholder { margin-top:12px; border:1px dashed var(--border,rgba(255,255,255,.15)); border-radius:12px; }
+
+/* Viagens — Bloco 2: carga e resumo */
+.jv-corpo { display:grid; grid-template-columns:1fr 1.3fr; gap:14px; margin-top:12px; }
+@media(max-width:820px){ .jv-corpo{ grid-template-columns:1fr; } }
+.jv-col-esq, .jv-col-dir { display:flex; flex-direction:column; gap:12px; min-width:0; }
+
+.jv-resumo { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:14px 16px; background:var(--surface-1,rgba(255,255,255,.03)); }
+.jv-resumo-tit { font-weight:700; font-size:.9rem; margin-bottom:10px; }
+.jv-resumo-linhas { display:flex; flex-direction:column; gap:7px; margin-bottom:12px; }
+.jv-resumo-item { display:flex; justify-content:space-between; font-size:.85rem; }
+.jv-resumo-item span { color:var(--text-secondary,#9ca3af); }
+.jv-barra-ocup { height:10px; border-radius:999px; background:var(--surface-2,rgba(255,255,255,.08)); overflow:hidden; }
+.jv-barra-fill { height:100%; border-radius:999px; transition:width .3s ease; }
+.jv-barra-pct { text-align:right; font-size:.78rem; font-weight:700; margin-top:5px; color:var(--text-secondary,#9ca3af); }
+
+.jv-carga { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:14px 16px; background:var(--surface-1,rgba(255,255,255,.03)); }
+.jv-carga-cab { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:6px; }
+.jv-carga-tit { font-weight:700; font-size:.9rem; }
+.jv-carga-badge { font-size:.72rem; font-weight:700; background:rgba(74,222,128,.15); color:#4ade80; padding:2px 8px; border-radius:999px; }
+.jv-tabela { width:100%; border-collapse:collapse; font-size:.82rem; min-width:480px; }
+.jv-tabela thead th { text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-muted,#9ca3af); font-weight:700; padding:5px 8px; border-bottom:1px solid var(--border,rgba(255,255,255,.12)); white-space:nowrap; }
+.jv-tabela td { padding:6px 8px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
+.jv-tabela td:nth-child(2){ max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jv-vagas-livres { margin-top:8px; font-size:.78rem; color:#60a5fa; font-weight:600; }
+
+/* Viagens — Bloco 3: ações e documentos */
+.jv-acoes { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:14px 16px; background:var(--surface-1,rgba(255,255,255,.03)); display:flex; flex-direction:column; gap:8px; }
+.jv-acoes-tit { font-weight:700; font-size:.9rem; margin-bottom:4px; }
+.jv-acao { border:none; border-radius:9px; padding:11px 14px; font-weight:700; font-size:.85rem; color:#fff; cursor:pointer; text-align:left; transition:filter .15s, transform .1s; }
+.jv-acao:hover { filter:brightness(1.1); }
+.jv-acao:active { transform:scale(.98); }
+.jv-acao-coleta { background:#16a34a; }
+.jv-acao-viagem { background:#2563eb; }
+.jv-acao-entrega { background:#4ade80; color:#0f1115; }
+.jv-acao-transbordo { background:#fb923c; color:#0f1115; }
+.jv-acao-ocorrencia { background:#f97316; }
+.jv-acao-finalizar { background:#6b7280; }
+
+.jv-docs { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:14px 16px; background:var(--surface-1,rgba(255,255,255,.03)); }
+.jv-docs-tit { font-weight:700; font-size:.9rem; margin-bottom:8px; }
+.jv-doc-item { display:flex; justify-content:space-between; align-items:center; font-size:.83rem; padding:4px 0; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
+.jv-doc-ver { color:#60a5fa; text-decoration:none; font-weight:600; }
+
+.jv-sel-linha { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:8px; cursor:pointer; font-size:.85rem; }
+.jv-sel-linha:hover { border-color:rgba(255,106,0,.35); }
+.jv-sel-carro { width:16px; height:16px; accent-color:#ff6a00; }
