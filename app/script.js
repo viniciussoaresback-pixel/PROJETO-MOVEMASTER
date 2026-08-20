@@ -11604,17 +11604,20 @@ function mostrarViewPainel(view, btn){
   const avancar = document.getElementById('painelViewAvancar');
   const historico = document.getElementById('painelViewHistorico');
   const vagas = document.getElementById('painelViewVagas');
+  const viagens = document.getElementById('painelViewViagens');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas');
+  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas' || view === 'viagens');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
   if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
   if (historico) historico.style.display = (view === 'historico') ? '' : 'none';
   if (vagas) vagas.style.display = (view === 'vagas') ? '' : 'none';
+  if (viagens) viagens.style.display = (view === 'viagens') ? '' : 'none';
   if (view === 'corredores') renderizarPainelCorredores();
   if (view === 'avancar') renderizarAvancarPedidos();
   if (view === 'historico'){ historico.innerHTML = _histCargasCasca(); renderizarHistoricoCargas(); }
+  if (view === 'viagens') renderizarViagensAndamento();
   if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="renderizarVagasPorRota()"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
@@ -14321,4 +14324,314 @@ async function _setTransbordoPrevisto(pedidoId, cidade){
     if (typeof renderizarRotas === 'function') renderizarRotas();
     if (typeof exibirMensagem === 'function' && valor) exibirMensagem('mensagemLogistica', `🔁 #${pedidoId}: transbordo planejado em ${valor}.`, 'success');
   } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// ============================================================
+// VIAGENS EM ANDAMENTO — tela principal de acompanhamento de viagens ativas
+// Inspirada no layout "Jornada da Viagem". Construída em blocos.
+// ============================================================
+let _viagemSelecionada = null;
+
+// As 7 etapas da jornada da viagem
+const VIAGEM_ETAPAS = [
+  { id:'criada',     num:'01', label:'Viagem Criada',  icone:'✓' },
+  { id:'fechada',    num:'02', label:'Carga Fechada',  icone:'📦' },
+  { id:'coleta',     num:'03', label:'Coleta Iniciada',icone:'🚚' },
+  { id:'viagem',     num:'04', label:'Em Viagem',      icone:'🚛' },
+  { id:'transbordo', num:'05', label:'Transbordo',     icone:'🔁' },
+  { id:'entrega',    num:'06', label:'Entrega Final',  icone:'📥' },
+  { id:'encerrada',  num:'07', label:'Viagem Encerrada',icone:'🏁' },
+];
+
+// Deduz em qual etapa a viagem está, a partir dos status dos carros da rota
+function _viagemEtapaAtual(rota, carros){
+  if (rota.status === 'concluida') return 6; // encerrada
+  const temTransbordo = carros.some(c => c.status === 'Transbordo');
+  const todosEntregues = carros.length > 0 && carros.every(c => ['Entregue','Cancelado'].includes(c.status));
+  const algumEmTransporte = carros.some(c => c.status === 'Em Transporte');
+  const algumColetado = carros.some(c => ['Em Coleta','Coletado'].includes(statusPlanilhaDoPedido(c)) || c.status === 'Em Coleta');
+  const algumEntregue = carros.some(c => c.status === 'Entregue');
+  if (todosEntregues) return 5; // entrega final (aguardando encerrar)
+  if (algumEntregue && !algumEmTransporte) return 5;
+  if (temTransbordo) return 4; // transbordo
+  if (algumEmTransporte) return 3; // em viagem
+  if (algumColetado) return 2; // coleta iniciada
+  if (rota.status === 'em_andamento') return 3;
+  return 1; // carga fechada / criada
+}
+
+function renderizarViagensAndamento(){
+  const cont = document.getElementById('painelViewViagens');
+  if (!cont) return;
+  // Viagens ativas = rotas em andamento (ou planejadas com carga)
+  const rotasAtivas = (rotasGlobais||[]).filter(r =>
+    r.status === 'em_andamento' || r.status === 'planejada');
+
+  if (rotasAtivas.length === 0){
+    cont.innerHTML = `<p class="text-muted" style="padding:1.5rem;text-align:center">🚚 Nenhuma viagem em andamento no momento.<br><span style="font-size:.85rem">Crie e inicie uma rota para acompanhá-la aqui.</span></p>`;
+    return;
+  }
+
+  // Se nenhuma selecionada, seleciona a primeira
+  if (!_viagemSelecionada || !rotasAtivas.find(r => String(r.id)===String(_viagemSelecionada))){
+    _viagemSelecionada = rotasAtivas[0].id;
+  }
+  const rota = rotasAtivas.find(r => String(r.id)===String(_viagemSelecionada));
+  const carros = _veiculosNaRota(rota.id);
+
+  // Lista lateral de viagens + detalhe da selecionada
+  cont.innerHTML = `
+    <div class="viagens-layout">
+      <div class="viagens-lista">
+        <div class="viagens-lista-tit">🚚 Viagens ativas (${rotasAtivas.length})</div>
+        ${rotasAtivas.map(r => {
+          const cs = _veiculosNaRota(r.id);
+          const et = _viagemEtapaAtual(r, cs);
+          const sel = String(r.id)===String(_viagemSelecionada);
+          return `<div class="viagem-item ${sel?'sel':''}" onclick="_selecionarViagem(${r.id})">
+            <div class="viagem-item-nome">${r.nome || ('Rota #'+r.id)}</div>
+            <div class="viagem-item-sub">🚛 ${r.placa_cegonha||'a definir'} · ${cs.length} carro(s)</div>
+            <div class="viagem-item-etapa">${VIAGEM_ETAPAS[et].icone} ${VIAGEM_ETAPAS[et].label}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="viagem-detalhe">
+        ${_viagemDetalheHTML(rota, carros)}
+      </div>
+    </div>`;
+}
+
+function _selecionarViagem(rotaId){
+  _viagemSelecionada = rotaId;
+  renderizarViagensAndamento();
+}
+
+function _viagemDetalheHTML(rota, carros){
+  const etapaAtual = _viagemEtapaAtual(rota, carros);
+  const origem = carros[0] ? `${carros[0].cidadeOrigem||''}/${carros[0].ufOrigem||''}` : '—';
+  const destinos = [...new Set(carros.map(c => `${c.cidadeDestino||''}/${c.ufDestino||''}`))];
+  const destinoFinal = destinos.length === 1 ? destinos[0] : `${destinos.length} destinos`;
+
+  // Timeline horizontal das 7 etapas
+  const timeline = `<div class="jv-timeline">
+    ${VIAGEM_ETAPAS.map((e, i) => {
+      const feito = i < etapaAtual;
+      const atual = i === etapaAtual;
+      const cls = feito ? 'feito' : (atual ? 'atual' : 'pendente');
+      return `<div class="jv-etapa ${cls}">
+        <div class="jv-bolha">${feito ? '✓' : e.icone}</div>
+        <div class="jv-num">${e.num}</div>
+        <div class="jv-label">${e.label}</div>
+      </div>${i < VIAGEM_ETAPAS.length-1 ? `<div class="jv-conector ${feito?'feito':''}"></div>` : ''}`;
+    }).join('')}
+  </div>`;
+
+  // Dados da viagem
+  const dados = `<div class="jv-dados">
+    <div class="jv-dados-tit">📋 ${rota.nome || ('Viagem #'+rota.id)} <span class="jv-badge">${_labelStatusRota(rota.status)}</span></div>
+    <div class="jv-dados-grid">
+      <div><span class="jv-dl">Origem</span><span class="jv-dv">${origem}</span></div>
+      <div><span class="jv-dl">Destino final</span><span class="jv-dv">${destinoFinal}</span></div>
+      <div><span class="jv-dl">Motorista</span><span class="jv-dv">${rota.motorista_1||'a definir'}</span></div>
+      <div><span class="jv-dl">Caminhão / Carreta</span><span class="jv-dv">${rota.placa_cegonha||'a definir'}</span></div>
+      <div><span class="jv-dl">Carros na carga</span><span class="jv-dv">${carros.length}</span></div>
+      <div><span class="jv-dl">Status</span><span class="jv-dv">${VIAGEM_ETAPAS[etapaAtual].label}</span></div>
+    </div>
+  </div>`;
+
+  // ===== BLOCO 2: Veículos na carga + Resumo com barra de ocupação =====
+  const cap = _capacidadeRota(rota) || 11;
+  const ocupados = carros.length;
+  const pctOcup = Math.round((ocupados / cap) * 100);
+  const disponivel = Math.max(0, cap - ocupados);
+
+  const veiculosCarga = `<div class="jv-carga">
+    <div class="jv-carga-cab">
+      <span class="jv-carga-tit">📦 Veículos na carga <span class="text-muted">(${ocupados}/${cap})</span></span>
+      <span class="jv-carga-badge">${ocupados} carregado(s)</span>
+    </div>
+    ${carros.length === 0 ? '<p class="text-muted" style="padding:.6rem;font-size:.85rem">Nenhum carro nesta carga ainda.</p>' : `
+    <div style="overflow-x:auto">
+    <table class="jv-tabela">
+      <thead><tr><th>Placa</th><th>Cliente</th><th>Origem</th><th>Destino</th><th>Status</th></tr></thead>
+      <tbody>
+        ${carros.map(c => `<tr>
+          <td><strong>${c.placa||'—'}</strong></td>
+          <td title="${(c.cliente||'').replace(/"/g,'&quot;')}">${(c.cliente||'—')}</td>
+          <td>${c.patioAtual ? '🅿️ '+(c.patioAtual.split('/')[0]) : (c.cidadeOrigem||'—')}</td>
+          <td><strong>${c.cidadeDestino||'—'}</strong></td>
+          <td>${_statusPillPlanilha(c)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    ${disponivel > 0 ? `<div class="jv-vagas-livres">${disponivel} vaga(s) disponível(is)</div>` : ''}`}
+  </div>`;
+
+  const resumo = `<div class="jv-resumo">
+    <div class="jv-resumo-tit">📊 Resumo da carga</div>
+    <div class="jv-resumo-linhas">
+      <div class="jv-resumo-item"><span>🚛 Capacidade total</span><strong>${cap} veículos</strong></div>
+      <div class="jv-resumo-item"><span>📦 Carregados</span><strong>${ocupados} veículos</strong></div>
+      <div class="jv-resumo-item"><span>🅿️ Disponível</span><strong>${disponivel} vaga(s)</strong></div>
+    </div>
+    <div class="jv-barra-ocup"><div class="jv-barra-fill" style="width:${pctOcup}%;background:${pctOcup>=80?'#4ade80':pctOcup>=40?'#fbbf24':'#fb923c'}"></div></div>
+    <div class="jv-barra-pct">${pctOcup}% ocupado</div>
+  </div>`;
+
+  // ===== BLOCO 3: Ações rápidas (o coração da operação — eventos movem o status) =====
+  const etTransbordo = carros.some(c => c.status === 'Transbordo');
+  const podeColeta = carros.some(c => !['Em Transporte','Transbordo','Entregue','Cancelado'].includes(c.status));
+  const podeEntrega = carros.some(c => c.status === 'Em Transporte');
+  const acoes = `<div class="jv-acoes">
+    <div class="jv-acoes-tit">⚡ Ações da viagem</div>
+    <button class="jv-acao jv-acao-coleta" onclick="_viagemAcao(${rota.id},'coleta')">🚚 Registrar Coleta</button>
+    <button class="jv-acao jv-acao-viagem" onclick="_viagemAcao(${rota.id},'viagem')">🛫 Iniciar Viagem (saiu)</button>
+    <button class="jv-acao jv-acao-entrega" onclick="_viagemAcao(${rota.id},'entrega')">📥 Registrar Entrega</button>
+    <button class="jv-acao jv-acao-transbordo" onclick="_viagemAcao(${rota.id},'transbordo')">🔁 Registrar Transbordo</button>
+    <button class="jv-acao jv-acao-ocorrencia" onclick="_viagemAcao(${rota.id},'ocorrencia')">⚠️ Registrar Ocorrência</button>
+    <button class="jv-acao jv-acao-finalizar" onclick="_viagemAcao(${rota.id},'finalizar')">🏁 Finalizar Viagem</button>
+  </div>`;
+
+  // Documentos da viagem (reaproveita documentos_rota)
+  const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(rota.id));
+  const documentos = `<div class="jv-docs">
+    <div class="jv-docs-tit">📄 Documentos da viagem</div>
+    ${docs.length === 0 ? '<p class="text-muted" style="font-size:.82rem;padding:.3rem 0">Nenhum documento enviado ainda.</p>' :
+      docs.map(d => `<div class="jv-doc-item"><span>📎 ${_docTipoLabel(d.tipo)}</span><a href="${d.url}" target="_blank" class="jv-doc-ver">abrir</a></div>`).join('')}
+  </div>`;
+
+  return `${timeline}
+    <div class="jv-corpo">
+      <div class="jv-col-esq">${dados}${resumo}${documentos}</div>
+      <div class="jv-col-dir">${veiculosCarga}${acoes}</div>
+    </div>`;
+}
+
+function _docTipoLabel(t){
+  return ({ manifesto:'Manifesto', cte:'CT-e', romaneio:'Romaneio', conhecimento:'Conhecimento', checklist:'Check-list' })[t] || (t||'Documento');
+}
+
+// Dispatcher das ações da viagem — cada uma registra o EVENTO real e move o status
+async function _viagemAcao(rotaId, acao){
+  const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
+  if (!rota) return;
+  const carros = _veiculosNaRota(rotaId);
+  if (acao === 'coleta')      return _viagemRegistrarColeta(rota, carros);
+  if (acao === 'viagem')      return _viagemIniciar(rota, carros);
+  if (acao === 'entrega')     return _viagemRegistrarEntrega(rota, carros);
+  if (acao === 'transbordo')  return _viagemRegistrarTransbordo(rota, carros);
+  if (acao === 'ocorrencia')  { if (carros[0]) abrirRegistrarOcorrencia(carros[0].id); return; }
+  if (acao === 'finalizar')   return _viagemFinalizar(rota, carros);
+}
+// Modal genérico de seleção de carros para uma ação
+function _viagemModalCarros(titulo, subtitulo, carros, corBtn, textoBtn, onConfirm){
+  const old = document.getElementById('modalViagemAcao'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalViagemAcao';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">${titulo}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${subtitulo}</p>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.jv-sel-carro').forEach(c=>c.checked=true)">Marcar todos</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.jv-sel-carro').forEach(c=>c.checked=false)">Desmarcar</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+        ${carros.map(c => `<label class="jv-sel-linha">
+          <input type="checkbox" class="jv-sel-carro" value="${c.id}" checked>
+          <span><strong>${c.placa||'—'}</strong> · ${c.modelo||''} · ${c.cliente||''} <span class="text-muted">→ ${c.cidadeDestino||''}</span></span>
+        </label>`).join('')}
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" style="flex:1;background:${corBtn}" id="btnConfirmViagemAcao">${textoBtn}</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalViagemAcao').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  document.getElementById('btnConfirmViagemAcao').onclick = () => {
+    const ids = [...document.querySelectorAll('.jv-sel-carro:checked')].map(c => parseInt(c.value));
+    if (ids.length === 0){ alert('Selecione pelo menos um carro.'); return; }
+    onConfirm(ids);
+  };
+}
+
+async function _viagemMudarStatusCarros(ids, statusInterno, statusPlanilha, obs){
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Operador';
+  const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    if (!p) continue;
+    const antes = statusPlanilhaDoPedido(p);
+    try {
+      await supabase.from('pedidos').update({ status: statusInterno, status_planilha: statusPlanilha }).eq('id', id);
+      p.status = statusInterno; p.statusPlanilha = statusPlanilha;
+      await supabase.from('historico_status').insert({
+        pedido_id: id, status_anterior: antes, status_novo: statusPlanilha,
+        usuario_nome: usuario, usuario_perfil: perfil, observacao: obs
+      });
+    } catch(_){}
+  }
+}
+
+async function _viagemRegistrarColeta(rota, carros){
+  const elegiveis = carros.filter(c => !['Em Transporte','Transbordo','Entregue','Cancelado'].includes(c.status));
+  if (elegiveis.length === 0){ alert('Nenhum carro pendente de coleta nesta viagem.'); return; }
+  _viagemModalCarros('🚚 Registrar Coleta', 'Selecione os carros que foram coletados. O evento fica registrado na jornada.', elegiveis, '#16a34a', '✅ Confirmar coleta', async (ids) => {
+    await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado', '🚚 Coleta registrada (evento na viagem)');
+    document.getElementById('modalViagemAcao').remove();
+    renderizarViagensAndamento();
+  });
+}
+
+async function _viagemIniciar(rota, carros){
+  const elegiveis = carros.filter(c => ['Coletado','Enviado coleta'].includes(statusPlanilhaDoPedido(c)) || c.status === 'Em Coleta');
+  if (elegiveis.length === 0){ alert('Nenhum carro pronto para iniciar viagem (precisa estar coletado).'); return; }
+  _viagemModalCarros('🛫 Iniciar Viagem', 'Confirme os carros que saíram para viagem (Em transporte).', elegiveis, '#2563eb', '✅ Confirmar saída', async (ids) => {
+    await _viagemMudarStatusCarros(ids, 'Em Transporte', 'Em transporte', '🛫 Saiu para viagem (evento na viagem)');
+    if (rota.status !== 'em_andamento'){ try { await supabase.from('rotas_planejadas').update({ status:'em_andamento' }).eq('id', rota.id); rota.status='em_andamento'; } catch(_){} }
+    document.getElementById('modalViagemAcao').remove();
+    renderizarViagensAndamento();
+  });
+}
+
+async function _viagemRegistrarEntrega(rota, carros){
+  const elegiveis = carros.filter(c => c.status === 'Em Transporte');
+  if (elegiveis.length === 0){ alert('Nenhum carro em transporte para entregar.'); return; }
+  _viagemModalCarros('📥 Registrar Entrega', 'Selecione os carros entregues no destino final.', elegiveis, '#4ade80', '✅ Confirmar entrega', async (ids) => {
+    await _viagemMudarStatusCarros(ids, 'Entregue', 'Entregue', '📥 Entrega registrada (evento na viagem)');
+    document.getElementById('modalViagemAcao').remove();
+    renderizarViagensAndamento();
+    // sugere finalizar se todos entregues (exceto transbordo)
+    const rest = _veiculosNaRota(rota.id).filter(c => c.status !== 'Cancelado' && c.status !== 'Transbordo');
+    if (rest.length && rest.every(c => c.status === 'Entregue')){
+      setTimeout(() => { if (confirm('✅ Todos os carros desta viagem foram entregues. Finalizar a viagem?')) _viagemFinalizar(rota, _veiculosNaRota(rota.id)); }, 300);
+    }
+  });
+}
+
+async function _viagemRegistrarTransbordo(rota, carros){
+  const elegiveis = carros.filter(c => !['Entregue','Cancelado','Transbordo'].includes(c.status));
+  if (elegiveis.length === 0){ alert('Nenhum carro elegível para transbordo.'); return; }
+  // usa o fluxo de transbordo que já existe (escolhe pátio → corredor), 1 carro por vez
+  if (elegiveis.length === 1){ _abrirModalTransbordoStatus(elegiveis[0].id, statusPlanilhaDoPedido(elegiveis[0])); return; }
+  _viagemModalCarros('🔁 Registrar Transbordo', 'Selecione o carro que vai transbordar (um por vez, para escolher pátio e corredor).', elegiveis, '#fb923c', '➡️ Continuar', async (ids) => {
+    document.getElementById('modalViagemAcao').remove();
+    _abrirModalTransbordoStatus(ids[0], statusPlanilhaDoPedido((pedidosGlobais||[]).find(x=>x.id===ids[0])));
+  });
+}
+
+async function _viagemFinalizar(rota, carros){
+  const emViagem = carros.filter(c => !['Entregue','Cancelado','Transbordo'].includes(c.status));
+  if (emViagem.length > 0){
+    if (!confirm(`Ainda há ${emViagem.length} carro(s) não entregue(s) nesta viagem. Finalizar mesmo assim?`)) return;
+  }
+  if (typeof mudarStatusRota === 'function'){ await mudarStatusRota(rota.id, 'concluida'); }
+  _viagemSelecionada = null;
+  renderizarViagensAndamento();
+}
+
+function _labelStatusRota(st){
+  return ({ em_andamento:'Em viagem', planejada:'Planejada', concluida:'Concluída', cancelada:'Cancelada' })[st] || st;
 }
