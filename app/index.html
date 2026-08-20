@@ -824,12 +824,14 @@
                     </div>
                     <div class="cad-subtabs painel-subtabs">
                         <button class="cad-subtab-btn ativo" onclick="mostrarViewPainel('acomp',this)">📋 Acompanhamento</button>
+                        <button class="cad-subtab-btn" onclick="mostrarViewPainel('viagens',this)">🚚 Viagens em Andamento</button>
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('vagas',this)">📋 Vagas por Rota</button>
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('corredores',this)">🛣️ Corredores</button>
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('avancar',this)">📊 Pedidos por Status</button>
                         <button class="cad-subtab-btn" onclick="mostrarViewPainel('historico',this)">📚 Histórico de Cargas</button>
                     </div>
                     <div id="painelViewAvancar" style="display:none"></div>
+                    <div id="painelViewViagens" style="display:none"></div>
                     <div id="painelViewHistorico" style="display:none"></div>
                     <div id="painelViewVagas" style="display:none"></div>
                     <div id="painelViewCarteira" style="display:none"></div>
@@ -918,14 +920,14 @@
                     <button class="btn btn-secondary btn-sm log-atualizar" id="btnCarregarPedidos">↻ Atualizar</button>
 
                     <div class="log-grupo log-grupo-planejamento">
-                        <div class="log-grupo-rotulo"><span class="log-passo">1</span> 🗺️ Planejar</div>
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">1</span> 🗺️ Planejar</div>
                         <div class="log-grupo-abas">
                             <button class="log-tab-btn active" onclick="trocarTabLogistica('rotas', this)">🛣️ Rotas Planejadas</button>
                         </div>
                     </div>
 
                     <div class="log-grupo log-grupo-operacao">
-                        <div class="log-grupo-rotulo"><span class="log-passo">2</span> 🚛 Acompanhar</div>
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">2</span> 🚛 Acompanhar</div>
                         <div class="log-grupo-abas">
                             <button class="log-tab-btn" onclick="trocarTabLogistica('acompanhamento', this)">📊 Acompanhamento</button>
                             <button class="log-tab-btn" onclick="trocarTabLogistica('cegonhas', this)">📦 Cegonhas</button>
@@ -934,14 +936,14 @@
                     </div>
 
                     <div class="log-grupo">
-                        <div class="log-grupo-rotulo"><span class="log-passo">3</span> ⏰ Coordenar</div>
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">3</span> ⏰ Coordenar</div>
                         <div class="log-grupo-abas">
                             <button class="log-tab-btn" onclick="trocarTabLogistica('patios', this)">🅿️ Pátios</button>
                         </div>
                     </div>
 
                     <div class="log-grupo">
-                        <div class="log-grupo-rotulo"><span class="log-passo">4</span> 🔎 Conferência</div>
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">4</span> 🔎 Conferência</div>
                         <div class="log-grupo-abas">
                             <button class="log-tab-btn" onclick="trocarTabLogistica('validacaoPlacas', this)">🔎 Validação de Placas <span id="seloValidacaoPlacas" class="selo-log-pend" style="display:none">0</span></button>
                             <button class="log-tab-btn" onclick="trocarTabLogistica('fotos', this)">📸 Fotos das Placas</button>
@@ -949,7 +951,7 @@
                     </div>
 
                     <div class="log-grupo">
-                        <div class="log-grupo-rotulo"><span class="log-passo">5</span> 📅 Gestão de equipe</div>
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">5</span> 📅 Gestão de equipe</div>
                         <div class="log-grupo-abas">
                             <button class="log-tab-btn" onclick="trocarTabLogistica('folgas', this)">📅 Folgas e Lembretes</button>
                         </div>
