@@ -11602,19 +11602,22 @@ function mostrarViewPainel(view, btn){
   const historico = document.getElementById('painelViewHistorico');
   const vagas = document.getElementById('painelViewVagas');
   const viagens = document.getElementById('painelViewViagens');
+  const planejamento = document.getElementById('painelViewPlanejamento');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas' || view === 'viagens');
+  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas' || view === 'viagens' || view === 'planejamento');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
   if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
   if (historico) historico.style.display = (view === 'historico') ? '' : 'none';
   if (vagas) vagas.style.display = (view === 'vagas') ? '' : 'none';
   if (viagens) viagens.style.display = (view === 'viagens') ? '' : 'none';
+  if (planejamento) planejamento.style.display = (view === 'planejamento') ? '' : 'none';
   if (view === 'corredores') renderizarPainelCorredores();
   if (view === 'avancar') renderizarAvancarPedidos();
   if (view === 'historico'){ historico.innerHTML = _histCargasCasca(); renderizarHistoricoCargas(); }
   if (view === 'viagens') renderizarViagensAndamento();
+  if (view === 'planejamento') renderizarPlanejamentoRotas();
   if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="renderizarVagasPorRota()"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
@@ -14647,4 +14650,240 @@ async function _viagemFinalizar(rota, carros){
 
 function _labelStatusRota(st){
   return ({ em_andamento:'Em viagem', planejada:'Planejada', concluida:'Concluída', cancelada:'Cancelada' })[st] || st;
+}
+
+// ============================================================
+// PLANEJAMENTO DE ROTAS — tela visual da logística (drag & drop)
+// Substitui (futuramente) Corredores, Gestão Logística, Pedidos por Status e Rota Planejada.
+// Bloco 1: estrutura (corredores | pedidos disponíveis | carros) + KPIs + resumo.
+// ============================================================
+let _planCorredorSel = null;
+
+function _planParadasDoCorredor(c){
+  if (!c) return [];
+  if (c._paradas && c._paradas.length) return c._paradas.map(p => p.cidade);
+  return [c.origem, c.destino].filter(Boolean);
+}
+
+// Pedidos que encaixam num corredor (não entregues, sem rota) — parte do pátio atual ou origem
+function _planPedidosDoCorredor(c){
+  const paradas = _planParadasDoCorredor(c);
+  return (pedidosGlobais||[]).filter(p =>
+    !['Entregue','Cancelado'].includes(p.status||'') &&
+    !p.rotaId && !p.rota_id && !p.placaCegonha &&
+    pedidoEncaixaNaRota(p, paradas)
+  );
+}
+
+// Rotas (carros) ativas ligadas a um corredor
+function _planRotasDoCorredor(c){
+  return (rotasGlobais||[]).filter(r =>
+    String(r.corredor_id)===String(c.id) &&
+    !['concluida','cancelada'].includes(r.status));
+}
+
+function renderizarPlanejamentoRotas(){
+  const cont = document.getElementById('painelViewPlanejamento');
+  if (!cont) return;
+  const corredores = corredoresGlobais || [];
+  if (corredores.length === 0){
+    cont.innerHTML = `<p class="text-muted" style="padding:1.5rem;text-align:center">🗺️ Nenhum corredor cadastrado.<br><span style="font-size:.85rem">Cadastre corredores para planejar as rotas.</span></p>`;
+    return;
+  }
+  if (!_planCorredorSel || !corredores.find(c => String(c.id)===String(_planCorredorSel))){
+    _planCorredorSel = corredores[0].id;
+  }
+  const cor = corredores.find(c => String(c.id)===String(_planCorredorSel));
+
+  // KPIs globais
+  const totalPedidos = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'')).length;
+  const planejados = (pedidosGlobais||[]).filter(p => (p.rotaId||p.rota_id) && !['Entregue','Cancelado'].includes(p.status||'')).length;
+  const semRota = _planPedidosDoCorredor(cor).length;
+
+  cont.innerHTML = `
+    <div class="plan-kpis">
+      <div class="plan-kpi"><span class="plan-kpi-lbl">Total de pedidos</span><span class="plan-kpi-num">${totalPedidos}</span></div>
+      <div class="plan-kpi"><span class="plan-kpi-lbl">Carros planejados</span><span class="plan-kpi-num">${planejados}</span></div>
+      <div class="plan-kpi"><span class="plan-kpi-lbl">Sem rota (neste corredor)</span><span class="plan-kpi-num" style="color:#ef4444">${semRota}</span></div>
+    </div>
+
+    <div class="plan-layout">
+      <!-- Coluna 1: Corredores -->
+      <div class="plan-col plan-col-corredores">
+        <div class="plan-col-tit">Corredores</div>
+        ${corredores.map(c => {
+          const ped = _planPedidosDoCorredor(c);
+          const rotas = _planRotasDoCorredor(c);
+          const sel = String(c.id)===String(_planCorredorSel);
+          return `<div class="plan-corr-item ${sel?'sel':''}" onclick="_planSelCorredor(${c.id})">
+            <div class="plan-corr-nome">${c.nome}</div>
+            <div class="plan-corr-sub">${c.sla_horas?('SLA '+c.sla_horas+'h · '):''}${ped.length} sem rota · ${rotas.length} carro(s)</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Coluna 2: Pedidos disponíveis -->
+      <div class="plan-col plan-col-pedidos">
+        <div class="plan-col-tit">Pedidos disponíveis <span class="plan-col-badge">${_planPedidosDoCorredor(cor).length} sem rota</span></div>
+        <div id="planPedidosLista" class="plan-pedidos-lista">
+          ${_planPedidosListaHTML(cor)}
+        </div>
+      </div>
+
+      <!-- Coluna 3: Rotas / Carros -->
+      <div class="plan-col plan-col-carros">
+        <div class="plan-col-tit">Rotas / Carros <span class="plan-col-badge">${_planRotasDoCorredor(cor).length} carro(s)</span></div>
+        <div id="planCarrosLista" class="plan-carros-lista">
+          ${_planCarrosListaHTML(cor)}
+        </div>
+        <button class="plan-add-carro" onclick="_planAdicionarCarro()">➕ Adicionar carro</button>
+      </div>
+    </div>
+
+    <div class="plan-resumo">
+      <div class="plan-resumo-tit">Resumo do corredor — ${cor.nome}</div>
+      <div class="plan-resumo-grid">
+        <div><span class="plan-resumo-num">${_planRotasDoCorredor(cor).length}</span><span class="plan-resumo-lbl">Carros</span></div>
+        <div><span class="plan-resumo-num">${_planParadasDoCorredor(cor).length}</span><span class="plan-resumo-lbl">Cidades</span></div>
+        <div><span class="plan-resumo-num">${_planPedidosDoCorredor(cor).length}</span><span class="plan-resumo-lbl">Pedidos sem rota</span></div>
+      </div>
+    </div>`;
+}
+
+function _planPedidosListaHTML(cor){
+  const pedidos = _planPedidosDoCorredor(cor);
+  if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">Nenhum pedido sem rota neste corredor. 👌</p>';
+  return pedidos.map(p => `
+    <div class="plan-pedido" draggable="true" data-pedido="${p.id}" ondragstart="_planDragStart(event,${p.id})">
+      <div class="plan-pedido-top">
+        <span class="plan-pedido-id">#${p.id}</span>
+        <span class="plan-pedido-placa">${p.placa||'—'}</span>
+        <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
+      </div>
+      <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''}</div>
+      <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
+    </div>`).join('');
+}
+
+function _planCarrosListaHTML(cor){
+  const rotas = _planRotasDoCorredor(cor);
+  if (rotas.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">Nenhum carro criado. Clique em "Adicionar carro".</p>';
+  return rotas.map((r, i) => {
+    const carros = _veiculosNaRota(r.id);
+    const cap = _capacidadeRota(r) || 11;
+    return `<div class="plan-carro" data-rota="${r.id}" ondragover="_planDragOver(event)" ondragleave="_planDragLeave(event)" ondrop="_planDrop(event,${r.id})">
+      <div class="plan-carro-cab">
+        <span class="plan-carro-nome">🚛 ${r.placa_cegonha || ('CARRO '+(i+1))}</span>
+        <span class="plan-carro-info">${carros.length}/${cap}</span>
+      </div>
+      <div class="plan-carro-pedidos">
+        ${carros.map(c => `<div class="plan-carro-ped">
+          <span>✓ ${(c.cidadeOrigem||'').split('/')[0]} · #${c.id} ${c.placa||''}</span>
+          <button class="plan-ped-x" onclick="_planRemoverPedido(${c.id})" title="Tirar deste carro">✕</button>
+        </div>`).join('')}
+      </div>
+      <div class="plan-carro-drop">Soltar pedido aqui</div>
+    </div>`;
+  }).join('');
+}
+
+function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
+
+// Stubs do Bloco 1 (o drag & drop completo vem no Bloco 2)
+let _planPedidoArrastado = null;
+function _planDragStart(ev, pedidoId){ _planPedidoArrastado = pedidoId; ev.dataTransfer.effectAllowed = 'move'; }
+function _planDragOver(ev){ ev.preventDefault(); ev.currentTarget.classList.add('plan-carro-hover'); }
+function _planDragLeave(ev){ ev.currentTarget.classList.remove('plan-carro-hover'); }
+async function _planDrop(ev, rotaId){
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('plan-carro-hover');
+  if (!_planPedidoArrastado) return;
+  const pedidoId = _planPedidoArrastado; _planPedidoArrastado = null;
+  // vincula o pedido à rota
+  const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!rota || !p) return;
+  try {
+    const upd = { rota_id: rota.id };
+    if (rota.placa_cegonha) upd.placa_cegonha = rota.placa_cegonha;
+    if (rota.motorista_1) upd.motorista_1 = rota.motorista_1;
+    await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    p.rotaId = rota.id; p.rota_id = rota.id;
+    if (rota.placa_cegonha) p.placaCegonha = rota.placa_cegonha;
+    if (rota.motorista_1) p.motorista1 = rota.motorista_1;
+    renderizarPlanejamentoRotas();
+  } catch(e){ alert('Erro ao alocar: '+(e.message||e)); }
+}
+async function _planRemoverPedido(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  try {
+    await supabase.from('pedidos').update({ rota_id: null, placa_cegonha: null, corredor_manual_id: null }).eq('id', parseInt(pedidoId));
+    p.rotaId = null; p.rota_id = null; p.placaCegonha = null; p.corredorManualId = null;
+    renderizarPlanejamentoRotas();
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+async function _planAdicionarCarro(){
+  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
+  if (!cor) return;
+  _planAbrirModalNovoCarro(cor);
+}
+
+// Modal para criar um novo carro/rota no corredor, já com cegonha e motorista
+function _planAbrirModalNovoCarro(cor){
+  const cegonhas = (veiculosGlobais||[]).filter(v => (v.tipo === 'cegonha' || v.categoria === 'cegonha' || (v.capacidade||0) > 1) && v.ativo !== false);
+  const old = document.getElementById('modalPlanNovoCarro'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalPlanNovoCarro';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">🚛 Novo carro — ${cor.nome}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Escolha a cegonha (o motorista padrão vem junto). Deixe em branco para criar como <strong>"A definir"</strong>.</p>
+      <div class="form-group">
+        <label>Nome do carro / rota</label>
+        <input type="text" id="planNovoNome" value="${cor.nome} - Carro ${_planRotasDoCorredor(cor).length + 1}">
+      </div>
+      <div class="form-group">
+        <label>Cegonha / Guincho</label>
+        <select id="planNovoCegonha" onchange="_planNovoPreencheMot()">
+          <option value="">— sem cegonha por enquanto —</option>
+          ${cegonhas.map(v => `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}">${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Motorista</label>
+        <input type="text" id="planNovoMotorista" placeholder="Motorista da viagem" list="listaMotPlanNovo">
+        <datalist id="listaMotPlanNovo">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="_planConfirmarNovoCarro(${cor.id})">✅ Criar carro</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalPlanNovoCarro').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function _planNovoPreencheMot(){
+  const sel = document.getElementById('planNovoCegonha');
+  const opt = sel?.options[sel.selectedIndex];
+  const inp = document.getElementById('planNovoMotorista');
+  if (inp) inp.value = opt?.getAttribute('data-mot') || '';
+}
+
+async function _planConfirmarNovoCarro(corId){
+  const nome = document.getElementById('planNovoNome')?.value.trim();
+  const cegonha = document.getElementById('planNovoCegonha')?.value || null;
+  const motorista = document.getElementById('planNovoMotorista')?.value.trim() || null;
+  if (!nome){ alert('Informe um nome para o carro.'); return; }
+  try {
+    const ins = { nome, corredor_id: corId, status: 'planejada' };
+    if (cegonha) ins.placa_cegonha = cegonha;
+    if (motorista) ins.motorista_1 = motorista;
+    const { data, error } = await supabase.from('rotas_planejadas').insert(ins).select().single();
+    if (error) throw error;
+    if (data) rotasGlobais.push(data);
+    document.getElementById('modalPlanNovoCarro')?.remove();
+    renderizarPlanejamentoRotas();
+  } catch(e){ alert('Erro ao criar carro: '+(e.message||e)); }
 }
