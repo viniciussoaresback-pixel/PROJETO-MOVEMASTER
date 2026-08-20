@@ -8752,3 +8752,11 @@ html span.log-passo-bolinha {
 .plan-resumo-grid > div { display:flex; flex-direction:column; }
 .plan-resumo-num { font-size:1.5rem; font-weight:700; }
 .plan-resumo-lbl { font-size:.72rem; color:var(--text-secondary,#9ca3af); }
+
+/* Planejamento — novo layout (corredor → pedidos → viagem) */
+.plan-layout2 { display:grid; grid-template-columns:260px 1fr; gap:14px; margin-bottom:14px; }
+@media(max-width:820px){ .plan-layout2{ grid-template-columns:1fr; } }
+.plan-corr-hover { border-color:#ff6a00 !important; background:rgba(255,106,0,.15) !important; box-shadow:0 0 0 2px rgba(255,106,0,.3); }
+.plan-criar-viagem { background:#ff6a00; color:#fff; border:none; border-radius:8px; padding:6px 12px; font-weight:700; font-size:.78rem; cursor:pointer; }
+.plan-criar-viagem:hover { filter:brightness(1.1); }
+.plan-ped-tag { font-size:.72rem; }
