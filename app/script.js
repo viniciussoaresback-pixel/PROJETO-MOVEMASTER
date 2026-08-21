@@ -312,6 +312,7 @@ async function carregarDadosDoSupabase(opts) {
                 grupoId: p.grupo_id || null,
                 rotaId: p.rota_id || null,
                 tipoEntrega: p.tipo_entrega || 'patio',
+                aguardandoRetirada: p.aguardando_retirada || false,
                 fluxoEntrega: p.fluxo_entrega || null,
                 equipeEntregaId: p.equipe_entrega_id || null,
                 coletaEquipeEm: p.coleta_equipe_em || null,
@@ -11603,9 +11604,10 @@ function mostrarViewPainel(view, btn){
   const vagas = document.getElementById('painelViewVagas');
   const viagens = document.getElementById('painelViewViagens');
   const planejamento = document.getElementById('painelViewPlanejamento');
+  const central = document.getElementById('painelViewCentral');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas' || view === 'viagens' || view === 'planejamento');
+  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas' || view === 'viagens' || view === 'planejamento' || view === 'central');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
   if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
@@ -11613,11 +11615,13 @@ function mostrarViewPainel(view, btn){
   if (vagas) vagas.style.display = (view === 'vagas') ? '' : 'none';
   if (viagens) viagens.style.display = (view === 'viagens') ? '' : 'none';
   if (planejamento) planejamento.style.display = (view === 'planejamento') ? '' : 'none';
+  if (central) central.style.display = (view === 'central') ? '' : 'none';
   if (view === 'corredores') renderizarPainelCorredores();
   if (view === 'avancar') renderizarAvancarPedidos();
   if (view === 'historico'){ historico.innerHTML = _histCargasCasca(); renderizarHistoricoCargas(); }
   if (view === 'viagens') renderizarViagensAndamento();
   if (view === 'planejamento') renderizarPlanejamentoRotas();
+  if (view === 'central') renderizarCentralOperacao();
   if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="renderizarVagasPorRota()"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
@@ -14485,6 +14489,7 @@ function _viagemDetalheHTML(rota, carros){
   const podeEntrega = carros.some(c => c.status === 'Em Transporte');
   const acoes = `<div class="jv-acoes">
     <div class="jv-acoes-tit">⚡ Ações da viagem</div>
+    <button class="jv-acao jv-acao-puxar" onclick="_viagemAcao(${rota.id},'puxar')">➕ Puxar pedido pra viagem</button>
     <button class="jv-acao jv-acao-coleta" onclick="_viagemAcao(${rota.id},'coleta')">🚚 Registrar Coleta</button>
     <button class="jv-acao jv-acao-viagem" onclick="_viagemAcao(${rota.id},'viagem')">🛫 Iniciar Viagem (saiu)</button>
     <button class="jv-acao jv-acao-entrega" onclick="_viagemAcao(${rota.id},'entrega')">📥 Registrar Entrega</button>
@@ -14518,6 +14523,7 @@ async function _viagemAcao(rotaId, acao){
   if (!rota) return;
   const carros = _veiculosNaRota(rotaId);
   if (acao === 'coleta')      return _viagemRegistrarColeta(rota, carros);
+  if (acao === 'puxar')       return _viagemPuxarPedido(rota, carros);
   if (acao === 'viagem')      return _viagemIniciar(rota, carros);
   if (acao === 'entrega')     return _viagemRegistrarEntrega(rota, carros);
   if (acao === 'transbordo')  return _viagemRegistrarTransbordo(rota, carros);
@@ -14667,12 +14673,18 @@ function _planParadasDoCorredor(c){
 
 // Pedidos que encaixam num corredor (não entregues, sem rota) — parte do pátio atual ou origem
 function _planPedidosDoCorredor(c){
-  const paradas = _planParadasDoCorredor(c);
-  return (pedidosGlobais||[]).filter(p =>
-    !['Entregue','Cancelado'].includes(p.status||'') &&
-    !p.rotaId && !p.rota_id && !p.placaCegonha &&
-    pedidoEncaixaNaRota(p, paradas)
-  );
+  const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
+  const paradasStr = seq.filter(Boolean);
+  const vivos = (pedidosGlobais||[]).filter(p =>
+    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha);
+  return vivos.filter(p => {
+    // Corredor manual MANDA e é EXCLUSIVO: se o pedido foi jogado num corredor, só aparece nele
+    if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
+    const partida = p.patioAtual || p.cidadeOrigem;
+    const io = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, partida) : paradasStr.indexOf(partida);
+    const id = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, p.cidadeDestino) : paradasStr.indexOf(p.cidadeDestino);
+    return (io !== -1 && id !== -1 && io < id);
+  });
 }
 
 // Rotas (carros) ativas ligadas a um corredor
@@ -14680,6 +14692,17 @@ function _planRotasDoCorredor(c){
   return (rotasGlobais||[]).filter(r =>
     String(r.corredor_id)===String(c.id) &&
     !['concluida','cancelada'].includes(r.status));
+}
+
+// Pedidos "sem rota" = ativos, sem rota/cegonha, que NÃO encaixam em nenhum corredor
+function _planPedidosSemRota(){
+  const corredores = corredoresGlobais || [];
+  const vivos = (pedidosGlobais||[]).filter(p =>
+    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha);
+  return vivos.filter(p => {
+    // se está em algum corredor (encaixe ou manual), não é "sem rota"
+    return !corredores.some(c => _planPedidosDoCorredor(c).some(x => String(x.id)===String(p.id)));
+  });
 }
 
 function renderizarPlanejamentoRotas(){
@@ -14693,24 +14716,31 @@ function renderizarPlanejamentoRotas(){
   if (!_planCorredorSel || !corredores.find(c => String(c.id)===String(_planCorredorSel))){
     _planCorredorSel = corredores[0].id;
   }
-  const cor = corredores.find(c => String(c.id)===String(_planCorredorSel));
-  const pedidosCor = _planPedidosDoCorredor(cor);
+  const modoSemRota = String(_planCorredorSel) === '__semrota__';
+  const cor = modoSemRota ? null : corredores.find(c => String(c.id)===String(_planCorredorSel));
+  const pedidosCol = modoSemRota ? _planPedidosSemRota() : _planPedidosDoCorredor(cor);
+  const semRotaLista = _planPedidosSemRota();
 
   // KPIs
   const totalPedidos = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'')).length;
   const semRotaTotal = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha).length;
+  const tituloCol = modoSemRota ? '⚠️ Sem rota (não encaixam em corredor)' : ('Pedidos · ' + cor.nome);
 
   cont.innerHTML = `
     <div class="plan-kpis">
       <div class="plan-kpi"><span class="plan-kpi-lbl">Total de pedidos ativos</span><span class="plan-kpi-num">${totalPedidos}</span></div>
       <div class="plan-kpi"><span class="plan-kpi-lbl">Sem rota (geral)</span><span class="plan-kpi-num" style="color:#ef4444">${semRotaTotal}</span></div>
-      <div class="plan-kpi"><span class="plan-kpi-lbl">Neste corredor</span><span class="plan-kpi-num">${pedidosCor.length}</span></div>
+      <div class="plan-kpi"><span class="plan-kpi-lbl">${modoSemRota?'Sem encaixe':'Neste corredor'}</span><span class="plan-kpi-num">${pedidosCol.length}</span></div>
     </div>
 
     <div class="plan-layout2">
-      <!-- Coluna 1: Corredores (alvos de drop) -->
+      <!-- Coluna 1: Corredores + aba Sem Rota -->
       <div class="plan-col plan-col-corredores">
         <div class="plan-col-tit">Corredores <span class="text-muted" style="font-weight:400;text-transform:none">(arraste um pedido para cá)</span></div>
+        <div class="plan-corr-item plan-corr-semrota ${modoSemRota?'sel':''}" onclick="_planSelCorredor('__semrota__')">
+          <div class="plan-corr-nome">⚠️ Sem rota</div>
+          <div class="plan-corr-sub">${semRotaLista.length} pedido(s) sem corredor</div>
+        </div>
         ${corredores.map(c => {
           const ped = _planPedidosDoCorredor(c);
           const sel = String(c.id)===String(_planCorredorSel);
@@ -14722,14 +14752,14 @@ function renderizarPlanejamentoRotas(){
         }).join('')}
       </div>
 
-      <!-- Coluna 2: Pedidos do corredor selecionado -->
+      <!-- Coluna 2: Pedidos -->
       <div class="plan-col plan-col-pedidos">
         <div class="plan-col-tit">
-          <span>Pedidos · ${cor.nome} <span class="plan-col-badge">${pedidosCor.length}</span></span>
-          <button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>
+          <span>${tituloCol} <span class="plan-col-badge">${pedidosCol.length}</span></span>
+          ${modoSemRota ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
         </div>
         <div id="planPedidosLista" class="plan-pedidos-lista">
-          ${_planPedidosListaHTML(cor)}
+          ${modoSemRota ? _planSemRotaListaHTML() : _planPedidosListaHTML(cor)}
         </div>
       </div>
     </div>`;
@@ -14737,7 +14767,14 @@ function renderizarPlanejamentoRotas(){
 
 function _planPedidosListaHTML(cor){
   const pedidos = _planPedidosDoCorredor(cor);
-  if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">Nenhum pedido neste corredor.<br>Arraste pedidos de outro corredor para cá.</p>';
+  if (pedidos.length === 0){
+    // diagnóstico: por que está vazio?
+    const semRotaGeral = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha).length;
+    const dica = semRotaGeral === 0
+      ? 'Todos os pedidos ativos já estão em alguma rota/cegonha.'
+      : `Há ${semRotaGeral} pedido(s) sem rota no sistema, mas nenhum encaixa neste corredor (confira as paradas/cidades do corredor).`;
+    return `<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">Nenhum pedido neste corredor.<br>${dica}<br><span style="font-size:.78rem">Arraste pedidos de outro corredor para cá, ou verifique as cidades do corredor.</span></p>`;
+  }
   return pedidos.map(p => {
     const indicado = p.corredorManualId ? ' <span class="plan-ped-tag" title="Direcionado a este corredor">📌</span>' : '';
     return `
@@ -14754,6 +14791,23 @@ function _planPedidosListaHTML(cor){
 }
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
+
+// Lista os pedidos "sem rota" — arrastáveis para qualquer corredor
+function _planSemRotaListaHTML(){
+  const pedidos = _planPedidosSemRota();
+  if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido sem rota. Todos encaixaram em algum corredor.</p>';
+  return pedidos.map(p => `
+    <div class="plan-pedido" draggable="true" data-pedido="${p.id}" ondragstart="_planDragStart(event,${p.id})">
+      <div class="plan-pedido-top">
+        <span class="plan-pedido-id">#${p.id}</span>
+        <span class="plan-pedido-placa">${p.placa||'—'}</span>
+        <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
+      </div>
+      <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''}</div>
+      <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
+      <div class="plan-pedido-hint">👉 arraste para um corredor à esquerda</div>
+    </div>`).join('');
+}
 
 // Stubs do Bloco 1 (o drag & drop completo vem no Bloco 2)
 let _planPedidoArrastado = null;
@@ -14865,4 +14919,294 @@ async function _planConfirmarViagem(corId){
     renderizarPlanejamentoRotas();
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `🚛 Viagem criada no corredor ${cor.nome} com ${ids.length} pedido(s).`, 'success');
   } catch(e){ alert('Erro ao criar viagem: '+(e.message||e)); }
-}   
+}
+
+// Puxar um pedido (sem rota ou aguardando transbordo) para dentro de uma viagem em andamento
+function _viagemPuxarPedido(rota, carros){
+  const cap = _capacidadeRota(rota) || 11;
+  const vagas = cap - carros.length;
+  if (vagas <= 0){ alert(`Esta viagem está cheia (${carros.length}/${cap}). Não há vagas para puxar mais pedidos.`); return; }
+
+  // Candidatos: pedidos ativos, sem rota, OU aguardando transbordo — que não estão já nesta viagem
+  const candidatos = (pedidosGlobais||[]).filter(p => {
+    if (['Entregue','Cancelado'].includes(p.status||'')) return false;
+    if (String(p.rotaId||p.rota_id) === String(rota.id)) return false; // já está nesta viagem
+    const semRota = !p.rotaId && !p.rota_id && !p.placaCegonha;
+    const emTransbordo = p.status === 'Transbordo';
+    return semRota || emTransbordo;
+  });
+
+  if (candidatos.length === 0){ alert('Nenhum pedido disponível para puxar (sem rota ou aguardando transbordo).'); return; }
+
+  // Destaca os que "fazem sentido no caminho": destino do pedido bate com destino de algum carro da viagem,
+  // ou a origem/pátio do pedido está no trajeto.
+  const destinosViagem = new Set(carros.map(c => (c.cidadeDestino||'').toLowerCase()));
+  const ordenados = candidatos.map(p => {
+    const noCaminho = destinosViagem.has((p.cidadeDestino||'').toLowerCase());
+    return { p, noCaminho };
+  }).sort((a,b) => (b.noCaminho?1:0) - (a.noCaminho?1:0));
+
+  const old = document.getElementById('modalPuxarPedido'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalPuxarPedido';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:560px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">➕ Puxar pedido para a viagem</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${carros.length}/${cap} na carga · ${vagas} vaga(s). Selecione os pedidos para embarcar nesta viagem. Os marcados com 🔁 estão aguardando transbordo; ⭐ combinam com o destino da viagem.</p>
+      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:340px;overflow:auto">
+        ${ordenados.map(({p, noCaminho}) => `<label class="jv-sel-linha">
+          <input type="checkbox" class="puxar-ped" value="${p.id}">
+          <span>
+            ${noCaminho?'⭐ ':''}${p.status==='Transbordo'?'🔁 ':''}<strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''}
+            <span class="text-muted">${p.patioAtual?('🅿️ '+p.patioAtual.split('/')[0]):(p.cidadeOrigem||'')} → ${p.cidadeDestino||''}</span>
+          </span>
+        </label>`).join('')}
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" style="flex:1" onclick="_viagemConfirmarPuxar(${rota.id}, ${cap})">✅ Puxar selecionados</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalPuxarPedido').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _viagemConfirmarPuxar(rotaId, cap){
+  const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
+  if (!rota) return;
+  const jaNaCarga = _veiculosNaRota(rotaId).length;
+  const ids = [...document.querySelectorAll('.puxar-ped:checked')].map(c => parseInt(c.value));
+  if (ids.length === 0){ alert('Selecione ao menos um pedido.'); return; }
+  if (jaNaCarga + ids.length > cap){
+    alert(`Não cabe: a viagem tem ${jaNaCarga}/${cap} e você selecionou ${ids.length}. Reduza a seleção.`); return;
+  }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    if (!p) continue;
+    const eraTransbordo = p.status === 'Transbordo';
+    const antes = statusPlanilhaDoPedido(p);
+    try {
+      const upd = { rota_id: rota.id, corredor_manual_id: null };
+      if (rota.placa_cegonha) upd.placa_cegonha = rota.placa_cegonha;
+      if (rota.motorista_1) upd.motorista_1 = rota.motorista_1;
+      // se estava em transbordo, ao embarcar sai do pátio e entra em transporte (nova perna começou)
+      if (eraTransbordo){ upd.status = 'Em Transporte'; upd.status_planilha = 'Em transporte'; upd.cidade_transbordo = null; }
+      await supabase.from('pedidos').update(upd).eq('id', id);
+      Object.assign(p, { rotaId: rota.id, rota_id: rota.id });
+      if (rota.placa_cegonha) p.placaCegonha = rota.placa_cegonha;
+      if (rota.motorista_1) p.motorista1 = rota.motorista_1;
+      if (eraTransbordo){ p.status = 'Em Transporte'; p.statusPlanilha = 'Em transporte'; p.cidadeTransbordo = null; }
+      await supabase.from('historico_status').insert({
+        pedido_id: id, status_anterior: antes, status_novo: statusPlanilhaDoPedido(p),
+        usuario_nome: usuario, usuario_perfil: perfil,
+        observacao: eraTransbordo ? `➕ Puxado para a viagem ${rota.nome||('#'+rota.id)} (retomou de transbordo)` : `➕ Puxado para a viagem ${rota.nome||('#'+rota.id)} no caminho`
+      });
+    } catch(e){ console.error('Erro ao puxar', id, e); }
+  }
+  document.getElementById('modalPuxarPedido')?.remove();
+  renderizarViagensAndamento();
+  if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `➕ ${ids.length} pedido(s) puxado(s) para a viagem.`, 'success');
+}
+
+// ============================================================
+// CENTRAL DE OPERAÇÃO — fila de trabalho: só o que precisa de ação agora
+// Coletas (→ equipe) | Entregas (→ motorista), filtro por base, saem ao confirmar.
+// ============================================================
+let _centralBase = '__todas__';
+
+// Bases = cidades-base distintas das equipes
+function _centralBases(){
+  const set = new Set();
+  (equipesGlobais||[]).forEach(e => { if (e.cidade_base) set.add(e.cidade_base); });
+  return [...set].sort();
+}
+
+// COLETAS pendentes: precisam ser coletadas e ainda não foram (independe de equipe definida)
+function _centralColetas(){
+  return (pedidosGlobais||[]).filter(p => {
+    if (['Entregue','Cancelado'].includes(p.status||'')) return false;
+    if (p.coletaEquipeEm) return false;      // já coletado pela equipe → sai
+    if (p.patioAtual) return false;          // já está no pátio → não precisa coletar
+    if (p.formaColeta === 'motorista') return false; // motorista coleta direto
+    if (p.rotaId || p.placaCegonha) return false;    // já em viagem
+    // filtro de base: pela cidade de origem
+    if (_centralBase !== '__todas__' && !_cidadeIgual(p.cidadeOrigem, _centralBase)) return false;
+    return true;
+  });
+}
+
+// ENTREGAS pendentes: em transporte/no pátio, precisam ser entregues (→ motorista)
+function _centralEntregas(){
+  return (pedidosGlobais||[]).filter(p => {
+    if (['Cancelado'].includes(p.status||'')) return false;
+    if (p.status === 'Entregue') return false;      // já entregue → sai
+    if (p.entregaEquipeEm) return false;
+    if (p.aguardandoRetirada) return false;          // foi pra "aguardando retirada" → sai da fila
+    // precisa estar em transporte (a caminho do destino)
+    if (p.status !== 'Em Transporte') return false;
+    if (_centralBase !== '__todas__' && !_cidadeIgual(p.cidadeDestino, _centralBase)) return false;
+    return true;
+  });
+}
+
+// AGUARDANDO CONFIRMAÇÃO: coletas/entregas que dependem de confirmação externa
+function _centralAguardando(){
+  return (pedidosGlobais||[]).filter(p => {
+    if (['Cancelado'].includes(p.status||'')) return false;
+    // cliente leva ao pátio (aguardando chegada) ou aguardando retirada pelo cliente
+    const clienteLeva = p.formaColeta === 'cliente' && !p.patioAtual && !['Entregue'].includes(p.status);
+    const aguardaRetirada = p.aguardandoRetirada;
+    if (_centralBase !== '__todas__'){
+      const cidadeRef = aguardaRetirada ? p.cidadeDestino : p.cidadeOrigem;
+      if (!_cidadeIgual(cidadeRef, _centralBase)) return false;
+    }
+    return clienteLeva || aguardaRetirada;
+  });
+}
+
+function _centralConcluidosHoje(){
+  const hoje = new Date().toISOString().slice(0,10);
+  return (pedidosGlobais||[]).filter(p => {
+    const dt = (p.coletaEquipeEm||p.entregaEquipeEm||'').slice(0,10);
+    return dt === hoje;
+  }).length;
+}
+
+function renderizarCentralOperacao(){
+  const cont = document.getElementById('painelViewCentral');
+  if (!cont) return;
+  const coletas = _centralColetas();
+  const entregas = _centralEntregas();
+  const aguardando = _centralAguardando();
+  const concluidos = _centralConcluidosHoje();
+  const bases = _centralBases();
+
+  cont.innerHTML = `
+    <div class="central-topo">
+      <div class="central-base">
+        <label>BASE</label>
+        <select onchange="_centralSetBase(this.value)">
+          <option value="__todas__" ${_centralBase==='__todas__'?'selected':''}>Todas</option>
+          ${bases.map(b => `<option value="${b}" ${_centralBase===b?'selected':''}>${b}</option>`).join('')}
+        </select>
+      </div>
+      <div class="central-kpis">
+        <div class="central-kpi central-kpi-laranja"><div class="central-kpi-ic">🚚</div><div><span class="central-kpi-lbl">Coletas pendentes</span><span class="central-kpi-num">${coletas.length}</span></div></div>
+        <div class="central-kpi central-kpi-azul"><div class="central-kpi-ic">📦</div><div><span class="central-kpi-lbl">Entregas pendentes</span><span class="central-kpi-num">${entregas.length}</span></div></div>
+        <div class="central-kpi central-kpi-amarelo"><div class="central-kpi-ic">⏳</div><div><span class="central-kpi-lbl">Aguardando confirmação</span><span class="central-kpi-num">${aguardando.length}</span></div></div>
+        <div class="central-kpi central-kpi-verde"><div class="central-kpi-ic">✅</div><div><span class="central-kpi-lbl">Concluídos hoje</span><span class="central-kpi-num">${concluidos}</span></div></div>
+      </div>
+    </div>
+
+    <div class="central-colunas">
+      ${_centralColunaColetas(coletas)}
+      ${_centralColunaEntregas(entregas)}
+    </div>
+
+    ${_centralAguardandoHTML(aguardando)}
+
+    <p class="central-rodape">ℹ️ Pedidos saem desta tela após a confirmação da coleta ou entrega.</p>`;
+}
+
+function _centralSetBase(b){ _centralBase = b; renderizarCentralOperacao(); }
+
+function _tipoColetaLabel(p){
+  if (p.formaColeta === 'cliente') return '🏠 Cliente leva ao pátio';
+  if (p.formaColeta === 'coletador') return '🚚 Coletador busca';
+  if (p.formaColeta === 'motorista') return '🚛 Motorista coleta';
+  return '🚚 A definir';
+}
+function _tipoEntregaLabel(p){
+  return p.tipoEntrega === 'estabelecimento' ? '🏪 Estabelecimento do cliente' : '🏢 Retira no pátio';
+}
+
+function _centralColunaColetas(coletas){
+  return `<div class="central-col">
+    <div class="central-col-cab central-col-coletas">
+      <span>🚚 COLETAS PENDENTES</span>
+      <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
+    </div>
+    ${coletas.length === 0 ? '<p class="central-vazio">Nenhuma coleta pendente. 👍</p>' : `
+    <div style="overflow-x:auto"><table class="central-tabela">
+      <thead><tr><th></th><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Tipo de coleta</th><th>Status</th></tr></thead>
+      <tbody>
+        ${coletas.map(p => `<tr>
+          <td><input type="checkbox" class="central-chk-coleta" value="${p.id}"></td>
+          <td><strong>#${p.id}</strong></td>
+          <td>${p.placa||'—'}<br><span class="central-sub">${p.modelo||''}</span></td>
+          <td>${(p.cidadeOrigem||'—')}<br><span class="central-sub">${p.ufOrigem||''}</span></td>
+          <td>${(p.cidadeDestino||'—')}<br><span class="central-sub">${p.ufDestino||''}</span></td>
+          <td>${_tipoColetaLabel(p)}</td>
+          <td><span class="central-status central-status-laranja">● Disponível para coleta</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div class="central-col-rodape">
+      <span class="text-muted">${coletas.length} pedido(s)</span>
+      <button class="central-btn central-btn-laranja" onclick="_centralDirecionarEquipe()">👥 Direcionar para equipe</button>
+    </div>`}
+  </div>`;
+}
+
+function _centralColunaEntregas(entregas){
+  return `<div class="central-col">
+    <div class="central-col-cab central-col-entregas">
+      <span>📦 ENTREGAS PENDENTES</span>
+      <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
+    </div>
+    ${entregas.length === 0 ? '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>' : `
+    <div style="overflow-x:auto"><table class="central-tabela">
+      <thead><tr><th></th><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Destino da entrega</th><th>Status</th><th>Motorista</th></tr></thead>
+      <tbody>
+        ${entregas.map(p => `<tr>
+          <td><input type="checkbox" class="central-chk-entrega" value="${p.id}"></td>
+          <td><strong>#${p.id}</strong></td>
+          <td>${p.placa||'—'}<br><span class="central-sub">${p.modelo||''}</span></td>
+          <td>${(p.cidadeOrigem||'—')}<br><span class="central-sub">${p.ufOrigem||''}</span></td>
+          <td>${(p.cidadeDestino||'—')}<br><span class="central-sub">${p.ufDestino||''}</span></td>
+          <td>${_tipoEntregaLabel(p)}</td>
+          <td><span class="central-status central-status-verde">● Disponível para entrega</span></td>
+          <td>${p.motorista1||'—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div class="central-col-rodape">
+      <span class="text-muted">${entregas.length} pedido(s)</span>
+      <button class="central-btn central-btn-azul" onclick="_centralDirecionarMotorista()">👤 Direcionar para motorista</button>
+    </div>`}
+  </div>`;
+}
+
+function _centralAguardandoHTML(aguardando){
+  return `<div class="central-aguardando">
+    <div class="central-aguardando-cab">⏳ AGUARDANDO CONFIRMAÇÃO ${aguardando.length>0?`<span class="central-badge">${aguardando.length}</span>`:''}</div>
+    ${aguardando.length === 0 ? '<p class="central-vazio" style="padding:.6rem">Nada aguardando confirmação.</p>' : `
+    <div class="central-aguardando-cards">
+      ${aguardando.slice(0,8).map(p => {
+        const retirada = p.aguardandoRetirada;
+        const titulo = retirada ? '🏢 Retira no pátio' : (p.formaColeta==='cliente' ? '🏠 Cliente leva ao pátio' : '📥 Coleta no cliente');
+        const sub = retirada ? 'Aguardando retirada pelo cliente' : (p.formaColeta==='cliente' ? 'Aguardando chegada ao pátio' : 'Aguardando confirmação de disponibilidade');
+        const cidade = retirada ? p.cidadeDestino : p.cidadeOrigem;
+        return `<div class="central-ag-card">
+          <div class="central-ag-top"><strong>#${p.id}</strong> · Placa: ${p.placa||'—'}</div>
+          <div class="central-ag-tit">${titulo} · ${cidade||''}</div>
+          <div class="central-ag-sub">🟡 ${sub}</div>
+        </div>`;
+      }).join('')}
+    </div>`}
+  </div>`;
+}
+
+// Ações da Central (Bloco 2 detalha; stubs funcionais mínimos)
+function _centralDirecionarEquipe(){
+  const ids = [...document.querySelectorAll('.central-chk-coleta:checked')].map(c => parseInt(c.value));
+  if (ids.length === 0){ alert('Selecione ao menos uma coleta.'); return; }
+  _centralModalEquipe(ids);
+}
+function _centralDirecionarMotorista(){
+  const ids = [...document.querySelectorAll('.central-chk-entrega:checked')].map(c => parseInt(c.value));
+  if (ids.length === 0){ alert('Selecione ao menos uma entrega.'); return; }
+  _centralModalMotorista(ids);
+}
