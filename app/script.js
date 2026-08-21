@@ -14736,8 +14736,9 @@ function renderizarPlanejamentoRotas(){
     <div class="plan-layout2">
       <!-- Coluna 1: Corredores + aba Sem Rota -->
       <div class="plan-col plan-col-corredores">
-        <div class="plan-col-tit">Corredores <span class="text-muted" style="font-weight:400;text-transform:none">(arraste um pedido para cá)</span></div>
-        <div class="plan-corr-item plan-corr-semrota ${modoSemRota?'sel':''}" onclick="_planSelCorredor('__semrota__')">
+        <div class="plan-col-tit">Corredores</div>
+        <div class="plan-col-dica">arraste um pedido para cá ↴</div>
+        <div class="plan-corr-item plan-corr-semrota ${modoSemRota?'sel':''}" onclick="_planSelSemRota()">
           <div class="plan-corr-nome">⚠️ Sem rota</div>
           <div class="plan-corr-sub">${semRotaLista.length} pedido(s) sem corredor</div>
         </div>
@@ -14791,6 +14792,7 @@ function _planPedidosListaHTML(cor){
 }
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
+function _planSelSemRota(){ _planCorredorSel = '__semrota__'; renderizarPlanejamentoRotas(); }
 
 // Lista os pedidos "sem rota" — arrastáveis para qualquer corredor
 function _planSemRotaListaHTML(){
