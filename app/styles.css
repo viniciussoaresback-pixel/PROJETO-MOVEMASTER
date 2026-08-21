@@ -8825,3 +8825,19 @@ html span.log-passo-bolinha {
 
 /* Planejamento — dica da coluna corredores (proporcional) */
 .plan-col-dica { font-size:.7rem; color:var(--text-tertiary,#6b7280); margin:-6px 0 10px; font-style:italic; }
+
+/* Ação cancelar rota */
+.jv-acao-cancelar { background:#dc2626; }
+
+/* Planejamento — faixa de folgas/afastamentos */
+.plan-folgas { border:1px solid rgba(251,191,36,.3); background:rgba(251,191,36,.06); border-radius:12px; padding:10px 14px; margin:12px 0; }
+.plan-folgas-tit { font-size:.78rem; font-weight:700; color:#fbbf24; display:block; margin-bottom:8px; }
+.plan-folgas-chips { display:flex; gap:8px; flex-wrap:wrap; }
+.plan-folga-chip { display:inline-flex; align-items:center; gap:7px; border:1px solid; border-radius:999px; padding:4px 12px; font-size:.78rem; }
+.plan-folga-data { color:var(--text-tertiary,#9ca3af); font-size:.72rem; }
+
+/* Planejamento — filtro frota/terceiro no criar viagem */
+.plan-vtipo { display:flex; gap:8px; flex-wrap:wrap; }
+.plan-vtipo-btn { flex:1; min-width:90px; padding:8px 10px; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:8px; background:var(--surface-2,rgba(255,255,255,.03)); color:var(--text-secondary,#9ca3af); cursor:pointer; font-size:.8rem; font-weight:600; }
+.plan-vtipo-btn:hover { border-color:rgba(255,106,0,.4); }
+.plan-vtipo-btn.active { border-color:#ff6a00; background:rgba(255,106,0,.12); color:#ff6a00; }
