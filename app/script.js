@@ -14496,6 +14496,7 @@ function _viagemDetalheHTML(rota, carros){
     <button class="jv-acao jv-acao-transbordo" onclick="_viagemAcao(${rota.id},'transbordo')">🔁 Registrar Transbordo</button>
     <button class="jv-acao jv-acao-ocorrencia" onclick="_viagemAcao(${rota.id},'ocorrencia')">⚠️ Registrar Ocorrência</button>
     <button class="jv-acao jv-acao-finalizar" onclick="_viagemAcao(${rota.id},'finalizar')">🏁 Finalizar Viagem</button>
+    <button class="jv-acao jv-acao-cancelar" onclick="_viagemAcao(${rota.id},'cancelar')">❌ Cancelar Rota</button>
   </div>`;
 
   // Documentos da viagem (reaproveita documentos_rota)
@@ -14529,6 +14530,7 @@ async function _viagemAcao(rotaId, acao){
   if (acao === 'transbordo')  return _viagemRegistrarTransbordo(rota, carros);
   if (acao === 'ocorrencia')  { if (carros[0]) abrirRegistrarOcorrencia(carros[0].id); return; }
   if (acao === 'finalizar')   return _viagemFinalizar(rota, carros);
+  if (acao === 'cancelar')    return _viagemCancelar(rota, carros);
 }
 // Modal genérico de seleção de carros para uma ação
 function _viagemModalCarros(titulo, subtitulo, carros, corBtn, textoBtn, onConfirm){
@@ -14654,6 +14656,18 @@ async function _viagemFinalizar(rota, carros){
   renderizarViagensAndamento();
 }
 
+async function _viagemCancelar(rota, carros){
+  const msg = `❌ CANCELAR a rota "${rota.nome||('#'+rota.id)}"?\n\n` +
+    `Isso significa que a viagem NÃO aconteceu. Todos os ${carros.length} carro(s) voltam ao estado inicial ` +
+    `(Aguardando coleta), sem motorista, cegonha ou rota, e reaparecem nos corredores para novo planejamento.\n\n` +
+    `Esta ação fica registrada. Deseja continuar?`;
+  if (!confirm(msg)) return;
+  if (typeof mudarStatusRota === 'function'){ await mudarStatusRota(rota.id, 'cancelada'); }
+  _viagemSelecionada = null;
+  renderizarViagensAndamento();
+  if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `❌ Rota cancelada. Os carros voltaram para novo planejamento.`, 'success');
+}
+
 function _labelStatusRota(st){
   return ({ em_andamento:'Em viagem', planejada:'Planejada', concluida:'Concluída', cancelada:'Cancelada' })[st] || st;
 }
@@ -14727,6 +14741,7 @@ function renderizarPlanejamentoRotas(){
   const tituloCol = modoSemRota ? '⚠️ Sem rota (não encaixam em corredor)' : ('Pedidos · ' + cor.nome);
 
   cont.innerHTML = `
+    ${_planFolgasHTML()}
     <div class="plan-kpis">
       <div class="plan-kpi"><span class="plan-kpi-lbl">Total de pedidos ativos</span><span class="plan-kpi-num">${totalPedidos}</span></div>
       <div class="plan-kpi"><span class="plan-kpi-lbl">Sem rota (geral)</span><span class="plan-kpi-num" style="color:#ef4444">${semRotaTotal}</span></div>
@@ -14792,7 +14807,13 @@ function _planPedidosListaHTML(cor){
 }
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
-function _planSelSemRota(){ _planCorredorSel = '__semrota__'; renderizarPlanejamentoRotas(); }
+function _planSelSemRota(){
+  console.log('[Planejamento] Clique em Sem rota. Antes:', _planCorredorSel);
+  _planCorredorSel = '__semrota__';
+  console.log('[Planejamento] Depois:', _planCorredorSel, '— renderizando...');
+  try { renderizarPlanejamentoRotas(); console.log('[Planejamento] Render OK'); }
+  catch(e){ console.error('[Planejamento] ERRO no render sem rota:', e); alert('Erro ao abrir Sem rota: '+e.message); }
+}
 
 // Lista os pedidos "sem rota" — arrastáveis para qualquer corredor
 function _planSemRotaListaHTML(){
@@ -14864,10 +14885,18 @@ function _planAbrirModalViagem(cor, pedidos){
         </label>`).join('')}
       </div>
       <div class="form-group">
+        <label>Tipo de veículo</label>
+        <div class="plan-vtipo">
+          <button type="button" class="plan-vtipo-btn active" data-vtipo="todos" onclick="_planFiltrarCegonhas(this,'todos')">Todos</button>
+          <button type="button" class="plan-vtipo-btn" data-vtipo="frota" onclick="_planFiltrarCegonhas(this,'frota')">🚛 Frota própria</button>
+          <button type="button" class="plan-vtipo-btn" data-vtipo="terceiro" onclick="_planFiltrarCegonhas(this,'terceiro')">🤝 Terceiros</button>
+        </div>
+      </div>
+      <div class="form-group">
         <label>Cegonha / Guincho</label>
         <select id="planViagemCegonha" onchange="_planViagemPreencheMot()">
           <option value="">— a definir —</option>
-          ${cegonhas.map(v => `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}">${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`).join('')}
+          ${cegonhas.map(v => `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${v.propriedade||'frota'}">${v.propriedade==='terceiro'?'🤝 ':'🚛 '}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -14881,6 +14910,21 @@ function _planAbrirModalViagem(cor, pedidos){
       </div>
     </div>`;
   document.body.appendChild(div);
+}
+
+// Filtra as opções de cegonha por tipo (todos / frota própria / terceiro)
+function _planFiltrarCegonhas(btn, tipo){
+  document.querySelectorAll('.plan-vtipo-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const sel = document.getElementById('planViagemCegonha');
+  if (!sel) return;
+  [...sel.options].forEach(op => {
+    if (!op.value){ op.hidden = false; return; } // "a definir" sempre visível
+    const prop = op.getAttribute('data-prop') || 'frota';
+    op.hidden = (tipo === 'todos') ? false : (prop !== tipo);
+  });
+  // se a opção selecionada ficou escondida, volta pra "a definir"
+  if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden){ sel.value = ''; _planViagemPreencheMot(); }
 }
 
 function _planViagemPreencheMot(){
@@ -15362,4 +15406,38 @@ async function _centralRegistrarRetirada(pedidoId){
     renderizarCentralOperacao();
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ Retirada do #${p.id} registrada. Processo concluído.`, 'success');
   } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// Faixa de folgas/afastamentos/lembretes no topo do Planejamento (só visualização)
+function _planFolgasHTML(){
+  const folgas = window.folgasGlobais || (typeof folgasGlobais !== 'undefined' ? folgasGlobais : []);
+  if (!folgas || folgas.length === 0) return '';
+  const hoje = new Date().toISOString().slice(0,10);
+  const em7 = new Date(Date.now() + 7*86400000).toISOString().slice(0,10);
+  // ativos hoje + que começam nos próximos 7 dias
+  const relevantes = folgas.filter(f => {
+    const ini = String(f.data_inicio).slice(0,10);
+    const fim = String(f.data_fim || f.data_inicio).slice(0,10);
+    const ativoHoje = hoje >= ini && hoje <= fim;
+    const proximo = ini > hoje && ini <= em7;
+    return ativoHoje || proximo;
+  });
+  if (relevantes.length === 0) return '';
+  const cfgTipo = (typeof TIPOS_FOLGA !== 'undefined') ? TIPOS_FOLGA : {};
+  const chips = relevantes.map(f => {
+    const cfg = cfgTipo[f.tipo] || { label:'Lembrete', icone:'📌', cor:'#fbbf24' };
+    const ini = new Date(String(f.data_inicio).slice(0,10)+'T12:00').toLocaleDateString('pt-BR');
+    const fim = f.data_fim && String(f.data_fim).slice(0,10) !== String(f.data_inicio).slice(0,10)
+      ? ' a ' + new Date(String(f.data_fim).slice(0,10)+'T12:00').toLocaleDateString('pt-BR') : '';
+    const ativoHoje = hoje >= String(f.data_inicio).slice(0,10) && hoje <= String(f.data_fim||f.data_inicio).slice(0,10);
+    return `<span class="plan-folga-chip" style="border-color:${cfg.cor}55;background:${cfg.cor}18">
+      <span style="color:${cfg.cor}">${cfg.icone} ${cfg.label}</span>
+      <strong>${f.motorista_nome||f.titulo||'—'}</strong>
+      <span class="plan-folga-data">${ativoHoje?'hoje':ini}${fim}</span>
+    </span>`;
+  }).join('');
+  return `<div class="plan-folgas">
+    <span class="plan-folgas-tit">⚠️ Indisponibilidades / lembretes</span>
+    <div class="plan-folgas-chips">${chips}</div>
+  </div>`;
 }
