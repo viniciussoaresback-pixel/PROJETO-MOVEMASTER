@@ -8841,3 +8841,34 @@ html span.log-passo-bolinha {
 .plan-vtipo-btn { flex:1; min-width:90px; padding:8px 10px; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:8px; background:var(--surface-2,rgba(255,255,255,.03)); color:var(--text-secondary,#9ca3af); cursor:pointer; font-size:.8rem; font-weight:600; }
 .plan-vtipo-btn:hover { border-color:rgba(255,106,0,.4); }
 .plan-vtipo-btn.active { border-color:#ff6a00; background:rgba(255,106,0,.12); color:#ff6a00; }
+
+/* ===== ÁREA COMERCIAL — Visão Global ===== */
+.cg-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.cg-header h2 { margin:0; }
+.cg-kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px; }
+@media(max-width:900px){ .cg-kpis{ grid-template-columns:repeat(2,1fr); } }
+.cg-kpi { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:16px; background:var(--surface-1,rgba(255,255,255,.03)); text-align:left; }
+.cg-kpi-num { display:block; font-size:2rem; font-weight:800; line-height:1.1; }
+.cg-kpi-lbl { font-size:.76rem; color:var(--text-secondary,#9ca3af); }
+.cg-sec-tit { font-size:.82rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-secondary,#9ca3af); margin:20px 0 12px; }
+.cg-corredores { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-bottom:20px; }
+.cg-corr-card { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:14px; background:var(--surface-1,rgba(255,255,255,.03)); }
+.cg-corr-nome { font-weight:700; font-size:.9rem; }
+.cg-corr-total { font-weight:800; font-size:1.1rem; margin:6px 0 10px; }
+.cg-corr-detalhe { display:flex; flex-direction:column; gap:4px; font-size:.8rem; color:var(--text-secondary,#9ca3af); margin-bottom:10px; }
+.cg-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+.cg-corr-barra { display:flex; height:8px; border-radius:999px; overflow:hidden; background:var(--surface-2,rgba(255,255,255,.08)); }
+.cg-corr-barra > div { height:100%; }
+.cg-duplo { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:820px){ .cg-duplo{ grid-template-columns:1fr; } }
+.cg-bloco { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:16px; background:var(--surface-1,rgba(255,255,255,.03)); }
+.cg-bloco-tit { font-weight:700; font-size:.9rem; margin-bottom:12px; }
+.cg-viagem-linha { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); cursor:pointer; font-size:.84rem; }
+.cg-viagem-linha:hover { background:rgba(255,106,0,.04); }
+.cg-viagem-rota { font-weight:700; min-width:60px; }
+.cg-viagem-corr { flex:1; color:var(--text-secondary,#9ca3af); }
+.cg-viagem-ped { color:var(--text-secondary,#9ca3af); }
+.cg-badge { font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:999px; }
+.cg-badge-azul { background:rgba(37,99,235,.15); color:#2563eb; }
+.cg-atencao { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:.85rem; }
+.cg-at-ic { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
