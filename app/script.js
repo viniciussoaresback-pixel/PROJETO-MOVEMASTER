@@ -15019,7 +15019,7 @@ let _centralBase = '__todas__';
 // Bases = cidades-base distintas das equipes
 function _centralBases(){
   const set = new Set();
-  (equipesGlobais||[]).forEach(e => { if (e.cidade_base) set.add(e.cidade_base); });
+  (equipesEntregaGlobais||[]).forEach(e => { if (e.cidade_base) set.add(e.cidade_base); });
   return [...set].sort();
 }
 
