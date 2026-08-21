@@ -15199,7 +15199,7 @@ function _centralAguardandoHTML(aguardando){
   </div>`;
 }
 
-// Ações da Central (Bloco 2 detalha; stubs funcionais mínimos)
+// Ações da Central (Bloco 2)
 function _centralDirecionarEquipe(){
   const ids = [...document.querySelectorAll('.central-chk-coleta:checked')].map(c => parseInt(c.value));
   if (ids.length === 0){ alert('Selecione ao menos uma coleta.'); return; }
@@ -15209,4 +15209,87 @@ function _centralDirecionarMotorista(){
   const ids = [...document.querySelectorAll('.central-chk-entrega:checked')].map(c => parseInt(c.value));
   if (ids.length === 0){ alert('Selecione ao menos uma entrega.'); return; }
   _centralModalMotorista(ids);
+}
+
+// Modal: direcionar coletas para uma EQUIPE
+function _centralModalEquipe(ids){
+  const equipes = (equipesEntregaGlobais||[]).filter(e => e.ativo !== false);
+  const old = document.getElementById('modalCentralEquipe'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalCentralEquipe';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">👥 Direcionar para equipe</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} coleta(s) selecionada(s). Escolha a equipe que fará a coleta.</p>
+      <div class="form-group">
+        <label>Equipe de coleta</label>
+        <select id="centralEquipeSel">
+          <option value="">Selecione...</option>
+          ${equipes.map(e => `<option value="${e.id}">${e.nome}${e.cidade_base?' · 📍 '+e.cidade_base:''}${e.responsavel?' ('+e.responsavel+')':''}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#ff6a00" onclick="_centralConfirmarEquipe([${ids.join(',')}])">✅ Direcionar</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalCentralEquipe').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _centralConfirmarEquipe(ids){
+  const equipeId = document.getElementById('centralEquipeSel')?.value;
+  if (!equipeId){ alert('Selecione uma equipe.'); return; }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    if (!p) continue;
+    try {
+      await supabase.from('pedidos').update({ equipe_coleta_id: parseInt(equipeId), forma_coleta: p.formaColeta || 'coletador' }).eq('id', id);
+      p.equipeColetaId = parseInt(equipeId);
+      if (!p.formaColeta) p.formaColeta = 'coletador';
+    } catch(e){ console.error('Erro ao direcionar coleta', id, e); }
+  }
+  document.getElementById('modalCentralEquipe')?.remove();
+  renderizarCentralOperacao();
+  if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} coleta(s) direcionada(s) para a equipe. A equipe confirma no app.`, 'success');
+}
+
+// Modal: direcionar entregas para um MOTORISTA
+function _centralModalMotorista(ids){
+  const old = document.getElementById('modalCentralMotorista'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalCentralMotorista';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">👤 Direcionar para motorista</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} entrega(s) selecionada(s). Escolha o motorista responsável pela entrega.</p>
+      <div class="form-group">
+        <label>Motorista</label>
+        <input type="text" id="centralMotoristaSel" placeholder="Nome do motorista" list="listaMotCentral">
+        <datalist id="listaMotCentral">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#2563eb" onclick="_centralConfirmarMotorista([${ids.join(',')}])">✅ Direcionar</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalCentralMotorista').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _centralConfirmarMotorista(ids){
+  const mot = document.getElementById('centralMotoristaSel')?.value.trim();
+  if (!mot){ alert('Informe o motorista.'); return; }
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    if (!p) continue;
+    try {
+      await supabase.from('pedidos').update({ motorista_1: mot }).eq('id', id);
+      p.motorista1 = mot;
+    } catch(e){ console.error('Erro ao direcionar entrega', id, e); }
+  }
+  document.getElementById('modalCentralMotorista')?.remove();
+  renderizarCentralOperacao();
+  if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👤 ${ids.length} entrega(s) direcionada(s) para ${mot}. O motorista confirma no app.`, 'success');
 }
