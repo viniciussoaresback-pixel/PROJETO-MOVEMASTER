@@ -14727,7 +14727,7 @@ function renderizarPlanejamentoRotas(){
     cont.innerHTML = `<p class="text-muted" style="padding:1.5rem;text-align:center">🗺️ Nenhum corredor cadastrado.<br><span style="font-size:.85rem">Cadastre corredores para planejar as rotas.</span></p>`;
     return;
   }
-  if (!_planCorredorSel || !corredores.find(c => String(c.id)===String(_planCorredorSel))){
+  if (_planCorredorSel !== '__semrota__' && (!_planCorredorSel || !corredores.find(c => String(c.id)===String(_planCorredorSel)))){
     _planCorredorSel = corredores[0].id;
   }
   const modoSemRota = String(_planCorredorSel) === '__semrota__';
@@ -14807,13 +14807,7 @@ function _planPedidosListaHTML(cor){
 }
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
-function _planSelSemRota(){
-  console.log('[Planejamento] Clique em Sem rota. Antes:', _planCorredorSel);
-  _planCorredorSel = '__semrota__';
-  console.log('[Planejamento] Depois:', _planCorredorSel, '— renderizando...');
-  try { renderizarPlanejamentoRotas(); console.log('[Planejamento] Render OK'); }
-  catch(e){ console.error('[Planejamento] ERRO no render sem rota:', e); alert('Erro ao abrir Sem rota: '+e.message); }
-}
+function _planSelSemRota(){ _planCorredorSel = '__semrota__'; renderizarPlanejamentoRotas(); }
 
 // Lista os pedidos "sem rota" — arrastáveis para qualquer corredor
 function _planSemRotaListaHTML(){
