@@ -763,6 +763,13 @@ async function carregarPainel() {
     }
     renderizarKanban();
     verificarNotificacoesColeta();
+    // Abre na primeira aba (Planejamento de Rotas), se o botão existir e nenhuma view estiver ativa
+    try {
+        const btnPrimeira = document.querySelector('.painel-subtabs .cad-subtab-btn.ativo');
+        if (btnPrimeira && /Planejamento/.test(btnPrimeira.textContent)) {
+            mostrarViewPainel('planejamento', btnPrimeira);
+        }
+    } catch(e){}
 }
 
 let _ocupFiltroStatus = '';
