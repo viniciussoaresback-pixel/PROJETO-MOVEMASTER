@@ -307,6 +307,9 @@
                 </div>
                 <nav class="nav-tabs">
                     <button class="nav-btn" data-tab="diretoria">📊 Visão Geral</button>
+                    <button class="nav-btn" data-tab="visaoGlobal">🌐 Visão Global</button>
+                    <button class="nav-btn" data-tab="comercialPedidos">📋 Pedidos</button>
+                    <button class="nav-btn" data-tab="comercialViagens">🚛 Viagens</button>
                     <button class="nav-btn active" data-tab="comercial">Lançamento Comercial</button>
                     <button class="nav-btn" data-tab="orcamento">💵 Orçamento</button>
                     <button class="nav-btn" data-tab="meusPedidos">Meus Pedidos <span id="seloOcorrencias" class="selo-aba" style="display:none">0</span></button>
@@ -618,6 +621,18 @@
             </section>
 
             <!-- TAB: ORÇAMENTO -->
+            <section id="visaoGlobal" class="tab-content">
+                <div id="visaoGlobalConteudo"></div>
+            </section>
+
+            <section id="comercialPedidos" class="tab-content">
+                <div id="comercialPedidosConteudo"></div>
+            </section>
+
+            <section id="comercialViagens" class="tab-content">
+                <div id="comercialViagensConteudo"></div>
+            </section>
+
             <section id="orcamento" class="tab-content">
                 <div class="card">
                     <h2>💵 Orçamento de Frete</h2>
@@ -921,30 +936,15 @@
                     <button class="btn btn-secondary btn-sm log-atualizar" id="btnCarregarPedidos">↻ Atualizar</button>
 
                     <div class="log-grupo log-grupo-planejamento">
-                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">1</span> 🗺️ Planejar</div>
+                        <div class="log-grupo log-grupo-operacao">
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">1</span> ⏰ Coordenar</div>
                         <div class="log-grupo-abas">
-                            <button class="log-tab-btn active" onclick="trocarTabLogistica('rotas', this)">🛣️ Rotas Planejadas</button>
-                        </div>
-                    </div>
-
-                    <div class="log-grupo log-grupo-operacao">
-                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">2</span> 🚛 Acompanhar</div>
-                        <div class="log-grupo-abas">
-                            <button class="log-tab-btn" onclick="trocarTabLogistica('acompanhamento', this)">📊 Acompanhamento</button>
-                            <button class="log-tab-btn" onclick="trocarTabLogistica('cegonhas', this)">📦 Cegonhas</button>
-                            <button class="log-tab-btn" onclick="trocarTabLogistica('terceiros', this)">🤝 Terceiros</button>
+                            <button class="log-tab-btn active" onclick="trocarTabLogistica('patios', this)">🅿️ Pátios</button>
                         </div>
                     </div>
 
                     <div class="log-grupo">
-                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">3</span> ⏰ Coordenar</div>
-                        <div class="log-grupo-abas">
-                            <button class="log-tab-btn" onclick="trocarTabLogistica('patios', this)">🅿️ Pátios</button>
-                        </div>
-                    </div>
-
-                    <div class="log-grupo">
-                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">4</span> 🔎 Conferência</div>
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">2</span> 🔎 Conferência</div>
                         <div class="log-grupo-abas">
                             <button class="log-tab-btn" onclick="trocarTabLogistica('validacaoPlacas', this)">🔎 Validação de Placas <span id="seloValidacaoPlacas" class="selo-log-pend" style="display:none">0</span></button>
                             <button class="log-tab-btn" onclick="trocarTabLogistica('fotos', this)">📸 Fotos das Placas</button>
@@ -952,11 +952,17 @@
                     </div>
 
                     <div class="log-grupo">
-                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">5</span> 📅 Gestão de equipe</div>
+                        <div class="log-grupo-rotulo"><span class="log-passo-bolinha">3</span> 📅 Gestão de equipe</div>
                         <div class="log-grupo-abas">
                             <button class="log-tab-btn" onclick="trocarTabLogistica('folgas', this)">📅 Folgas e Lembretes</button>
                         </div>
                     </div>
+
+                    <!-- Abas antigas escondidas (funções mantidas por baixo): rotas, acompanhamento, cegonhas, terceiros -->
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('rotas', this)" style="display:none">Rotas</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('acompanhamento', this)" style="display:none">Acompanhamento</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('cegonhas', this)" style="display:none">Cegonhas</button>
+                    <button class="log-tab-btn" onclick="trocarTabLogistica('terceiros', this)" style="display:none">Terceiros</button>
 
                     <!-- Manifestos: escondido da navegação mas continua registrando por baixo -->
                     <button class="log-tab-btn" onclick="trocarTabLogistica('manifestos', this)" style="display:none">Manifestos</button>
@@ -1020,7 +1026,7 @@
                 </div>
 
                 <!-- ABA: ROTAS PLANEJADAS -->
-                <div id="logTab-rotas" class="log-tab-content active">
+                <div id="logTab-rotas" class="log-tab-content" style="display:none">
                     <div class="rotas-topo">
                         <p class="text-muted text-sm" style="margin:0">Planeje a rota primeiro (cegonha + data + paradas na ordem) e vá vinculando os pedidos que se encaixam no caminho até encher a carreta.</p>
                         <button class="btn btn-primary btn-sm" onclick="abrirNovaRota()">➕ Nova Rota</button>
@@ -1107,7 +1113,7 @@
                 </div>
 
                 <!-- ABA: CARROS NOS PÁTIOS (TRANSBORDO) -->
-                <div id="logTab-patios" class="log-tab-content" style="display:none">
+                <div id="logTab-patios" class="log-tab-content active">
                     <div id="painelPatios">
                         <p class="text-center text-muted">Clique em Atualizar para carregar</p>
                     </div>
