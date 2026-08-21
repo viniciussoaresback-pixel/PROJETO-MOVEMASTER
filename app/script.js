@@ -107,6 +107,9 @@ function trocarAba(event) {
     const secao = document.getElementById(tabAlvo);
     if (secao) secao.classList.add('active');
     if (tabAlvo === 'diretoria') renderizarDiretoria();
+    if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
+    if (tabAlvo === 'comercialPedidos' && typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
+    if (tabAlvo === 'comercialViagens' && typeof renderizarComercialViagens === 'function') renderizarComercialViagens();
     if (tabAlvo === 'orcamento') prepararOrcamento();
 
     if (tabAlvo === 'painel') carregarPainel();
@@ -12125,7 +12128,7 @@ async function criarRotaDoCorredorSelec(corredorId){
 
 // Modal reutilizável de escolha de cegonha/motorista ao criar rota do corredor
 function _abrirModalCegonhaRotaCorr(nome, qtd){
-  const cegonhas = (veiculosGlobais||[]).filter(v => (v.tipo === 'cegonha' || v.categoria === 'cegonha' || (v.capacidade||0) > 1) && v.ativo !== false);
+  const cegonhas = (veiculosGlobais||[]).filter(v => v.ativo !== false && v.placa);
   const old = document.getElementById('modalCriarRotaCorr'); if (old) old.remove();
   const div = document.createElement('div');
   div.id = 'modalCriarRotaCorr';
@@ -14784,8 +14787,17 @@ function renderizarPlanejamentoRotas(){
         <div id="planPedidosLista" class="plan-pedidos-lista">
           ${modoSemRota ? _planSemRotaListaHTML() : _planPedidosListaHTML(cor)}
         </div>
+        ${modoSemRota ? '' : `<button class="plan-nova-rota" onclick="_planNovaRotaVazia(${cor.id})">➕ Abrir rota nova para planejar</button>`}
       </div>
     </div>`;
+}
+
+// Cria uma rota nova (vazia) para o corredor — abre pra planejar/escolher veículo
+function _planNovaRotaVazia(corId){
+  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(corId));
+  if (!cor) return;
+  // reaproveita o modal de criar viagem, mas sem pré-selecionar pedidos
+  _planAbrirModalViagem(cor, _planPedidosDoCorredor(cor), true);
 }
 
 function _planPedidosListaHTML(cor){
@@ -14865,23 +14877,23 @@ function _planCriarViagem(corId){
   _planAbrirModalViagem(cor, pedidos);
 }
 
-function _planAbrirModalViagem(cor, pedidos){
-  const cegonhas = (veiculosGlobais||[]).filter(v => (v.tipo === 'cegonha' || v.categoria === 'cegonha' || (v.capacidade||0) > 1) && v.ativo !== false);
+function _planAbrirModalViagem(cor, pedidos, rotaVazia){
+  const cegonhas = (veiculosGlobais||[]).filter(v => v.ativo !== false && v.placa);
   const old = document.getElementById('modalPlanViagem'); if (old) old.remove();
   const div = document.createElement('div');
   div.id = 'modalPlanViagem';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
   div.innerHTML = `
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:560px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
-      <h2 style="margin:0 0 4px">🚛 Criar viagem — ${cor.nome}</h2>
-      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Selecione os pedidos que vão nesta viagem e escolha o caminhão/motorista.</p>
+      <h2 style="margin:0 0 4px">${rotaVazia ? '➕ Nova rota para planejar' : '🚛 Criar viagem'} — ${cor.nome}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${rotaVazia ? 'Crie a rota e escolha o veículo. Você pode marcar pedidos agora ou deixar para arrastar depois.' : 'Selecione os pedidos que vão nesta viagem e escolha o caminhão/motorista.'}</p>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.plan-viagem-ped').forEach(c=>c.checked=true)">Marcar todos</button>
         <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.plan-viagem-ped').forEach(c=>c.checked=false)">Desmarcar</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:220px;overflow:auto">
-        ${pedidos.map(p => `<label class="jv-sel-linha">
-          <input type="checkbox" class="plan-viagem-ped" value="${p.id}" checked>
+        ${pedidos.length === 0 ? '<p class="text-muted" style="font-size:.82rem">Nenhum pedido neste corredor ainda. Você pode criar a rota vazia e arrastar pedidos depois.</p>' : pedidos.map(p => `<label class="jv-sel-linha">
+          <input type="checkbox" class="plan-viagem-ped" value="${p.id}" ${rotaVazia ? '' : 'checked'}>
           <span><strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''} <span class="text-muted">→ ${p.cidadeDestino||''}</span></span>
         </label>`).join('')}
       </div>
@@ -14938,9 +14950,9 @@ function _planViagemPreencheMot(){
 async function _planConfirmarViagem(corId){
   const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(corId));
   const ids = [...document.querySelectorAll('.plan-viagem-ped:checked')].map(c => parseInt(c.value));
-  if (ids.length === 0){ alert('Selecione ao menos um pedido.'); return; }
   const cegonha = document.getElementById('planViagemCegonha')?.value || null;
   const motorista = document.getElementById('planViagemMotorista')?.value.trim() || null;
+  if (ids.length === 0 && !cegonha){ alert('Para criar a rota, selecione ao menos um pedido OU escolha o veículo.'); return; }
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
     // cria a rota
@@ -15441,4 +15453,142 @@ function _planFolgasHTML(){
     <span class="plan-folgas-tit">⚠️ Indisponibilidades / lembretes</span>
     <div class="plan-folgas-chips">${chips}</div>
   </div>`;
+}
+
+// ============================================================
+// ÁREA COMERCIAL (somente visualização) — Visão Global, Pedidos, Viagens, Rastreio
+// Tudo que a logística faz aparece aqui; o comercial não altera a operação.
+// ============================================================
+
+// Agrupa a situação dos pedidos ativos
+function _cgSituacao(){
+  const ativos = (pedidosGlobais||[]).filter(p => !['Cancelado'].includes(p.status||''));
+  const cont = { aguardandoColeta:0, prontos:0, emViagem:0, chegaram:0, aguardandoRetirada:0, total:0 };
+  ativos.forEach(p => {
+    const st = statusPlanilhaDoPedido(p);
+    if (p.status === 'Entregue') return; // entregue não conta como "em operação"
+    cont.total++;
+    if (p.aguardandoRetirada){ cont.aguardandoRetirada++; return; }
+    if (['Aguardando coleta','Não liberado'].includes(st)) cont.aguardandoColeta++;
+    else if (['Enviado coleta','Coletado'].includes(st)) cont.prontos++;
+    else if (st === 'Em transporte' || st === 'Transbordo') cont.emViagem++;
+  });
+  // chegaram ao destino hoje (entregues)
+  cont.chegaram = (pedidosGlobais||[]).filter(p => p.status === 'Entregue').length;
+  return cont;
+}
+
+// Dados por corredor: total, aguardando, em viagem, concluídos
+function _cgCorredores(){
+  return (corredoresGlobais||[]).map(c => {
+    const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
+    const paradasStr = seq.filter(Boolean);
+    const pedidos = (pedidosGlobais||[]).filter(p => {
+      if (['Cancelado'].includes(p.status||'')) return false;
+      if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
+      const partida = p.patioAtual || p.cidadeOrigem;
+      const io = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, partida) : -1;
+      const id = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, p.cidadeDestino) : -1;
+      return (io !== -1 && id !== -1 && io < id);
+    });
+    let aguardando=0, emViagem=0, concluidos=0;
+    pedidos.forEach(p => {
+      const st = statusPlanilhaDoPedido(p);
+      if (p.status === 'Entregue') concluidos++;
+      else if (st === 'Em transporte' || st === 'Transbordo') emViagem++;
+      else aguardando++;
+    });
+    return { corredor:c, nome:c.nome, total:pedidos.length, aguardando, emViagem, concluidos };
+  }).filter(c => c.total > 0).sort((a,b) => b.total - a.total);
+}
+
+function _cgCorCor(total){ return total >= 20 ? '#ef4444' : total >= 10 ? '#f59e0b' : '#22c55e'; }
+
+function renderizarVisaoGlobal(){
+  const cont = document.getElementById('visaoGlobalConteudo');
+  if (!cont) return;
+  const s = _cgSituacao();
+  const corredores = _cgCorredores();
+  const viagens = (rotasGlobais||[]).filter(r => r.status === 'em_andamento');
+  const aguardandoTransporte = (pedidosGlobais||[]).filter(p => {
+    const st = statusPlanilhaDoPedido(p);
+    return !['Cancelado','Entregue'].includes(p.status||'') && ['Enviado coleta','Coletado'].includes(st);
+  }).length;
+  const aguardandoRetirada = s.aguardandoRetirada;
+
+  cont.innerHTML = `
+    <div class="cg-header">
+      <h2>🌐 Visão Global — Comercial</h2>
+      <button class="btn btn-secondary btn-sm" onclick="renderizarVisaoGlobal()">🔄 Atualizar</button>
+    </div>
+
+    <div class="cg-kpis">
+      <div class="cg-kpi"><span class="cg-kpi-num">${s.total}</span><span class="cg-kpi-lbl">Pedidos em operação</span></div>
+      <div class="cg-kpi"><span class="cg-kpi-num" style="color:#f59e0b">${s.aguardandoColeta}</span><span class="cg-kpi-lbl">Aguardando coleta</span></div>
+      <div class="cg-kpi"><span class="cg-kpi-num" style="color:#2563eb">${s.emViagem}</span><span class="cg-kpi-lbl">Em viagem</span></div>
+      <div class="cg-kpi"><span class="cg-kpi-num" style="color:#22c55e">${s.chegaram}</span><span class="cg-kpi-lbl">Chegaram ao destino</span></div>
+      <div class="cg-kpi"><span class="cg-kpi-num" style="color:#a855f7">${aguardandoRetirada}</span><span class="cg-kpi-lbl">Aguardando retirada</span></div>
+    </div>
+
+    <div class="cg-sec-tit">📍 Pedidos por corredor</div>
+    <div class="cg-corredores">
+      ${corredores.length === 0 ? '<p class="text-muted">Nenhum pedido em corredores no momento.</p>' :
+        corredores.map(c => {
+          const cor = _cgCorCor(c.total);
+          const totalBar = c.aguardando + c.emViagem + c.concluidos || 1;
+          return `<div class="cg-corr-card" style="border-left:4px solid ${cor}">
+            <div class="cg-corr-top">
+              <span class="cg-corr-nome">${c.nome}</span>
+            </div>
+            <div class="cg-corr-total" style="color:${cor}">● ${c.total} pedidos</div>
+            <div class="cg-corr-detalhe">
+              <div><span class="cg-dot" style="background:#f59e0b"></span> ${c.aguardando} aguardando transporte</div>
+              <div><span class="cg-dot" style="background:#2563eb"></span> ${c.emViagem} em viagem</div>
+              <div><span class="cg-dot" style="background:#22c55e"></span> ${c.concluidos} concluídos</div>
+            </div>
+            <div class="cg-corr-barra">
+              <div style="width:${c.aguardando/totalBar*100}%;background:#f59e0b"></div>
+              <div style="width:${c.emViagem/totalBar*100}%;background:#2563eb"></div>
+              <div style="width:${c.concluidos/totalBar*100}%;background:#22c55e"></div>
+            </div>
+          </div>`;
+        }).join('')}
+    </div>
+
+    <div class="cg-duplo">
+      <div class="cg-bloco">
+        <div class="cg-bloco-tit">🚛 Viagens em andamento</div>
+        ${viagens.length === 0 ? '<p class="text-muted" style="font-size:.85rem">Nenhuma viagem em andamento.</p>' :
+          viagens.slice(0,6).map(r => {
+            const np = _veiculosNaRota(r.id).length;
+            return `<div class="cg-viagem-linha" onclick="_irParaViagensComercial()">
+              <span class="cg-viagem-rota">${r.nome||('R-'+r.id)}</span>
+              <span class="cg-viagem-corr">${r.placa_cegonha||''}</span>
+              <span class="cg-viagem-ped">${np} pedidos</span>
+              <span class="cg-badge cg-badge-azul">Em viagem</span>
+            </div>`;
+          }).join('')}
+      </div>
+      <div class="cg-bloco">
+        <div class="cg-bloco-tit">⚠️ Atenção</div>
+        <div class="cg-atencao"><span class="cg-at-ic" style="background:#fef3c7">🟠</span> ${aguardandoTransporte} pedidos aguardando transporte</div>
+        <div class="cg-atencao"><span class="cg-at-ic" style="background:#ede9fe">🟣</span> ${aguardandoRetirada} pedidos aguardando retirada</div>
+        <div class="cg-atencao"><span class="cg-at-ic" style="background:#dbeafe">🔵</span> ${viagens.length} viagens em andamento</div>
+      </div>
+    </div>`;
+}
+
+function _irParaViagensComercial(){
+  const btn = document.querySelector('.nav-btn[data-tab="comercialViagens"]');
+  if (btn) btn.click();
+}
+
+// Telas 2 e 3 (Pedidos e Viagens) — próximo bloco
+function renderizarComercialPedidos(){
+  const cont = document.getElementById('comercialPedidosConteudo');
+  if (cont) cont.innerHTML = '<p class="text-muted" style="padding:2rem;text-align:center">📋 Tela de Pedidos — em construção (próximo bloco).</p>';
+}
+function renderizarComercialViagens(){
+  const cont = document.getElementById('comercialViagensConteudo');
+  if (cont) cont.innerHTML = '<p class="text-muted" style="padding:2rem;text-align:center">🚛 Tela de Viagens — em construção (próximo bloco).</p>';
 }
