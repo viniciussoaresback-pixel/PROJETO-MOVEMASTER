@@ -15158,7 +15158,7 @@ function _centralColunaEntregas(entregas){
     </div>
     ${entregas.length === 0 ? '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>' : `
     <div style="overflow-x:auto"><table class="central-tabela">
-      <thead><tr><th></th><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Destino da entrega</th><th>Status</th><th>Motorista</th></tr></thead>
+      <thead><tr><th></th><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Destino da entrega</th><th>Status</th><th>Motorista</th><th></th></tr></thead>
       <tbody>
         ${entregas.map(p => `<tr>
           <td><input type="checkbox" class="central-chk-entrega" value="${p.id}"></td>
@@ -15169,6 +15169,7 @@ function _centralColunaEntregas(entregas){
           <td>${_tipoEntregaLabel(p)}</td>
           <td><span class="central-status central-status-verde">● Disponível para entrega</span></td>
           <td>${p.motorista1||'—'}</td>
+          <td>${p.tipoEntrega === 'patio' ? `<button class="central-btn-mini" onclick="_centralDisponivelRetirada(${p.id})" title="Veículo chegou ao pátio, disponível para o cliente retirar">🏢 Disponível p/ retirada</button>` : ''}</td>
         </tr>`).join('')}
       </tbody>
     </table></div>
@@ -15193,6 +15194,7 @@ function _centralAguardandoHTML(aguardando){
           <div class="central-ag-top"><strong>#${p.id}</strong> · Placa: ${p.placa||'—'}</div>
           <div class="central-ag-tit">${titulo} · ${cidade||''}</div>
           <div class="central-ag-sub">🟡 ${sub}</div>
+          ${retirada ? `<button class="central-btn-mini central-btn-mini-verde" onclick="_centralRegistrarRetirada(${p.id})" title="Comercial: cliente retirou o veículo">✅ Registrar retirada</button>` : ''}
         </div>`;
       }).join('')}
     </div>`}
@@ -15292,4 +15294,70 @@ async function _centralConfirmarMotorista(ids){
   document.getElementById('modalCentralMotorista')?.remove();
   renderizarCentralOperacao();
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👤 ${ids.length} entrega(s) direcionada(s) para ${mot}. O motorista confirma no app.`, 'success');
+}
+
+// ============================================================
+// FLUXO 🏢 RETIRA NO PÁTIO — Central de Operação (Bloco 2 final)
+// Colaborador marca "disponível para retirada" → avisa comercial →
+// 🟡 aguardando retirada → comercial registra a retirada (fecha).
+// ============================================================
+
+// Colaborador/logística: veículo chegou ao pátio e está disponível para o cliente retirar
+async function _centralDisponivelRetirada(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  if (!confirm(`Confirmar que o veículo #${p.id} (${p.placa||''}) chegou ao pátio e está DISPONÍVEL PARA RETIRADA pelo cliente?\n\nO comercial será avisado para acionar o cliente.`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Operador';
+  try {
+    await supabase.from('pedidos').update({
+      aguardando_retirada: true,
+      status_planilha: 'Em transporte'  // logística terminou o transporte, mas não é "Entregue"
+    }).eq('id', p.id);
+    p.aguardandoRetirada = true;
+
+    // registra na jornada
+    await supabase.from('historico_status').insert({
+      pedido_id: p.id, status_anterior: statusPlanilhaDoPedido(p), status_novo: 'Aguardando retirada',
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: '🟡 Veículo disponível para retirada no pátio — comercial avisado'
+    });
+
+    // avisa o COMERCIAL
+    if (typeof notificar === 'function'){
+      await notificar({
+        perfil: 'comercial', pedidoId: p.id, tipo: 'retirada',
+        titulo: `🚨 Veículo disponível para retirada — #${p.id}`,
+        mensagem: `${p.placa||''} (${p.modelo||''}) chegou ao pátio de ${p.cidadeDestino||''} e está pronto para o cliente ${p.cliente||''} retirar.`
+      });
+    }
+    renderizarCentralOperacao();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `🟡 #${p.id} marcado como disponível para retirada. Comercial avisado.`, 'success');
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+// Comercial: registra que o cliente retirou o veículo (fecha o processo)
+async function _centralRegistrarRetirada(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  if (!confirm(`Confirmar que o cliente ${p.cliente||''} RETIROU o veículo #${p.id} (${p.placa||''})?\n\nIsso conclui o processo (Entregue).`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Comercial';
+  try {
+    await supabase.from('pedidos').update({
+      aguardando_retirada: false,
+      status: 'Entregue',
+      status_planilha: 'Entregue',
+      entrega_equipe_em: new Date().toISOString()
+    }).eq('id', p.id);
+    p.aguardandoRetirada = false; p.status = 'Entregue'; p.statusPlanilha = 'Entregue';
+    p.entregaEquipeEm = new Date().toISOString();
+
+    await supabase.from('historico_status').insert({
+      pedido_id: p.id, status_anterior: 'Aguardando retirada', status_novo: 'Entregue',
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'comercial'),
+      observacao: '✅ Cliente retirou o veículo no pátio — processo concluído'
+    });
+
+    renderizarCentralOperacao();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ Retirada do #${p.id} registrada. Processo concluído.`, 'success');
+  } catch(e){ alert('Erro: '+(e.message||e)); }
 }
