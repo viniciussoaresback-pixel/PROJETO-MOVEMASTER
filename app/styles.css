@@ -8935,3 +8935,7 @@ html span.log-passo-bolinha {
 .cg-vd-head { margin-bottom:14px; }
 .cg-vd-tit { font-weight:700; font-size:1rem; }
 .cg-vd-sub { font-size:.84rem; color:var(--text-secondary,#9ca3af); margin-top:2px; }
+
+/* Overlay lateral da viagem (mesma mecânica do rastreio) */
+#cgViagemOverlay { display:none; }
+#cgViagemOverlay.aberto { display:block; }
