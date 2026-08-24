@@ -8948,3 +8948,8 @@ html span.log-passo-bolinha {
 .rlp-acoes { display:flex; gap:4px; }
 .rlp-acoes button { width:26px; height:26px; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:6px; background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; cursor:pointer; font-size:.7rem; }
 .rlp-acoes button:disabled { opacity:.3; cursor:default; }
+
+/* Botão novo corredor ao lado do título */
+.plan-col-tit-corr { display:flex; justify-content:space-between; align-items:center; }
+.plan-novo-corr { background:#ff6a00; color:#fff; border:none; border-radius:7px; padding:4px 10px; font-size:.74rem; font-weight:700; cursor:pointer; }
+.plan-novo-corr:hover { filter:brightness(1.1); }
