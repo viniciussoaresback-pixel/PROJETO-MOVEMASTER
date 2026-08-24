@@ -8872,3 +8872,66 @@ html span.log-passo-bolinha {
 .cg-badge-azul { background:rgba(37,99,235,.15); color:#2563eb; }
 .cg-atencao { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:.85rem; }
 .cg-at-ic { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
+
+/* ===== ÁREA COMERCIAL — Pedidos + Rastreio ===== */
+.cg-filtros { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px; padding:14px; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; background:var(--surface-1,rgba(255,255,255,.02)); }
+.cg-filtro { display:flex; flex-direction:column; gap:4px; }
+.cg-filtro label { font-size:.68rem; font-weight:600; text-transform:uppercase; letter-spacing:.3px; color:var(--text-tertiary,#6b7280); }
+.cg-filtro input, .cg-filtro select { padding:7px 9px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; font-size:.82rem; }
+.cg-filtro-btns { justify-content:flex-end; }
+.cg-tabela-wrap { overflow-x:auto; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; }
+.cg-tabela { width:100%; border-collapse:collapse; font-size:.84rem; min-width:760px; }
+.cg-tabela thead th { text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-muted,#9ca3af); font-weight:700; padding:10px; border-bottom:1px solid var(--border,rgba(255,255,255,.12)); white-space:nowrap; }
+.cg-tabela td { padding:10px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
+.cg-tr { cursor:pointer; transition:background .12s; }
+.cg-tr:hover { background:rgba(255,106,0,.05); }
+.cg-corr-cel { color:var(--text-secondary,#9ca3af); font-size:.8rem; }
+.cg-sub { color:var(--text-tertiary,#6b7280); font-size:.78rem; }
+.cg-chevron { color:var(--text-tertiary,#6b7280); font-size:1.2rem; text-align:center; }
+.cg-paginacao { display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+.cg-pag-btns { display:flex; align-items:center; gap:10px; }
+.cg-pag-btns button { width:32px; height:32px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; cursor:pointer; }
+.cg-pag-btns button:disabled { opacity:.4; cursor:default; }
+.cg-pag-atual { font-size:.85rem; font-weight:600; }
+
+/* Rastreio lateral */
+#cgRastreioOverlay { display:none; }
+#cgRastreioOverlay.aberto { display:block; }
+.cg-rastreio-bg { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9998; }
+.cg-rastreio-painel { position:fixed; top:0; right:0; width:440px; max-width:94vw; height:100vh; overflow-y:auto; background:var(--surface-0,#14151a); border-left:1px solid var(--border,rgba(255,255,255,.1)); z-index:9999; padding:22px; box-shadow:-8px 0 32px rgba(0,0,0,.4); animation:cgSlideIn .22s ease; }
+@keyframes cgSlideIn { from{ transform:translateX(100%); } to{ transform:translateX(0); } }
+.cg-rastreio-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+.cg-rastreio-head h3 { margin:0; font-size:1.3rem; }
+.cg-rastreio-x { background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-secondary,#9ca3af); }
+.cg-rastreio-dados { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; margin-bottom:20px; }
+.cg-rd-lbl { display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.3px; color:var(--text-tertiary,#6b7280); }
+.cg-rd-val { font-size:.86rem; font-weight:600; }
+.cg-rastreio-tit { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-secondary,#9ca3af); margin-bottom:14px; }
+.cg-timeline { position:relative; padding-left:8px; }
+.cg-tl-item { position:relative; padding-left:24px; padding-bottom:20px; border-left:2px solid var(--border,rgba(255,255,255,.15)); }
+.cg-tl-item:last-child { border-left-color:transparent; }
+.cg-tl-marker { position:absolute; left:-7px; top:2px; width:12px; height:12px; border-radius:50%; background:#22c55e; border:2px solid var(--surface-0,#14151a); }
+.cg-tl-item.atual .cg-tl-marker { background:#2563eb; box-shadow:0 0 0 4px rgba(37,99,235,.2); }
+.cg-tl-data { font-size:.74rem; color:var(--text-tertiary,#6b7280); }
+.cg-tl-status { font-weight:700; font-size:.9rem; margin:2px 0; }
+.cg-tl-obs { font-size:.8rem; color:var(--text-secondary,#9ca3af); }
+.cg-tl-quem { font-size:.72rem; color:var(--text-tertiary,#6b7280); margin-top:2px; }
+.cg-rastreio-status { margin-top:16px; padding:16px; border-radius:12px; background:rgba(37,99,235,.08); border:1px solid rgba(37,99,235,.2); }
+.cg-rs-lbl { font-size:.72rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-secondary,#9ca3af); margin-bottom:6px; }
+.cg-rs-val { font-size:1rem; font-weight:700; }
+@media(max-width:520px){ .cg-rastreio-painel{ width:100vw; } }
+
+/* ===== ÁREA COMERCIAL — Viagens ===== */
+.cg-viagens-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; margin-bottom:20px; }
+.cg-viagem-card { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:14px; background:var(--surface-1,rgba(255,255,255,.03)); cursor:pointer; transition:border-color .15s, background .15s; }
+.cg-viagem-card:hover { border-color:rgba(255,106,0,.4); }
+.cg-viagem-card.sel { border-color:#ff6a00; background:rgba(255,106,0,.06); }
+.cg-vc-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.cg-vc-rota { font-weight:800; font-size:.95rem; }
+.cg-vc-corr { font-size:.84rem; color:var(--text-secondary,#9ca3af); margin-bottom:10px; }
+.cg-vc-info { display:flex; flex-direction:column; gap:4px; font-size:.82rem; }
+.cg-vc-cegonha { margin-top:8px; font-size:.76rem; color:var(--text-tertiary,#6b7280); font-weight:600; }
+.cg-viagem-detalhe { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:16px; background:var(--surface-1,rgba(255,255,255,.02)); }
+.cg-vd-head { margin-bottom:14px; }
+.cg-vd-tit { font-weight:700; font-size:1rem; }
+.cg-vd-sub { font-size:.84rem; color:var(--text-secondary,#9ca3af); margin-top:2px; }
