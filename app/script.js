@@ -14929,8 +14929,30 @@ function _planPedidosListaHTML(cor){
       </div>
       <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''}</div>
       <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
+      ${_planPedidoDatasHTML(p)}
     </div>`;
   }).join('');
+}
+
+// Datas do pedido: criação e entrega prevista (para priorização no planejamento)
+function _planPedidoDatasHTML(p){
+  const criacao = p.dataSolicitacao ? _planFmtDataCurta(p.dataSolicitacao) : null;
+  const entrega = (p.dataPrevEntrega || p.prazoEntregaEstimado) ? _planFmtDataCurta(p.dataPrevEntrega || p.prazoEntregaEstimado) : null;
+  // dias esperando desde a criação
+  let diasTag = '';
+  if (p.dataSolicitacao){
+    const dias = Math.floor((Date.now() - new Date(p.dataSolicitacao).getTime()) / 86400000);
+    if (dias >= 1){ const cor = dias >= 5 ? '#ef4444' : dias >= 3 ? '#f59e0b' : '#9ca3af'; diasTag = ` <span style="color:${cor};font-weight:600">• ${dias}d esperando</span>`; }
+  }
+  if (!criacao && !entrega) return '';
+  return `<div class="plan-pedido-datas">
+    ${criacao ? `<span title="Data de criação do pedido">📅 Criado: ${criacao}${diasTag}</span>` : ''}
+    ${entrega ? `<span title="Data prevista de entrega">🏁 Entrega: ${entrega}</span>` : ''}
+  </div>`;
+}
+function _planFmtDataCurta(d){
+  try { return new Date(d.length<=10 ? d+'T12:00' : d).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}); }
+  catch(e){ return d; }
 }
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
@@ -14949,6 +14971,7 @@ function _planSemRotaListaHTML(){
       </div>
       <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''}</div>
       <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
+      ${_planPedidoDatasHTML(p)}
       <div class="plan-pedido-hint">👉 arraste para um corredor à esquerda</div>
     </div>`).join('');
 }
@@ -15297,11 +15320,12 @@ function _centralColunaColetas(coletas){
     </div>
     ${coletas.length === 0 ? '<p class="central-vazio">Nenhuma coleta pendente. 👍</p>' : `
     <div style="overflow-x:auto"><table class="central-tabela">
-      <thead><tr><th></th><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Tipo de coleta</th><th>Status</th></tr></thead>
+      <thead><tr><th></th><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Tipo de coleta</th><th>Status</th></tr></thead>
       <tbody>
         ${coletas.map(p => `<tr>
           <td><input type="checkbox" class="central-chk-coleta" value="${p.id}"></td>
           <td><strong>#${p.id}</strong></td>
+          <td>${p.cliente||'—'}</td>
           <td>${p.placa||'—'}<br><span class="central-sub">${p.modelo||''}</span></td>
           <td>${(p.cidadeOrigem||'—')}<br><span class="central-sub">${p.ufOrigem||''}</span></td>
           <td>${(p.cidadeDestino||'—')}<br><span class="central-sub">${p.ufDestino||''}</span></td>
@@ -15325,11 +15349,12 @@ function _centralColunaEntregas(entregas){
     </div>
     ${entregas.length === 0 ? '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>' : `
     <div style="overflow-x:auto"><table class="central-tabela">
-      <thead><tr><th></th><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Destino da entrega</th><th>Status</th><th>Motorista</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Destino da entrega</th><th>Status</th><th>Motorista</th><th></th></tr></thead>
       <tbody>
         ${entregas.map(p => `<tr>
           <td><input type="checkbox" class="central-chk-entrega" value="${p.id}"></td>
           <td><strong>#${p.id}</strong></td>
+          <td>${p.cliente||'—'}</td>
           <td>${p.placa||'—'}<br><span class="central-sub">${p.modelo||''}</span></td>
           <td>${(p.cidadeOrigem||'—')}<br><span class="central-sub">${p.ufOrigem||''}</span></td>
           <td>${(p.cidadeDestino||'—')}<br><span class="central-sub">${p.ufDestino||''}</span></td>
@@ -15878,17 +15903,15 @@ function renderizarComercialViagens(){
   const cont = document.getElementById('comercialViagensConteudo');
   if (!cont) return;
 
-  let viagens = (rotasGlobais||[]).filter(r => !['cancelada'].includes(r.status));
+  // ATIVAS = em andamento + planejadas (concluídas saem daqui)
+  let viagens = (rotasGlobais||[]).filter(r => ['em_andamento','planejada'].includes(r.status));
   if (_cgViagemFiltroStatus === 'andamento') viagens = viagens.filter(r => r.status === 'em_andamento');
   else if (_cgViagemFiltroStatus === 'planejada') viagens = viagens.filter(r => r.status === 'planejada');
-  else if (_cgViagemFiltroStatus === 'concluida') viagens = viagens.filter(r => r.status === 'concluida');
   if (_cgViagemFiltroCorredor) viagens = viagens.filter(r => String(r.corredor_id)===String(_cgViagemFiltroCorredor));
 
-  // ordena: em andamento primeiro
   viagens.sort((a,b) => (a.status==='em_andamento'?0:1) - (b.status==='em_andamento'?0:1));
 
   const corredores = corredoresGlobais || [];
-  if (!_cgViagemSel && viagens.length) _cgViagemSel = viagens[0].id;
 
   cont.innerHTML = `
     <div class="cg-header">
@@ -15898,10 +15921,9 @@ function renderizarComercialViagens(){
 
     <div class="cg-filtros" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       <div class="cg-filtro"><label>Status</label><select onchange="_cgViagemSetStatus(this.value)">
-        <option value="todas" ${_cgViagemFiltroStatus==='todas'?'selected':''}>Todas</option>
+        <option value="todas" ${_cgViagemFiltroStatus==='todas'?'selected':''}>Ativas (todas)</option>
         <option value="andamento" ${_cgViagemFiltroStatus==='andamento'?'selected':''}>Em andamento</option>
         <option value="planejada" ${_cgViagemFiltroStatus==='planejada'?'selected':''}>Planejadas</option>
-        <option value="concluida" ${_cgViagemFiltroStatus==='concluida'?'selected':''}>Concluídas</option>
       </select></div>
       <div class="cg-filtro"><label>Corredor</label><select onchange="_cgViagemSetCorredor(this.value)">
         <option value="">Todos</option>
@@ -15909,14 +15931,13 @@ function renderizarComercialViagens(){
       </select></div>
     </div>
 
-    ${viagens.length === 0 ? '<p class="text-muted" style="padding:2rem;text-align:center">Nenhuma viagem encontrada.</p>' : `
+    ${viagens.length === 0 ? '<p class="text-muted" style="padding:2rem;text-align:center">Nenhuma viagem ativa no momento.</p>' : `
     <div class="cg-viagens-cards">
       ${viagens.map(r => {
         const np = _veiculosNaRota(r.id).length;
         const cor = corredores.find(c => String(c.id)===String(r.corredor_id));
-        const sel = String(r.id)===String(_cgViagemSel);
         const stInfo = _cgViagemStatusInfo(r.status);
-        return `<div class="cg-viagem-card ${sel?'sel':''}" onclick="_cgSelViagem(${r.id})">
+        return `<div class="cg-viagem-card" onclick="_cgSelViagem(${r.id})">
           <div class="cg-vc-top"><span class="cg-vc-rota">${r.nome||('R-'+r.id)}</span><span class="cg-badge" style="background:${stInfo.bg};color:${stInfo.cor}">${stInfo.label}</span></div>
           <div class="cg-vc-corr">${cor?cor.nome:'—'}</div>
           <div class="cg-vc-info">
@@ -15926,10 +15947,60 @@ function renderizarComercialViagens(){
           ${r.placa_cegonha?`<div class="cg-vc-cegonha">${r.placa_cegonha}</div>`:''}
         </div>`;
       }).join('')}
-    </div>
-    <div id="cgViagemOverlay"></div>
-    `}`;
+    </div>`}
+
+    ${_cgViagensConcluidasHTML()}
+    <div id="cgViagemOverlay"></div>`;
 }
+
+// Consulta de viagens CONCLUÍDAS por período (recolhível, não polui a tela)
+let _cgConcluidasAberto = false;
+let _cgConcluidasIni = '';
+let _cgConcluidasFim = '';
+function _cgViagensConcluidasHTML(){
+  const concluidas = (rotasGlobais||[]).filter(r => r.status === 'concluida').filter(r => {
+    const dt = (r.concluida_em || r.updated_at || '').slice(0,10);
+    if (_cgConcluidasIni && dt && dt < _cgConcluidasIni) return false;
+    if (_cgConcluidasFim && dt && dt > _cgConcluidasFim) return false;
+    return true;
+  }).sort((a,b) => new Date(b.concluida_em||b.updated_at||0) - new Date(a.concluida_em||a.updated_at||0));
+
+  return `<div class="cg-concluidas">
+    <div class="cg-concluidas-head" onclick="_cgToggleConcluidas()">
+      <span>✅ Viagens concluídas ${!_cgConcluidasAberto?`<span class="cg-conc-badge">${concluidas.length}</span>`:''}</span>
+      <span>${_cgConcluidasAberto?'▲':'▼'}</span>
+    </div>
+    ${!_cgConcluidasAberto ? '' : `
+      <div class="cg-conc-filtros">
+        <div class="cg-filtro"><label>De</label><input type="date" value="${_cgConcluidasIni}" onchange="_cgConcluidasSetData('ini',this.value)"></div>
+        <div class="cg-filtro"><label>Até</label><input type="date" value="${_cgConcluidasFim}" onchange="_cgConcluidasSetData('fim',this.value)"></div>
+        <div class="cg-filtro cg-filtro-btns"><button class="btn btn-secondary btn-sm" onclick="_cgConcluidasLimpar()">Limpar</button></div>
+      </div>
+      ${concluidas.length === 0 ? '<p class="text-muted" style="padding:1rem;font-size:.85rem">Nenhuma viagem concluída no período.</p>' : `
+      <div class="cg-tabela-wrap">
+        <table class="cg-tabela">
+          <thead><tr><th>Rota</th><th>Corredor</th><th>Motorista</th><th>Pedidos</th><th>Concluída em</th></tr></thead>
+          <tbody>
+            ${concluidas.map(r => {
+              const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(r.corredor_id));
+              const np = _veiculosNaRota(r.id).length;
+              return `<tr class="cg-tr" onclick="_cgSelViagem(${r.id})">
+                <td><strong>${r.nome||('R-'+r.id)}</strong></td>
+                <td>${cor?cor.nome:'—'}</td>
+                <td>${r.motorista_1||'—'}</td>
+                <td>${np}</td>
+                <td class="cg-sub">${_cgFmtData(r.concluida_em||r.updated_at)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    `}
+  </div>`;
+}
+function _cgToggleConcluidas(){ _cgConcluidasAberto = !_cgConcluidasAberto; renderizarComercialViagens(); }
+function _cgConcluidasSetData(campo, v){ if(campo==='ini') _cgConcluidasIni=v; else _cgConcluidasFim=v; renderizarComercialViagens(); }
+function _cgConcluidasLimpar(){ _cgConcluidasIni=''; _cgConcluidasFim=''; renderizarComercialViagens(); }
 
 function _cgViagemStatusInfo(st){
   if (st === 'em_andamento') return { label:'Em viagem', cor:'#2563eb', bg:'rgba(37,99,235,.15)' };
