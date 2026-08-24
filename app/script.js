@@ -15583,12 +15583,284 @@ function _irParaViagensComercial(){
   if (btn) btn.click();
 }
 
-// Telas 2 e 3 (Pedidos e Viagens) — próximo bloco
+// ===== TELA 2 — PEDIDOS (comercial, só leitura) =====
+let _cgPedidoFiltros = { pedido:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' };
+let _cgPedidoPagina = 1;
+const _CG_POR_PAGINA = 12;
+
+// Descobre o corredor de um pedido (nome curto)
+function _cgCorredorDoPedido(p){
+  const cors = _cgCorredores();
+  for (const c of cors){
+    const seq = (c.corredor._paradas||[]).length >= 2 ? c.corredor._paradas.map(x=>x.cidade) : [c.corredor.origem, c.corredor.destino];
+    const paradasStr = seq.filter(Boolean);
+    if (p.corredorManualId && String(p.corredorManualId)===String(c.corredor.id)) return c.nome;
+    const partida = p.patioAtual || p.cidadeOrigem;
+    const io = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, partida) : -1;
+    const id = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, p.cidadeDestino) : -1;
+    if (io !== -1 && id !== -1 && io < id) return c.nome;
+  }
+  return '—';
+}
+
+function _cgPedidosFiltrados(){
+  const f = _cgPedidoFiltros;
+  return (pedidosGlobais||[]).filter(p => {
+    if (['Cancelado'].includes(p.status||'')) return false;
+    if (f.pedido && !String(p.id).includes(f.pedido)) return false;
+    if (f.placa && !(p.placa||'').toLowerCase().includes(f.placa.toLowerCase())) return false;
+    if (f.origem && !_cidadeIgual(p.cidadeOrigem, f.origem)) return false;
+    if (f.destino && !_cidadeIgual(p.cidadeDestino, f.destino)) return false;
+    if (f.status){
+      const st = statusPlanilhaDoPedido(p);
+      if (f.status === 'entregue' && p.status !== 'Entregue') return false;
+      if (f.status === 'viagem' && !(st === 'Em transporte' || st === 'Transbordo')) return false;
+      if (f.status === 'aguardando' && !['Aguardando coleta','Não liberado','Enviado coleta','Coletado'].includes(st)) return false;
+    }
+    if (f.rota && String(p.rotaId||p.rota_id||'') !== f.rota) return false;
+    if (f.dataIni && (p.dataSolicitacao||'') < f.dataIni) return false;
+    if (f.dataFim && (p.dataSolicitacao||'') > f.dataFim + 'T23:59') return false;
+    return true;
+  });
+}
+
+function _cgStatusPill(p){
+  return typeof _statusPillPlanilha === 'function' ? _statusPillPlanilha(p) : (statusPlanilhaDoPedido(p)||'—');
+}
+
 function renderizarComercialPedidos(){
   const cont = document.getElementById('comercialPedidosConteudo');
-  if (cont) cont.innerHTML = '<p class="text-muted" style="padding:2rem;text-align:center">📋 Tela de Pedidos — em construção (próximo bloco).</p>';
+  if (!cont) return;
+  const todos = _cgPedidosFiltrados();
+  const totalPag = Math.max(1, Math.ceil(todos.length / _CG_POR_PAGINA));
+  if (_cgPedidoPagina > totalPag) _cgPedidoPagina = 1;
+  const ini = (_cgPedidoPagina-1)*_CG_POR_PAGINA;
+  const pagina = todos.slice(ini, ini+_CG_POR_PAGINA);
+
+  const cidades = [...new Set((pedidosGlobais||[]).flatMap(p => [p.cidadeOrigem, p.cidadeDestino]).filter(Boolean))].sort();
+  const rotas = (rotasGlobais||[]).filter(r => !['cancelada'].includes(r.status));
+
+  cont.innerHTML = `
+    <div class="cg-header">
+      <h2>📋 Pedidos</h2>
+      <button class="btn btn-secondary btn-sm" onclick="renderizarComercialPedidos()">🔄 Atualizar</button>
+    </div>
+
+    <div class="cg-filtros">
+      <div class="cg-filtro"><label>Pedido</label><input type="text" value="${_cgPedidoFiltros.pedido}" oninput="_cgSetFiltro('pedido',this.value)" placeholder="Nº do pedido"></div>
+      <div class="cg-filtro"><label>Placa</label><input type="text" value="${_cgPedidoFiltros.placa}" oninput="_cgSetFiltro('placa',this.value)" placeholder="Placa do veículo"></div>
+      <div class="cg-filtro"><label>Origem</label><select onchange="_cgSetFiltro('origem',this.value)"><option value="">Todas</option>${cidades.map(c=>`<option ${_cgPedidoFiltros.origem===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="cg-filtro"><label>Destino</label><select onchange="_cgSetFiltro('destino',this.value)"><option value="">Todos</option>${cidades.map(c=>`<option ${_cgPedidoFiltros.destino===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="cg-filtro"><label>Status</label><select onchange="_cgSetFiltro('status',this.value)">
+        <option value="">Todos</option>
+        <option value="aguardando" ${_cgPedidoFiltros.status==='aguardando'?'selected':''}>Aguardando</option>
+        <option value="viagem" ${_cgPedidoFiltros.status==='viagem'?'selected':''}>Em viagem</option>
+        <option value="entregue" ${_cgPedidoFiltros.status==='entregue'?'selected':''}>Chegou ao destino</option>
+      </select></div>
+      <div class="cg-filtro"><label>Rota</label><select onchange="_cgSetFiltro('rota',this.value)"><option value="">Todas</option>${rotas.map(r=>`<option value="${r.id}" ${_cgPedidoFiltros.rota===String(r.id)?'selected':''}>${r.nome||('R-'+r.id)}</option>`).join('')}</select></div>
+      <div class="cg-filtro cg-filtro-btns"><button class="btn btn-secondary btn-sm" onclick="_cgLimparFiltros()">Limpar</button></div>
+    </div>
+
+    <div class="cg-tabela-wrap">
+      <table class="cg-tabela">
+        <thead><tr><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Atualizado</th><th></th></tr></thead>
+        <tbody>
+          ${pagina.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum pedido encontrado.</td></tr>' :
+            pagina.map(p => {
+              const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
+              const atualizado = p.atualizadoEm || p.dataSolicitacao || '';
+              return `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
+                <td><strong>#${p.id}</strong></td>
+                <td>${p.placa||'—'}</td>
+                <td>${p.cidadeOrigem||'—'}</td>
+                <td>${p.cidadeDestino||'—'}</td>
+                <td class="cg-corr-cel">${_cgCorredorDoPedido(p)}</td>
+                <td>${rota ? (rota.nome||('R-'+rota.id)) : '—'}</td>
+                <td>${_cgStatusPill(p)}</td>
+                <td class="cg-sub">${_cgFmtData(atualizado)}</td>
+                <td class="cg-chevron">›</td>
+              </tr>`;
+            }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cg-paginacao">
+      <span class="cg-sub">Mostrando ${todos.length===0?0:ini+1} a ${Math.min(ini+_CG_POR_PAGINA,todos.length)} de ${todos.length} pedidos</span>
+      <div class="cg-pag-btns">
+        <button ${_cgPedidoPagina<=1?'disabled':''} onclick="_cgPagina(${_cgPedidoPagina-1})">‹</button>
+        <span class="cg-pag-atual">${_cgPedidoPagina} / ${totalPag}</span>
+        <button ${_cgPedidoPagina>=totalPag?'disabled':''} onclick="_cgPagina(${_cgPedidoPagina+1})">›</button>
+      </div>
+    </div>
+
+    <div id="cgRastreioOverlay"></div>`;
 }
+
+function _cgSetFiltro(campo, valor){ _cgPedidoFiltros[campo] = valor; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
+function _cgLimparFiltros(){ _cgPedidoFiltros = { pedido:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' }; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
+function _cgPagina(n){ _cgPedidoPagina = n; renderizarComercialPedidos(); }
+function _cgFmtData(d){ if(!d) return '—'; try { return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e){ return d; } }
+
+// Painel lateral de RASTREIO (só leitura) — usa os eventos reais da jornada
+async function _cgAbrirRastreio(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
+  const overlay = document.getElementById('cgRastreioOverlay');
+  if (!overlay) return;
+
+  // busca o histórico real do banco
+  let hist = [];
+  try {
+    const { data } = await supabase.from('historico_status').select('*').eq('pedido_id', parseInt(pedidoId)).order('created_at', { ascending: true });
+    hist = data || [];
+  } catch(e){ hist = []; }
+
+  overlay.innerHTML = `
+    <div class="cg-rastreio-bg" onclick="_cgFecharRastreio()"></div>
+    <div class="cg-rastreio-painel">
+      <div class="cg-rastreio-head">
+        <h3>Pedido #${p.id}</h3>
+        <div style="display:flex;gap:8px;align-items:center">${_cgStatusPill(p)}<button class="cg-rastreio-x" onclick="_cgFecharRastreio()">✕</button></div>
+      </div>
+      <div class="cg-rastreio-dados">
+        <div><span class="cg-rd-lbl">🚗 Veículo</span><span class="cg-rd-val">${p.placa||'—'} ${p.modelo?('· '+p.modelo):''}</span></div>
+        <div><span class="cg-rd-lbl">📍 Corredor</span><span class="cg-rd-val">${_cgCorredorDoPedido(p)}</span></div>
+        <div><span class="cg-rd-lbl">🛣️ Rota</span><span class="cg-rd-val">${rota?(rota.nome||('R-'+rota.id)):'—'}</span></div>
+        <div><span class="cg-rd-lbl">👤 Motorista</span><span class="cg-rd-val">${p.motorista1||'—'}</span></div>
+        <div><span class="cg-rd-lbl">Origem</span><span class="cg-rd-val">${p.cidadeOrigem||'—'}/${p.ufOrigem||''}</span></div>
+        <div><span class="cg-rd-lbl">Destino</span><span class="cg-rd-val">${p.cidadeDestino||'—'}/${p.ufDestino||''}</span></div>
+      </div>
+
+      <div class="cg-rastreio-tit">📍 Histórico da viagem</div>
+      <div class="cg-timeline">
+        ${hist.length === 0 ? '<p class="text-muted" style="font-size:.85rem">Ainda sem eventos registrados para este pedido.</p>' :
+          hist.map((h,i) => {
+            const ultimo = i === hist.length-1;
+            return `<div class="cg-tl-item ${ultimo?'atual':''}">
+              <div class="cg-tl-marker"></div>
+              <div class="cg-tl-conteudo">
+                <div class="cg-tl-data">${_cgFmtData(h.created_at||h.data)}</div>
+                <div class="cg-tl-status">${h.status_novo||'—'}</div>
+                ${h.observacao?`<div class="cg-tl-obs">${h.observacao}</div>`:''}
+                ${h.usuario_nome?`<div class="cg-tl-quem">por ${h.usuario_nome}</div>`:''}
+              </div>
+            </div>`;
+          }).join('')}
+      </div>
+
+      <div class="cg-rastreio-status">
+        <div class="cg-rs-lbl">Status atual</div>
+        <div class="cg-rs-val">${_cgStatusPill(p)}</div>
+      </div>
+    </div>`;
+  overlay.classList.add('aberto');
+}
+function _cgFecharRastreio(){
+  const overlay = document.getElementById('cgRastreioOverlay');
+  if (overlay){ overlay.classList.remove('aberto'); overlay.innerHTML = ''; }
+}
+// ===== TELA 3 — VIAGENS (comercial, só leitura) =====
+let _cgViagemFiltroStatus = 'todas';
+let _cgViagemFiltroCorredor = '';
+let _cgViagemSel = null;
+
 function renderizarComercialViagens(){
   const cont = document.getElementById('comercialViagensConteudo');
-  if (cont) cont.innerHTML = '<p class="text-muted" style="padding:2rem;text-align:center">🚛 Tela de Viagens — em construção (próximo bloco).</p>';
+  if (!cont) return;
+
+  let viagens = (rotasGlobais||[]).filter(r => !['cancelada'].includes(r.status));
+  if (_cgViagemFiltroStatus === 'andamento') viagens = viagens.filter(r => r.status === 'em_andamento');
+  else if (_cgViagemFiltroStatus === 'planejada') viagens = viagens.filter(r => r.status === 'planejada');
+  else if (_cgViagemFiltroStatus === 'concluida') viagens = viagens.filter(r => r.status === 'concluida');
+  if (_cgViagemFiltroCorredor) viagens = viagens.filter(r => String(r.corredor_id)===String(_cgViagemFiltroCorredor));
+
+  // ordena: em andamento primeiro
+  viagens.sort((a,b) => (a.status==='em_andamento'?0:1) - (b.status==='em_andamento'?0:1));
+
+  const corredores = corredoresGlobais || [];
+  if (!_cgViagemSel && viagens.length) _cgViagemSel = viagens[0].id;
+
+  cont.innerHTML = `
+    <div class="cg-header">
+      <h2>🚛 Viagens</h2>
+      <button class="btn btn-secondary btn-sm" onclick="renderizarComercialViagens()">🔄 Atualizar</button>
+    </div>
+
+    <div class="cg-filtros" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+      <div class="cg-filtro"><label>Status</label><select onchange="_cgViagemSetStatus(this.value)">
+        <option value="todas" ${_cgViagemFiltroStatus==='todas'?'selected':''}>Todas</option>
+        <option value="andamento" ${_cgViagemFiltroStatus==='andamento'?'selected':''}>Em andamento</option>
+        <option value="planejada" ${_cgViagemFiltroStatus==='planejada'?'selected':''}>Planejadas</option>
+        <option value="concluida" ${_cgViagemFiltroStatus==='concluida'?'selected':''}>Concluídas</option>
+      </select></div>
+      <div class="cg-filtro"><label>Corredor</label><select onchange="_cgViagemSetCorredor(this.value)">
+        <option value="">Todos</option>
+        ${corredores.map(c=>`<option value="${c.id}" ${String(_cgViagemFiltroCorredor)===String(c.id)?'selected':''}>${c.nome}</option>`).join('')}
+      </select></div>
+    </div>
+
+    ${viagens.length === 0 ? '<p class="text-muted" style="padding:2rem;text-align:center">Nenhuma viagem encontrada.</p>' : `
+    <div class="cg-viagens-cards">
+      ${viagens.map(r => {
+        const np = _veiculosNaRota(r.id).length;
+        const cor = corredores.find(c => String(c.id)===String(r.corredor_id));
+        const sel = String(r.id)===String(_cgViagemSel);
+        const stInfo = _cgViagemStatusInfo(r.status);
+        return `<div class="cg-viagem-card ${sel?'sel':''}" onclick="_cgSelViagem(${r.id})">
+          <div class="cg-vc-top"><span class="cg-vc-rota">${r.nome||('R-'+r.id)}</span><span class="cg-badge" style="background:${stInfo.bg};color:${stInfo.cor}">${stInfo.label}</span></div>
+          <div class="cg-vc-corr">${cor?cor.nome:'—'}</div>
+          <div class="cg-vc-info">
+            <span>👤 ${r.motorista_1||'—'}</span>
+            <span>🚛 ${np} pedido(s)</span>
+          </div>
+          ${r.placa_cegonha?`<div class="cg-vc-cegonha">${r.placa_cegonha}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${_cgViagemDetalheHTML(viagens.find(v => String(v.id)===String(_cgViagemSel)))}
+    `}`;
 }
+
+function _cgViagemStatusInfo(st){
+  if (st === 'em_andamento') return { label:'Em viagem', cor:'#2563eb', bg:'rgba(37,99,235,.15)' };
+  if (st === 'concluida') return { label:'Concluída', cor:'#22c55e', bg:'rgba(34,197,94,.15)' };
+  if (st === 'planejada') return { label:'Planejada', cor:'#f59e0b', bg:'rgba(245,158,11,.15)' };
+  return { label:st||'—', cor:'#9ca3af', bg:'rgba(255,255,255,.08)' };
+}
+
+function _cgViagemDetalheHTML(rota){
+  if (!rota) return '';
+  const carros = _veiculosNaRota(rota.id);
+  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(rota.corredor_id));
+  return `<div class="cg-viagem-detalhe">
+    <div class="cg-vd-head">
+      <div>
+        <div class="cg-vd-tit">Detalhes da rota ${rota.nome||('R-'+rota.id)}</div>
+        <div class="cg-vd-sub">${cor?cor.nome:''} ${rota.motorista_1?('· 👤 '+rota.motorista_1):''} ${rota.placa_cegonha?('· 🚛 '+rota.placa_cegonha):''}</div>
+      </div>
+    </div>
+    ${carros.length === 0 ? '<p class="text-muted" style="font-size:.85rem;padding:.5rem">Nenhum pedido nesta viagem.</p>' : `
+    <div class="cg-tabela-wrap">
+      <table class="cg-tabela">
+        <thead><tr><th>Pedido</th><th>Veículo</th><th>Cliente</th><th>Destino</th><th>Status</th></tr></thead>
+        <tbody>
+          ${carros.map(p => `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
+            <td><strong>#${p.id}</strong></td>
+            <td>${p.placa||'—'}</td>
+            <td>${p.cliente||'—'}</td>
+            <td>${p.cidadeDestino||'—'}</td>
+            <td>${_cgStatusPill(p)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`}
+    <div id="cgRastreioOverlay"></div>
+  </div>`;
+}
+
+function _cgViagemSetStatus(v){ _cgViagemFiltroStatus = v; _cgViagemSel = null; renderizarComercialViagens(); }
+function _cgViagemSetCorredor(v){ _cgViagemFiltroCorredor = v; _cgViagemSel = null; renderizarComercialViagens(); }
+function _cgSelViagem(id){ _cgViagemSel = id; renderizarComercialViagens(); }
