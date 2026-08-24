@@ -15819,8 +15819,7 @@ function renderizarComercialViagens(){
         </div>`;
       }).join('')}
     </div>
-
-    ${_cgViagemDetalheHTML(viagens.find(v => String(v.id)===String(_cgViagemSel)))}
+    <div id="cgViagemOverlay"></div>
     `}`;
 }
 
@@ -15835,32 +15834,50 @@ function _cgViagemDetalheHTML(rota){
   if (!rota) return '';
   const carros = _veiculosNaRota(rota.id);
   const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(rota.corredor_id));
-  return `<div class="cg-viagem-detalhe">
-    <div class="cg-vd-head">
-      <div>
-        <div class="cg-vd-tit">Detalhes da rota ${rota.nome||('R-'+rota.id)}</div>
-        <div class="cg-vd-sub">${cor?cor.nome:''} ${rota.motorista_1?('· 👤 '+rota.motorista_1):''} ${rota.placa_cegonha?('· 🚛 '+rota.placa_cegonha):''}</div>
+  const stInfo = _cgViagemStatusInfo(rota.status);
+  return `
+    <div class="cg-rastreio-bg" onclick="_cgFecharViagem()"></div>
+    <div class="cg-rastreio-painel">
+      <div class="cg-rastreio-head">
+        <h3>${rota.nome||('R-'+rota.id)}</h3>
+        <div style="display:flex;gap:8px;align-items:center"><span class="cg-badge" style="background:${stInfo.bg};color:${stInfo.cor}">${stInfo.label}</span><button class="cg-rastreio-x" onclick="_cgFecharViagem()">✕</button></div>
       </div>
-    </div>
-    ${carros.length === 0 ? '<p class="text-muted" style="font-size:.85rem;padding:.5rem">Nenhum pedido nesta viagem.</p>' : `
-    <div class="cg-tabela-wrap">
-      <table class="cg-tabela">
-        <thead><tr><th>Pedido</th><th>Veículo</th><th>Cliente</th><th>Destino</th><th>Status</th></tr></thead>
-        <tbody>
-          ${carros.map(p => `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
-            <td><strong>#${p.id}</strong></td>
-            <td>${p.placa||'—'}</td>
-            <td>${p.cliente||'—'}</td>
-            <td>${p.cidadeDestino||'—'}</td>
-            <td>${_cgStatusPill(p)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>`}
-    <div id="cgRastreioOverlay"></div>
-  </div>`;
+      <div class="cg-rastreio-dados">
+        <div><span class="cg-rd-lbl">📍 Corredor</span><span class="cg-rd-val">${cor?cor.nome:'—'}</span></div>
+        <div><span class="cg-rd-lbl">👤 Motorista</span><span class="cg-rd-val">${rota.motorista_1||'—'}</span></div>
+        <div><span class="cg-rd-lbl">🚛 Cegonha</span><span class="cg-rd-val">${rota.placa_cegonha||'—'}</span></div>
+        <div><span class="cg-rd-lbl">📦 Pedidos</span><span class="cg-rd-val">${carros.length}</span></div>
+      </div>
+
+      <div class="cg-rastreio-tit">📋 Pedidos desta viagem</div>
+      ${carros.length === 0 ? '<p class="text-muted" style="font-size:.85rem">Nenhum pedido nesta viagem.</p>' : `
+      <div class="cg-tabela-wrap">
+        <table class="cg-tabela" style="min-width:0">
+          <thead><tr><th>Pedido</th><th>Veículo</th><th>Destino</th><th>Status</th></tr></thead>
+          <tbody>
+            ${carros.map(p => `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
+              <td><strong>#${p.id}</strong></td>
+              <td>${p.placa||'—'}</td>
+              <td>${p.cidadeDestino||'—'}</td>
+              <td>${_cgStatusPill(p)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}
+      <div id="cgRastreioOverlay"></div>
+    </div>`;
 }
 
 function _cgViagemSetStatus(v){ _cgViagemFiltroStatus = v; _cgViagemSel = null; renderizarComercialViagens(); }
 function _cgViagemSetCorredor(v){ _cgViagemFiltroCorredor = v; _cgViagemSel = null; renderizarComercialViagens(); }
-function _cgSelViagem(id){ _cgViagemSel = id; renderizarComercialViagens(); }
+function _cgSelViagem(id){
+  _cgViagemSel = id;
+  const rota = (rotasGlobais||[]).find(r => String(r.id)===String(id));
+  const overlay = document.getElementById('cgViagemOverlay');
+  if (overlay && rota){ overlay.innerHTML = _cgViagemDetalheHTML(rota); overlay.classList.add('aberto'); }
+}
+function _cgFecharViagem(){
+  const overlay = document.getElementById('cgViagemOverlay');
+  if (overlay){ overlay.classList.remove('aberto'); overlay.innerHTML = ''; }
+  _cgViagemSel = null;
+}
