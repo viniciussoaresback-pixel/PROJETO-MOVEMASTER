@@ -14787,7 +14787,7 @@ function renderizarPlanejamentoRotas(){
         <div id="planPedidosLista" class="plan-pedidos-lista">
           ${modoSemRota ? _planSemRotaListaHTML() : _planPedidosListaHTML(cor)}
         </div>
-        ${modoSemRota ? '' : `<button class="plan-nova-rota" onclick="_planNovaRotaVazia(${cor.id})">➕ Abrir rota nova para planejar</button>`}
+        ${modoSemRota ? '' : `<button class="plan-nova-rota" onclick="_planAbrirNovaRotaLivre()">➕ Abrir nova rota</button>`}
       </div>
     </div>`;
 }
@@ -14798,6 +14798,119 @@ function _planNovaRotaVazia(corId){
   if (!cor) return;
   // reaproveita o modal de criar viagem, mas sem pré-selecionar pedidos
   _planAbrirModalViagem(cor, _planPedidosDoCorredor(cor), true);
+}
+
+// NOVA ROTA LIVRE — cria uma rota do zero, com as cidades que o operador quiser (sem corredor)
+let _rotaLivreParadas = [];
+function _planAbrirNovaRotaLivre(){
+  _rotaLivreParadas = [];
+  const cegonhas = (veiculosGlobais||[]).filter(v => v.ativo !== false && v.placa);
+  const old = document.getElementById('modalRotaLivre'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalRotaLivre';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">➕ Nova rota (livre)</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Monte uma rota com as cidades que você quiser, sem depender de um corredor. Adicione as paradas na ordem da viagem.</p>
+
+      <div class="form-group">
+        <label>Nome da rota</label>
+        <input type="text" id="rotaLivreNome" placeholder="Ex: Especial Cascavel → Foz">
+      </div>
+
+      <div class="form-group">
+        <label>Adicionar cidade / parada</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="rotaLivreCidade" placeholder="Digite a cidade e clique em +" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();_rotaLivreAddParada();}">
+          <button class="btn btn-secondary" onclick="_rotaLivreAddParada()">+ Add</button>
+        </div>
+        <div style="margin-top:4px;font-size:.72rem;color:var(--text-tertiary,#6b7280)">Sugestões: ${PATIOS_FIXOS.slice(0,6).map(p=>`<a href="#" onclick="_rotaLivreAddSugestao('${p.split('/')[0]}');return false" style="color:#fb923c;margin-right:8px">${p.split('/')[0]}</a>`).join('')}</div>
+      </div>
+
+      <div id="rotaLivreParadas" class="rota-livre-paradas"></div>
+
+      <div class="form-group" style="margin-top:12px">
+        <label>Cegonha / Guincho (opcional)</label>
+        <select id="rotaLivreCegonha" onchange="_rotaLivrePreencheMot()">
+          <option value="">— a definir —</option>
+          ${cegonhas.map(v => `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}">${v.propriedade==='terceiro'?'🤝 ':'🚛 '}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Motorista (opcional)</label>
+        <input type="text" id="rotaLivreMotorista" placeholder="Motorista" list="listaMotRotaLivre">
+        <datalist id="listaMotRotaLivre">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="_rotaLivreConfirmar()">✅ Criar rota</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalRotaLivre').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  _rotaLivreRenderParadas();
+}
+
+function _rotaLivreAddParada(){
+  const inp = document.getElementById('rotaLivreCidade');
+  const val = (inp?.value||'').trim();
+  if (!val) return;
+  _rotaLivreParadas.push(val);
+  inp.value = ''; inp.focus();
+  _rotaLivreRenderParadas();
+}
+function _rotaLivreAddSugestao(cidade){ _rotaLivreParadas.push(cidade); _rotaLivreRenderParadas(); }
+function _rotaLivreRemoverParada(i){ _rotaLivreParadas.splice(i,1); _rotaLivreRenderParadas(); }
+function _rotaLivreMoverParada(i, dir){
+  const j = i + dir;
+  if (j < 0 || j >= _rotaLivreParadas.length) return;
+  [_rotaLivreParadas[i], _rotaLivreParadas[j]] = [_rotaLivreParadas[j], _rotaLivreParadas[i]];
+  _rotaLivreRenderParadas();
+}
+function _rotaLivreRenderParadas(){
+  const el = document.getElementById('rotaLivreParadas');
+  if (!el) return;
+  if (_rotaLivreParadas.length === 0){ el.innerHTML = '<p class="text-muted" style="font-size:.8rem;padding:.4rem">Nenhuma parada ainda. Adicione ao menos a origem e o destino.</p>'; return; }
+  el.innerHTML = _rotaLivreParadas.map((c,i) => `
+    <div class="rota-livre-parada">
+      <span class="rlp-num">${i+1}</span>
+      <span class="rlp-cidade">${c}</span>
+      <span class="rlp-acoes">
+        <button type="button" onclick="_rotaLivreMoverParada(${i},-1)" ${i===0?'disabled':''}>▲</button>
+        <button type="button" onclick="_rotaLivreMoverParada(${i},1)" ${i===_rotaLivreParadas.length-1?'disabled':''}>▼</button>
+        <button type="button" onclick="_rotaLivreRemoverParada(${i})" title="Remover">✕</button>
+      </span>
+    </div>`).join('');
+}
+function _rotaLivrePreencheMot(){
+  const sel = document.getElementById('rotaLivreCegonha');
+  const opt = sel?.options[sel.selectedIndex];
+  const inp = document.getElementById('rotaLivreMotorista');
+  if (inp) inp.value = opt?.getAttribute('data-mot') || '';
+}
+async function _rotaLivreConfirmar(){
+  const nome = document.getElementById('rotaLivreNome')?.value.trim();
+  if (!nome){ alert('Dê um nome para a rota.'); return; }
+  if (_rotaLivreParadas.length < 2){ alert('Adicione ao menos 2 cidades (origem e destino).'); return; }
+  const cegonha = document.getElementById('rotaLivreCegonha')?.value || null;
+  const motorista = document.getElementById('rotaLivreMotorista')?.value.trim() || null;
+  try {
+    const ins = { nome, status:'planejada', origem:_rotaLivreParadas[0], destino:_rotaLivreParadas[_rotaLivreParadas.length-1] };
+    if (cegonha) ins.placa_cegonha = cegonha;
+    if (motorista) ins.motorista_1 = motorista;
+    const { data: rota, error } = await supabase.from('rotas_planejadas').insert(ins).select().single();
+    if (error) throw error;
+    if (rota) rotasGlobais.push(rota);
+    // grava as paradas da rota (se a tabela existir)
+    try {
+      const paradasIns = _rotaLivreParadas.map((cidade, ordem) => ({ rota_id: rota.id, cidade, ordem }));
+      await supabase.from('rota_paradas').insert(paradasIns);
+    } catch(ep){ /* tabela de paradas opcional */ }
+    document.getElementById('modalRotaLivre')?.remove();
+    renderizarPlanejamentoRotas();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `➕ Rota livre "${nome}" criada (${_rotaLivreParadas.length} cidades). Agora você pode arrastar/puxar pedidos para ela.`, 'success');
+  } catch(e){ alert('Erro ao criar rota: '+(e.message||e)); }
 }
 
 function _planPedidosListaHTML(cor){
