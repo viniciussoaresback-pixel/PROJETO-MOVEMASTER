@@ -9084,3 +9084,12 @@ html span.log-passo-bolinha {
 .feo-ic { font-size:1.6rem; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.06); border-radius:10px; flex:0 0 auto; }
 .feo-tit { font-weight:700; font-size:.9rem; }
 .feo-sub { font-size:.78rem; color:var(--text-secondary,#9ca3af); }
+
+/* Ponto 2 — selos do pedido (transbordado / CTe emitida) */
+.selos-pedido { display:inline-flex; gap:4px; flex-wrap:wrap; vertical-align:middle; }
+.selo-pedido { display:inline-block; font-size:.66rem; font-weight:700; padding:1px 7px; border-radius:999px; white-space:nowrap; line-height:1.5; }
+.selo-transb { background:rgba(168,85,247,.15); color:#a855f7; border:1px solid rgba(168,85,247,.4); }
+.selo-cte { background:rgba(34,197,94,.15); color:#22c55e; border:1px solid rgba(34,197,94,.4); }
+
+/* Botão romaneio na viagem em andamento */
+.jv-acao-romaneio { background:#7c3aed; }
