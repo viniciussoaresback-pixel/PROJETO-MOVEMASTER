@@ -384,14 +384,6 @@
                 <div id="reservasAtivasWrap" class="reservas-wrap"></div>
                 <div id="confirmacaoComercialWrap" class="confirmacao-wrap"></div>
 
-                <div class="card" id="cardRotasDisponiveis" style="display:none">
-                    <div class="painel-header-bar">
-                        <h2>🛣️ Rotas planejadas — vagas disponíveis</h2>
-                        <span class="text-muted text-sm">Encaixe seu pedido em uma carreta que já vai por essa rota</span>
-                    </div>
-                    <div id="listaRotasComercial" class="rotas-comercial-grid"></div>
-                </div>
-
                 <div class="card">
                     <h2>Novo Pedido de Transporte</h2>
                     <form id="formComercial" class="form">
@@ -535,6 +527,10 @@
                             <div class="form-row">
                                 <div class="form-group endereco-grupo">
                                     <label for="enderecoColeta">Endereço de Coleta *</label>
+                                    <div class="cli-auto-wrap">
+                                        <input type="text" id="buscaClienteColeta" class="cli-auto-input" placeholder="🔍 Puxar de cliente cadastrado (ex: zacarias cascavel)" autocomplete="off" oninput="_buscarClienteEndereco('Coleta',this.value)" onblur="setTimeout(()=>_fecharClienteEndereco('Coleta'),200)">
+                                        <div id="listaClienteColeta" class="cli-auto-lista"></div>
+                                    </div>
                                     <div class="cep-endereco-linha">
                                         <input type="text" id="cepColeta" class="input-cep" placeholder="CEP" maxlength="9"
                                             oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Coleta')">
@@ -544,6 +540,10 @@
                                 </div>
                                 <div class="form-group endereco-grupo">
                                     <label for="enderecoEntrega">Endereço de Entrega *</label>
+                                    <div class="cli-auto-wrap">
+                                        <input type="text" id="buscaClienteEntrega" class="cli-auto-input" placeholder="🔍 Puxar de cliente cadastrado (ex: zacarias cascavel)" autocomplete="off" oninput="_buscarClienteEndereco('Entrega',this.value)" onblur="setTimeout(()=>_fecharClienteEndereco('Entrega'),200)">
+                                        <div id="listaClienteEntrega" class="cli-auto-lista"></div>
+                                    </div>
                                     <div class="cep-endereco-linha">
                                         <input type="text" id="cepEntrega" class="input-cep" placeholder="CEP" maxlength="9"
                                             oninput="mascaraCEP(this)" onblur="buscarCEPPedido(this.value,'Entrega')">
@@ -1920,6 +1920,44 @@
                                 <input type="text" id="chassiVeiculo" placeholder="9BWZZZ377VT004251" maxlength="17" style="text-transform:uppercase">
                             </div>
                         </div>
+
+                        <!-- CARRETA (secundária) — vinculada ao cavalo, trocável a qualquer momento -->
+                        <details class="carreta-bloco">
+                            <summary>🔗 Carreta vinculada + documentos (ANTT / CRLV) — opcional</summary>
+                            <div class="carreta-bloco-conteudo">
+                                <p class="text-muted text-sm" style="margin:.4rem 0 .8rem">O cavalo é o veículo principal. A carreta é uma informação secundária e pode ser trocada quando quiser.</p>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="placaCarreta">Placa da carreta</label>
+                                        <input type="text" id="placaCarreta" placeholder="XYZ9A88" maxlength="8" style="text-transform:uppercase">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="renavamCarreta">RENAVAM da carreta</label>
+                                        <input type="text" id="renavamCarreta" placeholder="00000000000" maxlength="11">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="anttVeiculo">ANTT (RNTRC)</label>
+                                        <input type="text" id="anttVeiculo" placeholder="Registro ANTT">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="anttProprietario">Proprietário do ANTT</label>
+                                        <input type="text" id="anttProprietario" placeholder="Nome / razão social">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="crlvCavaloProp">Proprietário do CRLV (cavalo)</label>
+                                        <input type="text" id="crlvCavaloProp" placeholder="Proprietário no CRLV do cavalo">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="crlvCarretaProp">Proprietário do CRLV (carreta)</label>
+                                        <input type="text" id="crlvCarretaProp" placeholder="Proprietário no CRLV da carreta">
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
 
                         <!-- Propriedade: frota própria ou cegonha terceira -->
                         <div class="form-row">
