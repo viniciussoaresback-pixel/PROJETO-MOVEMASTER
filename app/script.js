@@ -15812,9 +15812,10 @@ function renderizarVisaoGlobal(){
         corredores.map(c => {
           const cor = _cgCorCor(c.total);
           const totalBar = c.aguardando + c.emViagem + c.concluidos || 1;
-          return `<div class="cg-corr-card" style="border-left:4px solid ${cor}">
+          return `<div class="cg-corr-card cg-corr-click" style="border-left:4px solid ${cor}" onclick="_cgAbrirCorredor(${c.corredor.id})">
             <div class="cg-corr-top">
               <span class="cg-corr-nome">${c.nome}</span>
+              <span class="cg-corr-chevron">›</span>
             </div>
             <div class="cg-corr-total" style="color:${cor}">● ${c.total} pedidos</div>
             <div class="cg-corr-detalhe">
@@ -15900,6 +15901,58 @@ function _cgAbrirListaKpi(tipo){
 function _cgFecharListaKpi(){
   const overlay = document.getElementById('cgKpiOverlay');
   if (overlay){ overlay.classList.remove('aberto'); overlay.innerHTML = ''; }
+}
+
+// Item 4 — clicar num corredor abre painel lateral com pedidos separados: aguardando x em viagem
+function _cgPedidosDoCorredorSep(corredorId){
+  const c = (corredoresGlobais||[]).find(x => String(x.id)===String(corredorId));
+  if (!c) return { aguardando:[], emViagem:[], nome:'' };
+  const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
+  const paradasStr = seq.filter(Boolean);
+  const pedidos = (pedidosGlobais||[]).filter(p => {
+    if (['Cancelado','Entregue'].includes(p.status||'')) return false;
+    if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
+    const partida = p.patioAtual || p.cidadeOrigem;
+    const io = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, partida) : -1;
+    const id = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, p.cidadeDestino) : -1;
+    return (io !== -1 && id !== -1 && io < id);
+  });
+  const aguardando = [], emViagem = [];
+  pedidos.forEach(p => {
+    const st = statusPlanilhaDoPedido(p);
+    if (st === 'Em transporte' || st === 'Transbordo') emViagem.push(p);
+    else aguardando.push(p);
+  });
+  return { aguardando, emViagem, nome:c.nome };
+}
+
+function _cgAbrirCorredor(corredorId){
+  const overlay = document.getElementById('cgKpiOverlay');
+  if (!overlay) return;
+  const { aguardando, emViagem, nome } = _cgPedidosDoCorredorSep(corredorId);
+  const bloco = (titulo, cor, arr) => `
+    <div class="cg-corr-sec">
+      <div class="cg-corr-sec-tit" style="color:${cor}">${titulo} <span class="cg-corr-sec-num">${arr.length}</span></div>
+      ${arr.length === 0 ? '<p class="text-muted" style="font-size:.82rem;padding:.3rem 0">Nenhum pedido.</p>' :
+        arr.sort((a,b)=>new Date(a.dataSolicitacao||0)-new Date(b.dataSolicitacao||0)).map(p => `<div class="cg-kpi-item" onclick="_cgAbrirRastreio(${p.id})">
+          <div class="cg-ki-top"><strong>#${p.id}</strong> · ${p.placa||'—'} <span class="cg-ki-status">${_cgStatusPill(p)}</span></div>
+          <div class="cg-ki-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
+          <div class="cg-ki-data">📅 Lançado: ${_cgFmtData(p.dataSolicitacao)}${p.dataPrevEntrega||p.prazoEntregaEstimado?` · 🏁 Entrega: ${_cgFmtData(p.dataPrevEntrega||p.prazoEntregaEstimado)}`:''}</div>
+        </div>`).join('')}
+    </div>`;
+  overlay.innerHTML = `
+    <div class="cg-rastreio-bg" onclick="_cgFecharListaKpi()"></div>
+    <div class="cg-rastreio-painel">
+      <div class="cg-rastreio-head">
+        <h3>📍 ${nome}</h3>
+        <button class="cg-rastreio-x" onclick="_cgFecharListaKpi()">✕</button>
+      </div>
+      <p class="text-muted" style="font-size:.82rem;margin:-6px 0 14px">${aguardando.length + emViagem.length} pedido(s) neste corredor</p>
+      ${bloco('🟠 Aguardando transporte', '#f59e0b', aguardando)}
+      ${bloco('🔵 Em viagem', '#2563eb', emViagem)}
+      <div id="cgRastreioOverlay"></div>
+    </div>`;
+  overlay.classList.add('aberto');
 }
 
 // ===== TELA 2 — PEDIDOS (comercial, só leitura) =====
