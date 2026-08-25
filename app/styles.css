@@ -273,7 +273,7 @@ body::after {
     font-family: 'Inter', sans-serif;
     font-size: 0.72rem;
     font-weight: 600;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-light);
     margin-top: 2px;
@@ -9050,3 +9050,37 @@ html span.log-passo-bolinha {
 [data-tema="claro"] #visaoGlobal .cg-corr-detalhe,
 [data-tema="claro"] #comercialPedidos .cg-kpi-lbl,
 [data-tema="claro"] #comercialViagens .cg-kpi-lbl { color:#4d5058; }
+
+
+
+
+/* Aguardando transbordo — aba e cards */
+.plan-corr-transbordo { border-color:rgba(168,85,247,.4); background:rgba(168,85,247,.06); }
+.plan-corr-transbordo.sel { border-color:#a855f7; background:rgba(168,85,247,.12); }
+.plan-corr-transbordo .plan-corr-nome { color:#a855f7; }
+.plan-transb-card { border:1px solid rgba(168,85,247,.25); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--surface-1,rgba(255,255,255,.02)); }
+.plan-transb-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.plan-transb-selo { font-size:.72rem; font-weight:700; color:#a855f7; background:rgba(168,85,247,.12); padding:2px 8px; border-radius:999px; white-space:nowrap; }
+.plan-transb-cliente { font-size:.82rem; color:var(--text-secondary,#9ca3af); margin:2px 0 8px; }
+.plan-transb-proxima { margin-top:10px; padding:10px; border-radius:8px; background:rgba(168,85,247,.06); border:1px dashed rgba(168,85,247,.35); }
+.plan-transb-proxima-lbl { font-size:.66rem; font-weight:700; letter-spacing:.5px; color:#a855f7; }
+.plan-transb-proxima-txt { font-size:.84rem; margin:4px 0 8px; }
+.plan-transb-btn { width:100%; padding:8px; border:none; border-radius:8px; background:#a855f7; color:#fff; font-weight:700; font-size:.8rem; cursor:pointer; }
+.plan-transb-btn:hover { filter:brightness(1.1); }
+
+/* Linha do tempo do pedido (transbordo) */
+.ltp { display:flex; align-items:flex-start; gap:0; margin:8px 0; overflow-x:auto; padding:6px 0; }
+.ltp-item { display:flex; flex-direction:column; align-items:center; min-width:64px; position:relative; }
+.ltp-dot { width:12px; height:12px; border-radius:50%; background:var(--surface-3,#333); border:2px solid var(--border,rgba(255,255,255,.2)); }
+.ltp-item.feito .ltp-dot { background:#22c55e; border-color:#22c55e; }
+.ltp-item.atual .ltp-dot { background:#a855f7; border-color:#a855f7; box-shadow:0 0 0 4px rgba(168,85,247,.2); }
+.ltp-nome { font-size:.68rem; text-align:center; margin-top:4px; max-width:70px; line-height:1.2; }
+.ltp-aqui { font-size:.6rem; color:#a855f7; font-weight:700; margin-top:2px; }
+.ltp-linha { flex:1; min-width:20px; height:2px; background:var(--border,rgba(255,255,255,.15)); margin-top:5px; }
+
+/* Modal forma de entrega */
+.forma-entrega-opt { display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:14px; margin-bottom:10px; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:10px; background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; cursor:pointer; transition:border-color .15s, background .15s; }
+.forma-entrega-opt:hover { border-color:#ff6a00; background:rgba(255,106,0,.06); }
+.feo-ic { font-size:1.6rem; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.06); border-radius:10px; flex:0 0 auto; }
+.feo-tit { font-weight:700; font-size:.9rem; }
+.feo-sub { font-size:.78rem; color:var(--text-secondary,#9ca3af); }
