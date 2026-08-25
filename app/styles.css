@@ -8852,7 +8852,7 @@ html span.log-passo-bolinha {
 .cg-kpi-lbl { font-size:.76rem; color:var(--text-secondary,#9ca3af); }
 .cg-sec-tit { font-size:.82rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-secondary,#9ca3af); margin:20px 0 12px; }
 .cg-corredores { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-bottom:20px; }
-.cg-corr-card { border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:14px; background:rgba(20,21,26,.6); }
+.cg-corr-card { border:1px solid var(--border,rgba(0,0,0,.1)); border-radius:12px; padding:14px; background:var(--surface-1,#14141a); }
 .cg-corr-nome { font-weight:700; font-size:.9rem; }
 .cg-corr-total { font-weight:800; font-size:1.1rem; margin:6px 0 10px; }
 .cg-corr-detalhe { display:flex; flex-direction:column; gap:4px; font-size:.8rem; color:var(--text-secondary,#9ca3af); margin-bottom:10px; }
@@ -9023,5 +9023,30 @@ html span.log-passo-bolinha {
 .cg-corr-sec-num { background:rgba(255,255,255,.08); border-radius:999px; padding:1px 9px; font-size:.75rem; }
 .cg-corr-sec .cg-kpi-item { margin-bottom:8px; }
 
-/* Área comercial — os números dos KPIs herdam a cor do tema (contraste garantido nos 2 modos) */
-#visaoGlobal .cg-kpi-num, #comercialPedidos .cg-kpi-num, #comercialViagens .cg-kpi-num { color: var(--text-primary, inherit); }
+/* ===== Área comercial — cores explícitas por tema (evita inconsistência claro/escuro) ===== */
+/* MODO ESCURO (padrão): cards escuros, texto claro */
+#visaoGlobal .cg-kpi, #visaoGlobal .cg-corr-card, #visaoGlobal .cg-bloco,
+#comercialPedidos .cg-kpi, #comercialViagens .cg-kpi, #comercialViagens .cg-viagem-card {
+  background:#14141a; border-color:rgba(255,255,255,.1);
+}
+#visaoGlobal .cg-kpi-num, #comercialPedidos .cg-kpi-num, #comercialViagens .cg-kpi-num { color:#f0f0f2; }
+#visaoGlobal .cg-corr-nome, #comercialViagens .cg-vc-rota { color:#f0f0f2; }
+
+/* MODO CLARO: cards brancos, texto escuro */
+[data-tema="claro"] #visaoGlobal .cg-kpi,
+[data-tema="claro"] #visaoGlobal .cg-corr-card,
+[data-tema="claro"] #visaoGlobal .cg-bloco,
+[data-tema="claro"] #comercialPedidos .cg-kpi,
+[data-tema="claro"] #comercialViagens .cg-kpi,
+[data-tema="claro"] #comercialViagens .cg-viagem-card {
+  background:#ffffff; border-color:#e2e4e9;
+}
+[data-tema="claro"] #visaoGlobal .cg-kpi-num,
+[data-tema="claro"] #comercialPedidos .cg-kpi-num,
+[data-tema="claro"] #comercialViagens .cg-kpi-num { color:#1a1c20; }
+[data-tema="claro"] #visaoGlobal .cg-corr-nome,
+[data-tema="claro"] #comercialViagens .cg-vc-rota { color:#1a1c20; }
+[data-tema="claro"] #visaoGlobal .cg-kpi-lbl,
+[data-tema="claro"] #visaoGlobal .cg-corr-detalhe,
+[data-tema="claro"] #comercialPedidos .cg-kpi-lbl,
+[data-tema="claro"] #comercialViagens .cg-kpi-lbl { color:#4d5058; }
