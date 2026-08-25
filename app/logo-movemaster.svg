@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64" width="300" height="64" role="img" aria-label="Movemaster — Controle Logístico">
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="#0a0a0d"/>
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="none" stroke="#e85d04" stroke-opacity=".55" stroke-width="2"/>
+  <path d="M15 44V21l9 12 9-12v23" fill="none" stroke="#f5f6f8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39 26h10M35 32.5h14M39 39h10" stroke="#f97316" stroke-width="4.5" stroke-linecap="round"/>
+  <text x="78" y="34" font-family="Oswald, 'Arial Narrow', Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="1.5" fill="currentColor">MOVE<tspan fill="#f97316">MASTER</tspan></text>
+  <text x="79" y="50" font-family="Inter, Arial, sans-serif" font-size="10.5" letter-spacing="3" fill="#8a909a">CONTROLE LOGÍSTICO</text>
+</svg>
