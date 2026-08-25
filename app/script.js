@@ -13959,25 +13959,26 @@ function abrirFecharEnviarCarga(rotaId){
   div.className = 'modal-overlay';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
   const linhaEdit = (p) => {
-    const noPatio = p.noPatio || !!p.patioAtual;
     // pré-preenche com: local já definido > pátio atual > endereço de coleta do lançamento
     const local = p.localCarro || p.patioAtual || p.enderecoColeta || '';
-    const chips = PATIOS_FIXOS.map(pt =>
-      `<button type="button" class="rm-patio-chip ${local===pt?'sel':''}" onclick="_rmSelecionarPatio(${p.id}, '${pt.replace(/'/g,"\\'")}')">${pt}</button>`
+    const ehPatioFixo = PATIOS_FIXOS.includes(local);
+    const opcoes = PATIOS_FIXOS.map(pt =>
+      `<option value="${pt}" ${local===pt?'selected':''}>${pt}</option>`
     ).join('');
     return `<div class="rm-carro" id="rmCarro_${p.id}">
       <div class="rm-carro-head">
         <span><strong>#${p.id}</strong> · <strong>${p.placa||'—'}</strong> ${p.modelo?('· '+p.modelo):''}</span>
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
-      <label class="rm-patio-check">
-        <input type="checkbox" id="rmPatio_${p.id}" ${noPatio?'checked':''} onchange="_rmTogglePatio(${p.id})"> Está num pátio?
-      </label>
-      <div class="rm-patio-chips" id="rmChips_${p.id}" style="display:${noPatio?'flex':'none'}">
-        ${chips}
+      <div class="rm-onde-linha">
+        <select id="rmPatioSel_${p.id}" class="rm-patio-select" onchange="_rmSelectPatio(${p.id})">
+          <option value="__outro__" ${!ehPatioFixo?'selected':''}>📍 Outro local (endereço)</option>
+          ${opcoes}
+        </select>
       </div>
-      <input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input">
-      <div class="rm-local-hint">📍 Endereço do lançamento — edite se o carro estiver em local diferente.</div>
+      <input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input" style="display:${ehPatioFixo?'none':'block'}">
+      <input type="hidden" id="rmPatio_${p.id}" value="${ehPatioFixo?'1':'0'}">
+      <div class="rm-local-hint">📍 Endereço vindo do lançamento — escolha um pátio ou edite o endereço se o carro estiver em local diferente.</div>
     </div>`;
   };
   div.innerHTML = `
@@ -13998,22 +13999,21 @@ function abrirFecharEnviarCarga(rotaId){
   document.body.appendChild(div);
 }
 
-// Chips de pátio no romaneio: marcar/desmarcar "está num pátio" e escolher qual
-function _rmTogglePatio(pedidoId){
-  const check = document.getElementById('rmPatio_'+pedidoId);
-  const chips = document.getElementById('rmChips_'+pedidoId);
-  if (chips) chips.style.display = check?.checked ? 'flex' : 'none';
-}
-
-function _rmSelecionarPatio(pedidoId, patio){
-  // preenche o campo de local com o pátio escolhido e destaca o chip
+// Romaneio Opção C: dropdown de pátio + "outro local"
+function _rmSelectPatio(pedidoId){
+  const sel = document.getElementById('rmPatioSel_'+pedidoId);
   const input = document.getElementById('rmLocal_'+pedidoId);
-  if (input) input.value = patio;
-  const cont = document.getElementById('rmChips_'+pedidoId);
-  if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.textContent === patio)); }
-  // garante que o "está num pátio" fique marcado
-  const check = document.getElementById('rmPatio_'+pedidoId);
-  if (check) check.checked = true;
+  const hidden = document.getElementById('rmPatio_'+pedidoId);
+  if (!sel) return;
+  if (sel.value === '__outro__'){
+    // outro local: mostra o campo de endereço para digitar
+    if (input){ input.style.display = 'block'; if (PATIOS_FIXOS.includes(input.value)) input.value = ''; input.focus(); }
+    if (hidden) hidden.value = '0';
+  } else {
+    // pátio fixo escolhido: preenche e esconde o texto livre
+    if (input){ input.value = sel.value; input.style.display = 'none'; }
+    if (hidden) hidden.value = '1';
+  }
 }
 
 async function _salvarLocaisRomaneio(rotaId, enviar){
@@ -14021,7 +14021,7 @@ async function _salvarLocaisRomaneio(rotaId, enviar){
   if (!d) return;
   try {
     for (const p of d.carros){
-      const noPatio = document.getElementById('rmPatio_'+p.id)?.checked || false;
+      const noPatio = document.getElementById('rmPatio_'+p.id)?.value === '1';
       const local = document.getElementById('rmLocal_'+p.id)?.value.trim() || null;
       await supabase.from('pedidos').update({ local_carro: local }).eq('id', p.id);
       const pg = (pedidosGlobais||[]).find(x => String(x.id)===String(p.id));
@@ -16494,6 +16494,16 @@ function renderizarComercialViagens(){
         const np = _veiculosNaRota(r.id).length;
         const cor = corredores.find(c => String(c.id)===String(r.corredor_id));
         const stInfo = _cgViagemStatusInfo(r.status);
+        // status de emissão de CTe da carga
+        const pedsViagem = _pedidosHistoricoDaViagem(r.id).filter(x => x.status !== 'Cancelado');
+        const comCte = pedsViagem.filter(x => x.numeroCte).length;
+        const cteBadge = pedsViagem.length > 0
+          ? (comCte === pedsViagem.length
+              ? '<span class="cg-cte-badge cte-ok">🧾 CTe completo</span>'
+              : (comCte > 0
+                  ? `<span class="cg-cte-badge cte-parcial">🧾 CTe ${comCte}/${pedsViagem.length}</span>`
+                  : '<span class="cg-cte-badge cte-pend">🧾 CTe pendente</span>'))
+          : '';
         return `<div class="cg-viagem-card" onclick="_cgSelViagem(${r.id})">
           <div class="cg-vc-top"><span class="cg-vc-rota">${r.nome||('R-'+r.id)}</span><span class="cg-badge" style="background:${stInfo.bg};color:${stInfo.cor}">${stInfo.label}</span></div>
           <div class="cg-vc-corr">${cor?cor.nome:'—'}</div>
@@ -16501,6 +16511,7 @@ function renderizarComercialViagens(){
             <span>👤 ${r.motorista_1||'—'}</span>
             <span>🚛 ${np} pedido(s)</span>
           </div>
+          <div class="cg-vc-selos">${cteBadge}</div>
           ${r.placa_cegonha?`<div class="cg-vc-cegonha">${r.placa_cegonha}</div>`:''}
         </div>`;
       }).join('')}
@@ -16591,7 +16602,7 @@ function _cgViagemDetalheHTML(rota){
       ${carros.length === 0 ? '<p class="text-muted" style="font-size:.85rem">Nenhum pedido nesta viagem.</p>' : `
       <div class="cg-tabela-wrap">
         <table class="cg-tabela" style="min-width:0">
-          <thead><tr><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Destino</th><th>Status</th></tr></thead>
+          <thead><tr><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Destino</th><th>Lançado</th><th>CTe</th><th>Status</th></tr></thead>
           <tbody>
             ${carros.map(p => {
               const v = _vinculoViagemPedido(rota.id, p.id);
@@ -16601,6 +16612,8 @@ function _cgViagemDetalheHTML(rota){
               <td>${p.cliente||'—'}</td>
               <td>${p.placa||'—'}</td>
               <td>${p.cidadeDestino||'—'}</td>
+              <td class="cg-sub" style="white-space:nowrap">${_cgFmtData(p.dataSolicitacao)}</td>
+              <td>${p.numeroCte?`<span style="color:#22c55e;font-size:.75rem;white-space:nowrap">🧾 ${p.numeroCte}</span>`:'<span class="text-muted" style="font-size:.72rem">—</span>'}</td>
               <td>${transbordou ? `<span style="color:#a855f7;font-size:.75rem">🔀 ${v.motivo_saida||'transbordado'}</span>` : _cgStatusPill(p)}</td>
             </tr>`;
             }).join('')}
