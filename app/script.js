@@ -13960,15 +13960,25 @@ function abrirFecharEnviarCarga(rotaId){
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
   const linhaEdit = (p) => {
     const noPatio = p.noPatio || !!p.patioAtual;
-    const local = p.localCarro || p.patioAtual || '';
-    return `<tr class="corr-tr">
-      <td class="ct-id">#${p.id}</td>
-      <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
-      <td class="ct-modelo">${p.modelo||'—'}</td>
-      <td class="ct-rota">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></td>
-      <td style="text-align:center"><input type="checkbox" id="rmPatio_${p.id}" ${noPatio?'checked':''}></td>
-      <td><input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="onde está o carro..." class="ocup-busca" style="min-width:180px"></td>
-    </tr>`;
+    // pré-preenche com: local já definido > pátio atual > endereço de coleta do lançamento
+    const local = p.localCarro || p.patioAtual || p.enderecoColeta || '';
+    const chips = PATIOS_FIXOS.map(pt =>
+      `<button type="button" class="rm-patio-chip ${local===pt?'sel':''}" onclick="_rmSelecionarPatio(${p.id}, '${pt.replace(/'/g,"\\'")}')">${pt}</button>`
+    ).join('');
+    return `<div class="rm-carro" id="rmCarro_${p.id}">
+      <div class="rm-carro-head">
+        <span><strong>#${p.id}</strong> · <strong>${p.placa||'—'}</strong> ${p.modelo?('· '+p.modelo):''}</span>
+        <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
+      </div>
+      <label class="rm-patio-check">
+        <input type="checkbox" id="rmPatio_${p.id}" ${noPatio?'checked':''} onchange="_rmTogglePatio(${p.id})"> Está num pátio?
+      </label>
+      <div class="rm-patio-chips" id="rmChips_${p.id}" style="display:${noPatio?'flex':'none'}">
+        ${chips}
+      </div>
+      <input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input">
+      <div class="rm-local-hint">📍 Endereço do lançamento — edite se o carro estiver em local diferente.</div>
+    </div>`;
   };
   div.innerHTML = `
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:820px;width:96%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
@@ -13978,10 +13988,7 @@ function abrirFecharEnviarCarga(rotaId){
       </div>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Marque quais carros já estão <strong>no pátio</strong> e informe <strong>onde está</strong> cada um. Salve e envie ao motorista — ele verá esta lista (e o PDF) para saber onde coletar/pegar cada carro.</p>
       <div class="romaneio-cab" style="margin-bottom:10px"><strong>🚛 ${d.rota.placa_cegonha||'—'}</strong>${d.rota.motorista_1?' · 👤 '+d.rota.motorista_1:''}${d.rota.nome?' · '+d.rota.nome:''}</div>
-      <table class="corr-tabela">
-        <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>No pátio?</th><th>Onde está</th></tr></thead>
-        <tbody>${d.carros.map(linhaEdit).join('')}</tbody>
-      </table>
+      <div class="rm-carros-lista">${d.carros.map(linhaEdit).join('')}</div>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="_salvarLocaisRomaneio(${rotaId})">💾 Salvar localização</button>
         <button class="btn btn-primary" style="flex:1;min-width:180px" onclick="_salvarLocaisRomaneio(${rotaId}, true)">📤 Salvar e enviar ao motorista</button>
@@ -13989,6 +13996,24 @@ function abrirFecharEnviarCarga(rotaId){
       </div>
     </div>`;
   document.body.appendChild(div);
+}
+
+// Chips de pátio no romaneio: marcar/desmarcar "está num pátio" e escolher qual
+function _rmTogglePatio(pedidoId){
+  const check = document.getElementById('rmPatio_'+pedidoId);
+  const chips = document.getElementById('rmChips_'+pedidoId);
+  if (chips) chips.style.display = check?.checked ? 'flex' : 'none';
+}
+
+function _rmSelecionarPatio(pedidoId, patio){
+  // preenche o campo de local com o pátio escolhido e destaca o chip
+  const input = document.getElementById('rmLocal_'+pedidoId);
+  if (input) input.value = patio;
+  const cont = document.getElementById('rmChips_'+pedidoId);
+  if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.textContent === patio)); }
+  // garante que o "está num pátio" fique marcado
+  const check = document.getElementById('rmPatio_'+pedidoId);
+  if (check) check.checked = true;
 }
 
 async function _salvarLocaisRomaneio(rotaId, enviar){
@@ -14242,11 +14267,16 @@ function _fiscalNumerosCteHTML(rotaId){
   if (pedidos.length === 0) return '';
   return `<div style="margin-top:10px;border-top:1px dashed var(--border,rgba(255,255,255,.12));padding-top:10px">
     <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe por pedido (1 pedido = 1 CTe):</div>
-    ${pedidos.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
-      <span style="font-size:.8rem;min-width:150px"><strong>#${p.id}</strong> · ${p.placa||''} → ${p.cidadeDestino||''}</span>
-      <input type="text" id="cteNum_${p.id}" value="${p.numeroCte||''}" placeholder="nº CTe" style="font-size:.8rem;padding:3px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:130px">
-      <button class="btn btn-sm btn-primary" onclick="_salvarNumeroCte(${p.id})">Salvar</button>
-      ${p.numeroCte?`<span style="font-size:.75rem;color:#22c55e">✅ CTe ${p.numeroCte}</span>`:''}
+    ${pedidos.map(p => `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:8px;padding:8px 10px;margin-bottom:6px">
+      <div style="font-size:.82rem;margin-bottom:5px">
+        <strong>#${p.id}</strong> · 🚗 ${p.placa||'—'}${p.modelo?(' · '+p.modelo):''} ${_selosPedidoHTML(p)}<br>
+        <span style="color:var(--text-secondary,#9ca3af);font-size:.78rem">${p.cliente||'—'} · ${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="text" id="cteNum_${p.id}" value="${p.numeroCte||''}" placeholder="nº da CTe" style="font-size:.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:140px">
+        <button class="btn btn-sm btn-primary" onclick="_salvarNumeroCte(${p.id})">Salvar CTe</button>
+        ${p.numeroCte?`<span style="font-size:.75rem;color:#22c55e">✅ CTe ${p.numeroCte}</span>`:''}
+      </div>
     </div>`).join('')}
   </div>`;
 }
@@ -14677,10 +14707,11 @@ function _viagemDetalheHTML(rota, carros){
     ${carros.length === 0 ? '<p class="text-muted" style="padding:.6rem;font-size:.85rem">Nenhum carro nesta carga ainda.</p>' : `
     <div style="overflow-x:auto">
     <table class="jv-tabela">
-      <thead><tr><th>Placa</th><th>Cliente</th><th>Origem</th><th>Destino</th><th>Status</th></tr></thead>
+      <thead><tr><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem</th><th>Destino</th><th>Status</th></tr></thead>
       <tbody>
         ${carros.map(c => `<tr>
           <td><strong>${c.placa||'—'}</strong></td>
+          <td>${c.modelo||'—'}</td>
           <td title="${(c.cliente||'').replace(/"/g,'&quot;')}">${(c.cliente||'—')}</td>
           <td>${c.patioAtual ? '🅿️ '+(c.patioAtual.split('/')[0]) : (c.cidadeOrigem||'—')}</td>
           <td><strong>${c.cidadeDestino||'—'}</strong></td>
