@@ -8677,10 +8677,10 @@ html span.log-passo-bolinha {
 .jv-carga-cab { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:6px; }
 .jv-carga-tit { font-weight:700; font-size:.9rem; }
 .jv-carga-badge { font-size:.72rem; font-weight:700; background:rgba(74,222,128,.15); color:#4ade80; padding:2px 8px; border-radius:999px; }
-.jv-tabela { width:100%; border-collapse:collapse; font-size:.82rem; min-width:480px; }
-.jv-tabela thead th { text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-muted,#9ca3af); font-weight:700; padding:5px 8px; border-bottom:1px solid var(--border,rgba(255,255,255,.12)); white-space:nowrap; }
-.jv-tabela td { padding:6px 8px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
-.jv-tabela td:nth-child(2){ max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jv-tabela { width:100%; border-collapse:collapse; font-size:.76rem; min-width:420px; }
+.jv-tabela thead th { text-align:left; font-size:.63rem; text-transform:uppercase; letter-spacing:.3px; color:var(--text-muted,#9ca3af); font-weight:700; padding:3px 6px; border-bottom:1px solid var(--border,rgba(255,255,255,.12)); white-space:nowrap; }
+.jv-tabela td { padding:3px 6px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); line-height:1.3; }
+.jv-tabela td:nth-child(3){ max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .jv-vagas-livres { margin-top:8px; font-size:.78rem; color:#60a5fa; font-weight:600; }
 
 /* Viagens — Bloco 3: ações e documentos */
@@ -9105,3 +9105,14 @@ html span.log-passo-bolinha {
 .rm-patio-chip.sel { background:#ff6a00; border-color:#ff6a00; color:#fff; font-weight:700; }
 .rm-local-input { width:100%; padding:7px 10px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; font-size:.85rem; }
 .rm-local-hint { font-size:.72rem; color:var(--text-tertiary,#6b7280); margin-top:4px; }
+
+/* Romaneio Opção C — dropdown de pátio */
+.rm-onde-linha { margin-bottom:8px; }
+.rm-patio-select { width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.18)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; font-size:.85rem; }
+
+/* Selo de CTe no card de viagem (fiscal/comercial) */
+.cg-vc-selos { margin-top:6px; }
+.cg-cte-badge { display:inline-block; font-size:.68rem; font-weight:700; padding:2px 8px; border-radius:999px; }
+.cg-cte-badge.cte-ok { background:rgba(34,197,94,.15); color:#22c55e; border:1px solid rgba(34,197,94,.4); }
+.cg-cte-badge.cte-parcial { background:rgba(234,179,8,.15); color:#eab308; border:1px solid rgba(234,179,8,.4); }
+.cg-cte-badge.cte-pend { background:rgba(148,163,184,.12); color:#94a3b8; border:1px solid rgba(148,163,184,.3); }
