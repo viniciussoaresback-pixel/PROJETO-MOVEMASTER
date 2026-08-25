@@ -335,6 +335,7 @@ async function carregarDadosDoSupabase(opts) {
                 localCarro: p.local_carro || null,
                 patioColeta: p.patio_coleta || null,
                 equipeColetaId: p.equipe_coleta_id || null,
+                entregaEquipeId: p.entrega_equipe_id || null,
                 obsColeta: p.obs_coleta || null,
                 entregaEquipeEm: p.entrega_equipe_em || null,
                 entregaEquipePor: p.entrega_equipe_por || null,
@@ -13962,23 +13963,19 @@ function abrirFecharEnviarCarga(rotaId){
     // pré-preenche com: local já definido > pátio atual > endereço de coleta do lançamento
     const local = p.localCarro || p.patioAtual || p.enderecoColeta || '';
     const ehPatioFixo = PATIOS_FIXOS.includes(local);
-    const opcoes = PATIOS_FIXOS.map(pt =>
-      `<option value="${pt}" ${local===pt?'selected':''}>${pt}</option>`
+    const chips = PATIOS_FIXOS.map(pt =>
+      `<button type="button" class="rm-patio-chip ${local===pt?'sel':''}" onclick="_rmSelecionarPatio(${p.id}, '${pt.replace(/'/g,"\\'")}')">${pt}</button>`
     ).join('');
     return `<div class="rm-carro" id="rmCarro_${p.id}">
       <div class="rm-carro-head">
         <span><strong>#${p.id}</strong> · <strong>${p.placa||'—'}</strong> ${p.modelo?('· '+p.modelo):''}</span>
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
-      <div class="rm-onde-linha">
-        <select id="rmPatioSel_${p.id}" class="rm-patio-select" onchange="_rmSelectPatio(${p.id})">
-          <option value="__outro__" ${!ehPatioFixo?'selected':''}>📍 Outro local (endereço)</option>
-          ${opcoes}
-        </select>
-      </div>
-      <input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input" style="display:${ehPatioFixo?'none':'block'}">
+      <div class="rm-patio-lbl">🅿️ Selecione o pátio (ou deixe o endereço abaixo):</div>
+      <div class="rm-patio-chips">${chips}</div>
+      <input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input" oninput="_rmLocalDigitado(${p.id})">
       <input type="hidden" id="rmPatio_${p.id}" value="${ehPatioFixo?'1':'0'}">
-      <div class="rm-local-hint">📍 Endereço vindo do lançamento — escolha um pátio ou edite o endereço se o carro estiver em local diferente.</div>
+      <div class="rm-local-hint">📍 Endereço vindo do lançamento — clique num pátio ou edite o endereço se o carro estiver em local diferente.</div>
     </div>`;
   };
   div.innerHTML = `
@@ -13999,21 +13996,26 @@ function abrirFecharEnviarCarga(rotaId){
   document.body.appendChild(div);
 }
 
-// Romaneio Opção C: dropdown de pátio + "outro local"
-function _rmSelectPatio(pedidoId){
-  const sel = document.getElementById('rmPatioSel_'+pedidoId);
+// Romaneio Opção B: chips de pátio + endereço editável
+function _rmSelecionarPatio(pedidoId, patio){
   const input = document.getElementById('rmLocal_'+pedidoId);
+  if (input) input.value = patio;
+  const cont = document.getElementById('rmCarro_'+pedidoId);
+  if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.textContent === patio)); }
   const hidden = document.getElementById('rmPatio_'+pedidoId);
-  if (!sel) return;
-  if (sel.value === '__outro__'){
-    // outro local: mostra o campo de endereço para digitar
-    if (input){ input.style.display = 'block'; if (PATIOS_FIXOS.includes(input.value)) input.value = ''; input.focus(); }
-    if (hidden) hidden.value = '0';
-  } else {
-    // pátio fixo escolhido: preenche e esconde o texto livre
-    if (input){ input.value = sel.value; input.style.display = 'none'; }
-    if (hidden) hidden.value = '1';
-  }
+  if (hidden) hidden.value = '1';
+}
+
+// Se a pessoa digita um endereço manual, desmarca os chips (não é mais um pátio fixo)
+function _rmLocalDigitado(pedidoId){
+  const input = document.getElementById('rmLocal_'+pedidoId);
+  const cont = document.getElementById('rmCarro_'+pedidoId);
+  if (!input || !cont) return;
+  const val = input.value.trim();
+  const ehPatio = PATIOS_FIXOS.includes(val);
+  cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.textContent === val));
+  const hidden = document.getElementById('rmPatio_'+pedidoId);
+  if (hidden) hidden.value = ehPatio ? '1' : '0';
 }
 
 async function _salvarLocaisRomaneio(rotaId, enviar){
@@ -14053,11 +14055,24 @@ async function _salvarLocaisRomaneio(rotaId, enviar){
       }
       document.getElementById('modalRomaneio')?.remove();
       if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `📤 Carga enviada ao motorista${rota&&rota.motorista_1?' ('+rota.motorista_1+')':''} com a localização de cada carro.`, 'success');
+      _rmToastConfirmacao(`✅ Salvo e enviado ao motorista${rota&&rota.motorista_1?' ('+rota.motorista_1+')':''}!`);
       if (typeof renderizarRotas === 'function') renderizarRotas();
     } else {
       if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', '💾 Localização salva.', 'success');
+      _rmToastConfirmacao('💾 Localização salva!');
     }
   } catch(e){ alert('Erro ao salvar: '+(e.message||e)); }
+}
+
+// Toast de confirmação central (rápido e visível)
+function _rmToastConfirmacao(texto){
+  const old = document.getElementById('rmToast'); if (old) old.remove();
+  const t = document.createElement('div');
+  t.id = 'rmToast';
+  t.className = 'rm-toast';
+  t.textContent = texto;
+  document.body.appendChild(t);
+  setTimeout(() => { t.classList.add('sai'); setTimeout(()=>t.remove(), 400); }, 2400);
 }
 
 function _gerarPdfRomaneio(rotaId){
@@ -14992,6 +15007,7 @@ async function _viagemEnviarFiscal(rotaId){
       });
     }
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `📄 Espelho gerado e carga enviada ao fiscal (${carros.length} carro(s)).`, 'success');
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`✅ Enviado ao setor fiscal (${carros.length} carro(s))!`);
   } else {
     alert('Função de espelho de carga não disponível.');
   }
@@ -15829,7 +15845,10 @@ function _centralColunaEntregas(entregas){
     </table></div>
     <div class="central-col-rodape">
       <span class="text-muted">${entregas.length} pedido(s)</span>
-      <button class="central-btn central-btn-azul" onclick="_centralDirecionarMotorista()">👤 Direcionar para motorista</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="central-btn central-btn-azul" onclick="_centralDirecionarMotorista()">👤 Motorista</button>
+        <button class="central-btn" style="background:#a855f7" onclick="_centralDirecionarEquipeEntrega()">👥 Equipe de entrega</button>
+      </div>
     </div>`}
   </div>`;
 }
@@ -15909,6 +15928,57 @@ async function _centralConfirmarEquipe(ids){
   document.getElementById('modalCentralEquipe')?.remove();
   renderizarCentralOperacao();
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} coleta(s) direcionada(s) para a equipe. A equipe confirma no app.`, 'success');
+}
+
+// Direcionar ENTREGAS para uma equipe de entrega
+function _centralDirecionarEquipeEntrega(){
+  const ids = [...document.querySelectorAll('.central-chk-entrega:checked')].map(c => parseInt(c.value));
+  if (ids.length === 0){ alert('Selecione ao menos uma entrega.'); return; }
+  _centralModalEquipeEntrega(ids);
+}
+
+function _centralModalEquipeEntrega(ids){
+  const equipes = (equipesEntregaGlobais||[]).filter(e => e.ativo !== false);
+  const old = document.getElementById('modalCentralEquipeEnt'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalCentralEquipeEnt';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">👥 Direcionar entrega para equipe</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} entrega(s) selecionada(s). Escolha a equipe que fará a entrega ao cliente.</p>
+      <div class="form-group">
+        <label>Equipe de entrega</label>
+        <select id="centralEquipeEntSel">
+          <option value="">Selecione...</option>
+          ${equipes.map(e => `<option value="${e.id}">${e.nome}${e.cidade_base?' · 📍 '+e.cidade_base:''}${e.responsavel?' ('+e.responsavel+')':''}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#a855f7" onclick="_centralConfirmarEquipeEntrega([${ids.join(',')}])">✅ Direcionar</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalCentralEquipeEnt').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _centralConfirmarEquipeEntrega(ids){
+  const equipeId = document.getElementById('centralEquipeEntSel')?.value;
+  if (!equipeId){ alert('Selecione uma equipe.'); return; }
+  const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(equipeId));
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    if (!p) continue;
+    try {
+      await supabase.from('pedidos').update({ entrega_equipe_id: parseInt(equipeId), precisa_equipe_entrega: true }).eq('id', id);
+      p.entregaEquipeId = parseInt(equipeId); p.precisaEquipeEntrega = true;
+      try { await supabase.from('historico_status').insert({ pedido_id: parseInt(id), status_anterior: p.status, status_novo: p.status, usuario_nome: usuario, observacao: `👥 Entrega direcionada para a equipe ${eq?eq.nome:''}.` }); } catch(_){}
+    } catch(e){ console.error('Erro ao direcionar entrega', id, e); }
+  }
+  document.getElementById('modalCentralEquipeEnt')?.remove();
+  renderizarCentralOperacao();
+  if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} entrega(s) direcionada(s) para a equipe ${eq?eq.nome:''}. A equipe confirma no app.`, 'success');
 }
 
 // Modal: direcionar entregas para um MOTORISTA
