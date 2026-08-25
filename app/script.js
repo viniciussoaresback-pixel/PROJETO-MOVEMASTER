@@ -16,6 +16,7 @@ let tabelaPrecosGlobais = [];
 let _corridorRotaCtx = null;
 let precosManuaisTrechoGlobais = [];
 let documentosRotaGlobais = [];
+let viagemPedidosGlobais = [];
 let entregasLastMileGlobais = [];
 let estadosBrasil = [];
 let cidadesPorEstado = {};
@@ -260,6 +261,11 @@ async function carregarDadosDoSupabase(opts) {
         tabelaPrecosGlobais = resTab.data || [];
         precosManuaisTrechoGlobais = resTabM.data || [];
         documentosRotaGlobais = resDocs.data || [];
+        // Vínculo histórico viagem <-> pedido (nunca apagado; separa histórico da etapa atual)
+        try {
+          const resVP = await supabase.from('viagem_pedidos').select('*');
+          viagemPedidosGlobais = resVP.data || [];
+        } catch(e){ viagemPedidosGlobais = []; }
 
         // Folgas (tabela opcional) — mantém sua própria função
         if (typeof carregarFolgas === 'function') { try { await carregarFolgas(); } catch(e){} }
@@ -316,6 +322,9 @@ async function carregarDadosDoSupabase(opts) {
                 rotaId: p.rota_id || null,
                 tipoEntrega: p.tipo_entrega || 'patio',
                 aguardandoRetirada: p.aguardando_retirada || false,
+                qtdTransbordos: p.qtd_transbordos || 0,
+                aguardandoTransbordo: p.aguardando_transbordo || false,
+                precisaEquipeEntrega: p.precisa_equipe_entrega || false,
                 fluxoEntrega: p.fluxo_entrega || null,
                 equipeEntregaId: p.equipe_entrega_id || null,
                 coletaEquipeEm: p.coleta_equipe_em || null,
@@ -4124,6 +4133,12 @@ async function _aplicarStatusEmPedidoLote(pedidoObj, d) {
         atualizacao.confirmacao_comercial_por = d.usuarioNome;
     }
     if (d.statusNovo === 'Transbordo') {
+        // guarda a rota de origem ANTES de zerar, para preservar o vínculo histórico
+        atualizacao._rotaOrigemTransbordo = pedidoObj.rotaId || pedidoObj.rota_id || null;
+        // incrementa a contagem de transbordos (jornada com múltiplas pernas)
+        atualizacao.qtd_transbordos = (pedidoObj.qtdTransbordos || pedidoObj.qtd_transbordos || 0) + 1;
+        // flag para o pedido aparecer na área "Aguardando Transbordo" (não em "sem rota")
+        atualizacao.aguardando_transbordo = true;
         if (d.tipoTransbordo === 'patio') {
             atualizacao.cidade_transbordo = d.cidadeTransbordo;
             atualizacao.transbordo_em = new Date().toISOString();
@@ -4149,8 +4164,17 @@ async function _aplicarStatusEmPedidoLote(pedidoObj, d) {
         saidaPatioObs = ` — 📤 Saiu do pátio de ${pedidoObj.patioAtual}`;
     }
 
+    // extrai o campo auxiliar (não é coluna do banco)
+    const _rotaOrigemTransbordo = atualizacao._rotaOrigemTransbordo;
+    delete atualizacao._rotaOrigemTransbordo;
+
     const { error: errPedido } = await supabase.from('pedidos').update(atualizacao).eq('id', pedidoId);
     if (errPedido) throw errPedido;
+
+    // Transbordo: preserva o vínculo histórico (marca saída, NÃO apaga) da viagem de origem
+    if (d.statusNovo === 'Transbordo' && _rotaOrigemTransbordo){
+        await _marcarSaidaTransbordo(_rotaOrigemTransbordo, pedidoId, `transbordo em ${d.cidadeTransbordo || d.cegonhaDestino || ''}`);
+    }
 
     let descTransbordo = '';
     if (d.statusNovo === 'Transbordo') {
@@ -11834,11 +11858,12 @@ async function adicionarCarteiraNaRota(chaveOrigem, rotaId){
   if (!confirm(`Adicionar os ${itens.length} carro(s) de ${chaveOrigem} à rota "${rota.nome || '#'+rota.id}"${rota.placa_cegonha ? ' (cegonha '+rota.placa_cegonha+')' : ''}?`)) return;
   try {
     const ids = itens.map(p => parseInt(p.id));
-    const update = { rota_id: parseInt(rotaId) };
+    const update = { rota_id: parseInt(rotaId), aguardando_transbordo: false };
     // se a rota já tem cegonha, os carros entram como intenção agendada nela
     if (rota.placa_cegonha){ update.placa_cegonha = rota.placa_cegonha; update.status = 'Intenção Agendada'; }
     const { error } = await supabase.from('pedidos').update(update).in('id', ids);
     if (error) throw error;
+    for (const pid of ids){ await _registrarVinculoViagem(rotaId, pid); } // vínculo histórico
     await recarregarPedidos();
     if (typeof renderizarRotas === 'function') renderizarRotas();
     renderizarCarteiraDemanda();
@@ -12295,6 +12320,11 @@ function _statusPill(status){
 
 // Pill de status no MESMO padrão do dropdown planilha (mesmo texto e cor em todo o sistema)
 function _statusPillPlanilha(p){
+  // Aguardando transbordo tem etiqueta própria (roxo), para o comercial e a logística
+  if (p && p.aguardandoTransbordo){
+    const cor = '#a855f7';
+    return `<span class="status-pill-cor" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">🟣 Aguardando transbordo</span>`;
+  }
   const rotulo = (typeof statusPlanilhaDoPedido === 'function') ? statusPlanilhaDoPedido(p) : (p.status||'—');
   const cor = (typeof STATUS_PLANILHA !== 'undefined' && STATUS_PLANILHA[rotulo]?.cor) || '#888';
   return `<span class="status-pill-cor" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">${rotulo}</span>`;
@@ -12967,7 +12997,7 @@ function renderizarHistoricoCargas(containerId){
 
   // monta os dados de cada carga (rota + seus pedidos)
   let cargas = rotas.map(r => {
-    const pedidos = (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id) === String(r.id));
+    const pedidos = _pedidosHistoricoDaViagem(r.id);
     const data = r.data_saida || (pedidos[0]?.dataSolicitacao) || null;
     const total = pedidos.reduce((s,p)=>s+Number(p.valorFrete||0),0);
     const totalMotorista = pedidos.reduce((s,p)=>{
@@ -13109,6 +13139,41 @@ function _capacidadeRota(r){
 }
 function _veiculosNaRota(rotaId){
   return (pedidosGlobais||[]).filter(p => String(p.rotaId||p.rota_id) === String(rotaId) && p.status !== 'Cancelado');
+}
+
+// HISTÓRICO: todos os pedidos que já fizeram parte da viagem (mesmo que transbordados).
+// Usa o vínculo histórico (viagem_pedidos); cai para o atual se a tabela ainda não existir.
+function _pedidosHistoricoDaViagem(rotaId){
+  const vinculos = (viagemPedidosGlobais||[]).filter(v => String(v.rota_id) === String(rotaId));
+  if (vinculos.length === 0) return _veiculosNaRota(rotaId); // fallback
+  const ids = new Set(vinculos.map(v => String(v.pedido_id)));
+  return (pedidosGlobais||[]).filter(p => ids.has(String(p.id)));
+}
+
+// Info do vínculo (para saber se o pedido saiu por transbordo)
+function _vinculoViagemPedido(rotaId, pedidoId){
+  return (viagemPedidosGlobais||[]).find(v => String(v.rota_id)===String(rotaId) && String(v.pedido_id)===String(pedidoId));
+}
+
+// Registra que um pedido entrou numa viagem (vínculo histórico permanente)
+async function _registrarVinculoViagem(rotaId, pedidoId){
+  if (!rotaId || !pedidoId) return;
+  const jaTem = _vinculoViagemPedido(rotaId, pedidoId);
+  if (jaTem) return;
+  try {
+    const { data } = await supabase.from('viagem_pedidos').insert({ rota_id: parseInt(rotaId), pedido_id: parseInt(pedidoId) }).select().single();
+    if (data) viagemPedidosGlobais.push(data);
+  } catch(e){ /* tabela pode não existir ainda */ }
+}
+
+// Marca a saída do pedido de uma viagem por transbordo (não apaga o vínculo)
+async function _marcarSaidaTransbordo(rotaId, pedidoId, motivo){
+  const v = _vinculoViagemPedido(rotaId, pedidoId);
+  if (!v) return;
+  try {
+    await supabase.from('viagem_pedidos').update({ saiu_em: new Date().toISOString(), motivo_saida: motivo || 'transbordo' }).eq('id', v.id);
+    v.saiu_em = new Date().toISOString(); v.motivo_saida = motivo || 'transbordo';
+  } catch(e){}
 }
 
 let _kanbanExpandido = new Set();
@@ -14363,6 +14428,7 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
   const usuario = document.getElementById('usuarioLogado')?.textContent || '';
   const cegonhaAnterior = p.placaCegonha || '';
   try {
+    const _rotaOrigem = p.rotaId || p.rota_id || null;
     const upd = {
       status: 'Transbordo',
       status_planilha: 'Transbordo',
@@ -14370,6 +14436,8 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
       transbordo_em: new Date().toISOString(),
       patio_atual: patio,
       patio_desde: new Date().toISOString(),
+      aguardando_transbordo: !corredorId,  // se não direcionou a corredor, fica aguardando transbordo
+      qtd_transbordos: (p.qtdTransbordos || 0) + 1,
       // sai do caminhão/rota atual — renasce no pátio para a próxima perna
       placa_cegonha: null, motorista_1: null, motorista_2: null,
       percent_motorista_1: null, percent_motorista_2: null,
@@ -14377,9 +14445,12 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
       corredor_manual_id: corredorId ? parseInt(corredorId) : null
     };
     await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    // preserva o vínculo histórico da viagem de origem (marca saída, não apaga)
+    if (_rotaOrigem){ await _marcarSaidaTransbordo(_rotaOrigem, pedidoId, `transbordo em ${patio}`); }
     Object.assign(p, {
       status:'Transbordo', statusPlanilha:'Transbordo', cidadeTransbordo:patio,
       patioAtual:patio, placaCegonha:null, motorista1:null, rotaId:null,
+      aguardandoTransbordo: !corredorId, qtdTransbordos: (p.qtdTransbordos||0)+1,
       corredorManualId: corredorId ? parseInt(corredorId) : null
     });
     // registra a perna que acabou (para os trechos automáticos usarem depois)
@@ -14707,16 +14778,62 @@ async function _viagemIniciar(rota, carros){
 async function _viagemRegistrarEntrega(rota, carros){
   const elegiveis = carros.filter(c => c.status === 'Em Transporte');
   if (elegiveis.length === 0){ alert('Nenhum carro em transporte para entregar.'); return; }
-  _viagemModalCarros('📥 Registrar Entrega', 'Selecione os carros entregues no destino final.', elegiveis, '#4ade80', '✅ Confirmar entrega', async (ids) => {
-    await _viagemMudarStatusCarros(ids, 'Entregue', 'Entregue', '📥 Entrega registrada (evento na viagem)');
-    document.getElementById('modalViagemAcao').remove();
-    renderizarViagensAndamento();
-    // sugere finalizar se todos entregues (exceto transbordo)
-    const rest = _veiculosNaRota(rota.id).filter(c => c.status !== 'Cancelado' && c.status !== 'Transbordo');
-    if (rest.length && rest.every(c => c.status === 'Entregue')){
-      setTimeout(() => { if (confirm('✅ Todos os carros desta viagem foram entregues. Finalizar a viagem?')) _viagemFinalizar(rota, _veiculosNaRota(rota.id)); }, 300);
-    }
+  _viagemModalCarros('📥 Registrar Entrega', 'Selecione os carros que chegaram ao destino.', elegiveis, '#4ade80', '➡️ Continuar', async (ids) => {
+    document.getElementById('modalViagemAcao')?.remove();
+    _viagemModalFormaEntrega(rota, ids);
   });
+}
+
+// Pergunta COMO foi a entrega: motorista entregou na porta OU deixou no pátio para a equipe
+function _viagemModalFormaEntrega(rota, ids){
+  const old = document.getElementById('modalFormaEntrega'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalFormaEntrega';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">📥 Como foi a entrega?</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} veículo(s). Informe quem finalizou a entrega ao cliente.</p>
+      <button class="forma-entrega-opt" onclick="_viagemConfirmarEntregaMotorista([${ids.join(',')}])">
+        <div class="feo-ic">🚛</div>
+        <div><div class="feo-tit">Motorista entregou na porta do cliente</div><div class="feo-sub">Finaliza a operação por completo (Entregue).</div></div>
+      </button>
+      <button class="forma-entrega-opt" onclick="_viagemEntregaParaEquipe(${rota.id},[${ids.join(',')}])">
+        <div class="feo-ic">👥</div>
+        <div><div class="feo-tit">Motorista deixou no pátio/base</div><div class="feo-sub">Uma equipe de entrega leva até o cliente. Direciona para a equipe.</div></div>
+      </button>
+      <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalFormaEntrega').remove()">Cancelar</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+// Motorista entregou direto → conclui
+async function _viagemConfirmarEntregaMotorista(ids){
+  await _viagemMudarStatusCarros(ids, 'Entregue', 'Entregue', '📥 Entregue pelo motorista no cliente');
+  document.getElementById('modalFormaEntrega')?.remove();
+  const rotaId = (pedidosGlobais.find(p=>String(p.id)===String(ids[0]))||{}).rotaId;
+  renderizarViagensAndamento();
+  const rest = _veiculosNaRota(rotaId).filter(c => c.status !== 'Cancelado' && c.status !== 'Transbordo');
+  if (rest.length && rest.every(c => c.status === 'Entregue')){
+    setTimeout(() => { const r = rotasGlobais.find(x=>String(x.id)===String(rotaId)); if (r && confirm('✅ Todos os carros foram entregues. Finalizar a viagem?')) _viagemFinalizar(r, _veiculosNaRota(rotaId)); }, 300);
+  }
+}
+
+// Motorista deixou no pátio → direciona para equipe de entrega
+async function _viagemEntregaParaEquipe(rotaId, ids){
+  document.getElementById('modalFormaEntrega')?.remove();
+  // marca que chegou ao pátio e precisa de equipe (usa a Central: aguardando_retirada=false, mas fica pendente de entrega pela equipe)
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    if (!p) continue;
+    try {
+      await supabase.from('pedidos').update({ status:'Em Transporte', patio_atual: p.cidadeDestino, precisa_equipe_entrega: true }).eq('id', id);
+      p.patioAtual = p.cidadeDestino; p.precisaEquipeEntrega = true;
+      await supabase.from('historico_status').insert({ pedido_id: parseInt(id), status_anterior:'Em Transporte', status_novo:'Em Transporte', usuario_nome: document.getElementById('usuarioLogado')?.textContent||'Logística', observacao:'🚛→👥 Motorista deixou no pátio; direcionado para equipe de entrega' });
+    } catch(e){ console.error(e); }
+  }
+  renderizarViagensAndamento();
+  if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} veículo(s) direcionado(s) para a equipe de entrega. Veja na Central de Operação.`, 'success');
 }
 
 async function _viagemRegistrarTransbordo(rota, carros){
@@ -14811,17 +14928,28 @@ function _planRotasDoCorredor(c){
 function _planPedidosSemRota(){
   const corredores = corredoresGlobais || [];
   const vivos = (pedidosGlobais||[]).filter(p =>
-    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha);
+    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha
+    && !p.aguardandoTransbordo);  // aguardando transbordo tem área própria
   return vivos.filter(p => {
     // se está em algum corredor (encaixe ou manual), não é "sem rota"
     return !corredores.some(c => _planPedidosDoCorredor(c).some(x => String(x.id)===String(p.id)));
   });
 }
 
+// Pedidos aguardando transbordo (área própria, separada de "sem rota")
+function _planPedidosAguardandoTransbordo(){
+  return (pedidosGlobais||[]).filter(p =>
+    !['Entregue','Cancelado'].includes(p.status||'') && p.aguardandoTransbordo);
+}
+
 function renderizarPlanejamentoRotas(){
   const cont = document.getElementById('painelViewPlanejamento');
   if (!cont) return;
-  const corredores = corredoresGlobais || [];
+  const corredores = (corredoresGlobais || []).filter(c => {
+    if (!c.excepcional) return true; // corredores oficiais sempre aparecem
+    // rota excepcional: só aparece enquanto tiver pedido ativo (não concluído)
+    return _planPedidosDoCorredor(c).length > 0;
+  });
   if (corredores.length === 0){
     cont.innerHTML = `<p class="text-muted" style="padding:1.5rem;text-align:center">🗺️ Nenhum corredor cadastrado.<br><span style="font-size:.85rem">Cadastre corredores para planejar as rotas.</span></p>`;
     return;
@@ -14830,14 +14958,16 @@ function renderizarPlanejamentoRotas(){
     _planCorredorSel = corredores[0].id;
   }
   const modoSemRota = String(_planCorredorSel) === '__semrota__';
-  const cor = modoSemRota ? null : corredores.find(c => String(c.id)===String(_planCorredorSel));
-  const pedidosCol = modoSemRota ? _planPedidosSemRota() : _planPedidosDoCorredor(cor);
+  const modoTransbordo = String(_planCorredorSel) === '__transbordo__';
+  const cor = (modoSemRota||modoTransbordo) ? null : corredores.find(c => String(c.id)===String(_planCorredorSel));
+  const pedidosCol = modoSemRota ? _planPedidosSemRota() : modoTransbordo ? _planPedidosAguardandoTransbordo() : _planPedidosDoCorredor(cor);
   const semRotaLista = _planPedidosSemRota();
+  const transbordoLista = _planPedidosAguardandoTransbordo();
 
   // KPIs
   const totalPedidos = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'')).length;
-  const semRotaTotal = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha).length;
-  const tituloCol = modoSemRota ? '⚠️ Sem rota (não encaixam em corredor)' : ('Pedidos · ' + cor.nome);
+  const semRotaTotal = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha && !p.aguardandoTransbordo).length;
+  const tituloCol = modoSemRota ? '⚠️ Sem rota (não encaixam em corredor)' : modoTransbordo ? '🟣 Aguardando transbordo' : ('Pedidos · ' + cor.nome);
 
   cont.innerHTML = `
     ${_planFolgasHTML()}
@@ -14859,6 +14989,10 @@ function renderizarPlanejamentoRotas(){
           <div class="plan-corr-nome">⚠️ Sem rota</div>
           <div class="plan-corr-sub">${semRotaLista.length} pedido(s) sem corredor</div>
         </div>
+        ${transbordoLista.length > 0 ? `<div class="plan-corr-item plan-corr-transbordo ${modoTransbordo?'sel':''}" onclick="_planSelTransbordo()">
+          <div class="plan-corr-nome">🟣 Aguardando transbordo</div>
+          <div class="plan-corr-sub">${transbordoLista.length} pedido(s) na próxima perna</div>
+        </div>` : ''}
         ${corredores.map(c => {
           const ped = _planPedidosDoCorredor(c);
           const sel = String(c.id)===String(_planCorredorSel);
@@ -14874,10 +15008,10 @@ function renderizarPlanejamentoRotas(){
       <div class="plan-col plan-col-pedidos">
         <div class="plan-col-tit">
           <span>${tituloCol} <span class="plan-col-badge">${pedidosCol.length}</span></span>
-          ${modoSemRota ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
+          ${(modoSemRota||modoTransbordo) ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
         </div>
         <div id="planPedidosLista" class="plan-pedidos-lista">
-          ${modoSemRota ? _planSemRotaListaHTML() : _planPedidosListaHTML(cor)}
+          ${modoSemRota ? _planSemRotaListaHTML() : modoTransbordo ? _planTransbordoListaHTML() : _planPedidosListaHTML(cor)}
         </div>
       </div>
     </div>`;
@@ -14979,7 +15113,7 @@ async function _rotaLivreConfirmar(){
   const destino = _rotaLivreParadas[_rotaLivreParadas.length-1];
   try {
     const { data, error } = await supabase.from('corredores').insert({
-      nome, origem, destino, sla_horas: sla, ativo: true
+      nome, origem, destino, sla_horas: sla, ativo: true, excepcional: true
     }).select();
     if (error) throw error;
     const cor = data && data[0];
@@ -14988,12 +15122,13 @@ async function _rotaLivreConfirmar(){
       await supabase.from('corredor_paradas').insert(linhas);
       // adiciona ao array global com as paradas já embutidas
       cor._paradas = linhas.map(l => ({ cidade: l.cidade, ordem: l.ordem }));
+      cor.excepcional = true;
       corredoresGlobais.push(cor);
       _planCorredorSel = cor.id; // já seleciona o novo corredor
     }
     document.getElementById('modalRotaLivre')?.remove();
     renderizarPlanejamentoRotas();
-    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `➕ Corredor "${nome}" criado (${_rotaLivreParadas.length} cidades).`, 'success');
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `➕ Rota excepcional "${nome}" criada (${_rotaLivreParadas.length} cidades). Ela sai da lista após a viagem ser concluída.`, 'success');
   } catch(e){ alert('Erro ao criar corredor: '+(e.message||e)); }
 }
 
@@ -15049,6 +15184,53 @@ function _planFmtDataCurta(d){
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
 function _planSelSemRota(){ _planCorredorSel = '__semrota__'; renderizarPlanejamentoRotas(); }
+function _planSelTransbordo(){ _planCorredorSel = '__transbordo__'; renderizarPlanejamentoRotas(); }
+
+// Lista de pedidos aguardando transbordo — com linha do tempo e comando de próxima ação
+function _planTransbordoListaHTML(){
+  const pedidos = _planPedidosAguardandoTransbordo();
+  if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando transbordo.</p>';
+  return pedidos.map(p => {
+    const patio = p.patioAtual || p.cidadeTransbordo || '—';
+    return `<div class="plan-transb-card">
+      <div class="plan-transb-top">
+        <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
+        <span class="plan-transb-selo">🟣 Transbordo${p.qtdTransbordos>1?` (${p.qtdTransbordos}ª vez)`:''}</span>
+      </div>
+      <div class="plan-transb-cliente">${p.cliente||''}</div>
+      ${_linhaDoTempoPedidoHTML(p)}
+      <div class="plan-transb-proxima">
+        <div class="plan-transb-proxima-lbl">PRÓXIMA AÇÃO</div>
+        <div class="plan-transb-proxima-txt">🚛 Direcionar novo transporte a partir de ${patio.split('/')[0]} → ${p.cidadeDestino||''}</div>
+        <button class="plan-transb-btn" onclick="_abrirModalTransbordoStatus(${p.id}, 'Transbordo')">🔀 DIRECIONAR TRANSBORDO</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Linha do tempo simples do pedido (só para quem passou/vai passar por transbordo)
+function _linhaDoTempoPedidoHTML(p){
+  // monta as etapas: origem → (transbordos) → destino
+  const etapas = [];
+  etapas.push({ nome: p.cidadeOrigem || 'Origem', tipo:'origem', feito:true });
+  // paradas de transbordo já ocorridas (a partir de cidade_transbordo / patio_atual)
+  if (p.cidadeTransbordo){
+    const cidades = String(p.cidadeTransbordo).split(',').map(s=>s.trim()).filter(Boolean);
+    cidades.forEach(cid => etapas.push({ nome: cid.replace(/^Cegonha\s+/,'🚛 '), tipo:'transbordo', feito:true }));
+  }
+  const atualIdx = etapas.length - 1; // a última etapa feita é onde ele está
+  etapas.push({ nome: p.cidadeDestino || 'Destino', tipo:'destino', feito: p.status==='Entregue' });
+  return `<div class="ltp">
+    ${etapas.map((e,i) => `
+      <div class="ltp-item ${e.feito?'feito':''} ${i===atualIdx?'atual':''}">
+        <div class="ltp-dot"></div>
+        <div class="ltp-nome">${e.nome}</div>
+        ${i===atualIdx && p.status!=='Entregue' ? '<div class="ltp-aqui">📍 aqui</div>' : ''}
+      </div>
+      ${i < etapas.length-1 ? '<div class="ltp-linha"></div>' : ''}
+    `).join('')}
+  </div>`;
+}
 
 // Lista os pedidos "sem rota" — arrastáveis para qualquer corredor
 function _planSemRotaListaHTML(){
@@ -15264,6 +15446,7 @@ async function _planConfirmarViagem(corId){
       p.rotaId = rota.id; p.rota_id = rota.id;
       if (cegonha) p.placaCegonha = cegonha;
       if (motorista) p.motorista1 = motorista;
+      await _registrarVinculoViagem(rota.id, id); // vínculo histórico permanente
     }
     document.getElementById('modalPlanViagem')?.remove();
     renderizarPlanejamentoRotas();
@@ -15518,7 +15701,7 @@ function _centralColunaEntregas(entregas){
           <td>${p.placa||'—'}<br><span class="central-sub">${p.modelo||''}</span></td>
           <td>${(p.cidadeOrigem||'—')}<br><span class="central-sub">${p.ufOrigem||''}</span></td>
           <td>${(p.cidadeDestino||'—')}<br><span class="central-sub">${p.ufDestino||''}</span></td>
-          <td>${_tipoEntregaLabel(p)}</td>
+          <td>${_tipoEntregaLabel(p)}${p.precisaEquipeEntrega?' <span style="color:#a855f7;font-size:.7rem;font-weight:700">· 👥 equipe</span>':''}</td>
           <td><span class="central-status central-status-verde">● Disponível para entrega</span></td>
           <td>${p.motorista1||'—'}</td>
           <td>${p.tipoEntrega === 'patio' ? `<button class="central-btn-mini" onclick="_centralDisponivelRetirada(${p.id})" title="Veículo chegou ao pátio, disponível para o cliente retirar">🏢 Disponível p/ retirada</button>` : ''}</td>
@@ -15777,7 +15960,7 @@ function _cgCorredores(){
     const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
     const paradasStr = seq.filter(Boolean);
     const pedidos = (pedidosGlobais||[]).filter(p => {
-      if (['Cancelado'].includes(p.status||'')) return false;
+      if (['Cancelado','Entregue'].includes(p.status||'')) return false; // demanda ativa: sem concluídos
       if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
       const partida = p.patioAtual || p.cidadeOrigem;
       const io = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, partida) : -1;
@@ -15787,8 +15970,7 @@ function _cgCorredores(){
     let aguardando=0, emViagem=0, concluidos=0;
     pedidos.forEach(p => {
       const st = statusPlanilhaDoPedido(p);
-      if (p.status === 'Entregue') concluidos++;
-      else if (st === 'Em transporte' || st === 'Transbordo') emViagem++;
+      if (st === 'Em transporte' || st === 'Transbordo') emViagem++;
       else aguardando++;
     });
     return { corredor:c, nome:c.nome, total:pedidos.length, aguardando, emViagem, concluidos };
@@ -15820,7 +16002,6 @@ function renderizarVisaoGlobal(){
       <div class="cg-kpi cg-kpi-click" onclick="_cgAbrirListaKpi('aguardandoColeta')"><span class="cg-kpi-num" style="color:#f59e0b">${s.aguardandoColeta}</span><span class="cg-kpi-lbl">Aguardando coleta</span></div>
       <div class="cg-kpi cg-kpi-click" onclick="_cgAbrirListaKpi('emViagem')"><span class="cg-kpi-num" style="color:#2563eb">${s.emViagem}</span><span class="cg-kpi-lbl">Em viagem</span></div>
       <div class="cg-kpi cg-kpi-click" onclick="_cgAbrirListaKpi('aguardandoRetirada')"><span class="cg-kpi-num" style="color:#a855f7">${aguardandoRetirada}</span><span class="cg-kpi-lbl">Aguardando retirada</span></div>
-      <div class="cg-kpi cg-kpi-discreto cg-kpi-click" onclick="_cgAbrirListaKpi('chegaram')"><span class="cg-kpi-num-mini">${s.chegaram}</span><span class="cg-kpi-lbl">Chegaram ao destino</span></div>
     </div>
     <div id="cgKpiOverlay"></div>
 
@@ -15839,12 +16020,10 @@ function renderizarVisaoGlobal(){
             <div class="cg-corr-detalhe">
               <div><span class="cg-dot" style="background:#f59e0b"></span> ${c.aguardando} aguardando transporte</div>
               <div><span class="cg-dot" style="background:#2563eb"></span> ${c.emViagem} em viagem</div>
-              <div><span class="cg-dot" style="background:#22c55e"></span> ${c.concluidos} concluídos</div>
             </div>
             <div class="cg-corr-barra">
-              <div style="width:${c.aguardando/totalBar*100}%;background:#f59e0b"></div>
-              <div style="width:${c.emViagem/totalBar*100}%;background:#2563eb"></div>
-              <div style="width:${c.concluidos/totalBar*100}%;background:#22c55e"></div>
+              <div style="width:${c.aguardando/(c.aguardando+c.emViagem||1)*100}%;background:#f59e0b"></div>
+              <div style="width:${c.emViagem/(c.aguardando+c.emViagem||1)*100}%;background:#2563eb"></div>
             </div>
           </div>`;
         }).join('')}
@@ -16123,6 +16302,8 @@ async function _cgAbrirRastreio(pedidoId){
         <div><span class="cg-rd-lbl">Destino</span><span class="cg-rd-val">${p.cidadeDestino||'—'}/${p.ufDestino||''}</span></div>
       </div>
 
+      ${(p.qtdTransbordos>0 || p.aguardandoTransbordo) ? `<div class="cg-rastreio-tit">🚚 Jornada do veículo</div>${_linhaDoTempoPedidoHTML(p)}${p.aguardandoTransbordo?'<p style="font-size:.8rem;color:#a855f7;margin:4px 0 0">🟣 Aguardando transbordo — o veículo está no pátio aguardando a próxima etapa do transporte.</p>':''}` : ''}
+
       <div class="cg-rastreio-tit">📍 Histórico da viagem</div>
       <div class="cg-timeline">
         ${hist.length === 0 ? '<p class="text-muted" style="font-size:.85rem">Ainda sem eventos registrados para este pedido.</p>' :
@@ -16268,7 +16449,8 @@ function _cgViagemStatusInfo(st){
 
 function _cgViagemDetalheHTML(rota){
   if (!rota) return '';
-  const carros = _veiculosNaRota(rota.id);
+  // usa o vínculo histórico: mostra todos os pedidos que fizeram parte (mesmo transbordados)
+  const carros = _pedidosHistoricoDaViagem(rota.id);
   const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(rota.corredor_id));
   const stInfo = _cgViagemStatusInfo(rota.status);
   return `
@@ -16292,13 +16474,17 @@ function _cgViagemDetalheHTML(rota){
         <table class="cg-tabela" style="min-width:0">
           <thead><tr><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Destino</th><th>Status</th></tr></thead>
           <tbody>
-            ${carros.map(p => `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
+            ${carros.map(p => {
+              const v = _vinculoViagemPedido(rota.id, p.id);
+              const transbordou = v && v.saiu_em;
+              return `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
               <td><strong>#${p.id}</strong></td>
               <td>${p.cliente||'—'}</td>
               <td>${p.placa||'—'}</td>
               <td>${p.cidadeDestino||'—'}</td>
-              <td>${_cgStatusPill(p)}</td>
-            </tr>`).join('')}
+              <td>${transbordou ? `<span style="color:#a855f7;font-size:.75rem">🔀 ${v.motivo_saida||'transbordado'}</span>` : _cgStatusPill(p)}</td>
+            </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>`}
