@@ -11556,7 +11556,7 @@ function _buscarClienteEndereco(qual, termo){
   if (achados.length === 0){ lista.innerHTML = '<div class="cli-auto-vazio">Nenhum cliente encontrado</div>'; lista.classList.add('aberta'); return; }
   lista.innerHTML = achados.map(c => {
     const endResumo = [c.endereco, c.numero, c.bairro].filter(Boolean).join(', ');
-    return `<div class="cli-auto-item" onclick="_selecionarClienteEndereco('${qual}', ${c.id})">
+    return `<div class="cli-auto-item" onmousedown="event.preventDefault();_selecionarClienteEndereco('${qual}', ${c.id})">
       <div class="cai-nome">${c.nome||''}</div>
       <div class="cai-end">${c.cidade||''}${c.uf?('/'+c.uf):''}${endResumo?(' · '+endResumo):''}</div>
     </div>`;
@@ -11571,12 +11571,30 @@ function _selecionarClienteEndereco(qual, clienteId){
   _setVal('endereco' + qual, endereco);
   if (c.cep) _setVal('cep' + qual, c.cep);
   if (c.cnpj) _setVal('cnpj' + qual, c.cnpj);
-  if (qual === 'Coleta'){ if (c.cidade) _setVal('cidadeOrigem', c.cidade); if (c.uf) _setVal('ufOrigem', c.uf); }
-  else { if (c.cidade) _setVal('cidadeDestino', c.cidade); if (c.uf) _setVal('ufDestino', c.uf); }
+  // cidade/uf são <select> — usa helper que cria a opção se não existir
+  if (qual === 'Coleta'){ _setSelectVal('ufOrigem', c.uf); setTimeout(()=>_setSelectVal('cidadeOrigem', c.cidade), 350); }
+  else { _setSelectVal('ufDestino', c.uf); setTimeout(()=>_setSelectVal('cidadeDestino', c.cidade), 350); }
   _setVal('buscaCliente' + qual, c.nome || '');
   _fecharClienteEndereco(qual);
   if (typeof _popularCorredoresPedido === 'function') { try { _popularCorredoresPedido(); } catch(e){} }
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemComercial', `✅ Endereço de ${qual.toLowerCase()} preenchido com os dados de ${c.nome}.`, 'success');
+}
+
+// Seleciona valor num <select>; se a opção não existir, cria. Serve para input também.
+function _setSelectVal(id, val){
+  if (!val) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tagName === 'SELECT'){
+    let existe = [...el.options].some(o => o.value === val || o.text === val);
+    if (!existe){ const opt = document.createElement('option'); opt.value = val; opt.text = val; el.appendChild(opt); }
+    // seleciona por valor OU texto
+    const alvo = [...el.options].find(o => o.value === val || o.text === val);
+    if (alvo) el.value = alvo.value;
+    el.dispatchEvent(new Event('change'));
+  } else {
+    el.value = val;
+  }
 }
 
 function _fecharClienteEndereco(qual){
