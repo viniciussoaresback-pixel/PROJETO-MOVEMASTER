@@ -8964,3 +8964,51 @@ html span.log-passo-bolinha {
 .cg-concluidas-head:hover { background:rgba(255,255,255,.02); }
 .cg-conc-badge { background:rgba(34,197,94,.15); color:#22c55e; font-size:.72rem; padding:1px 8px; border-radius:999px; margin-left:6px; }
 .cg-conc-filtros { display:flex; gap:12px; padding:0 16px 12px; flex-wrap:wrap; align-items:flex-end; }
+
+/* Visão Global — KPI clicável e discreto */
+.cg-kpi-click { cursor:pointer; transition:border-color .15s, transform .1s; }
+.cg-kpi-click:hover { border-color:rgba(255,106,0,.4); transform:translateY(-1px); }
+.cg-kpi-discreto { opacity:.62; }
+.cg-kpi-discreto:hover { opacity:1; }
+.cg-kpi-num-mini { display:block; font-size:1.25rem; font-weight:700; line-height:1.1; color:#22c55e; }
+#cgKpiOverlay { display:none; }
+#cgKpiOverlay.aberto { display:block; }
+.cg-kpi-lista { display:flex; flex-direction:column; gap:8px; }
+.cg-kpi-item { border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:10px; padding:10px 12px; cursor:pointer; transition:border-color .12s; }
+.cg-kpi-item:hover { border-color:rgba(255,106,0,.45); }
+.cg-ki-top { font-size:.88rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.cg-ki-status { margin-left:auto; }
+.cg-ki-sub { font-size:.8rem; color:var(--text-secondary,#9ca3af); margin-top:3px; }
+.cg-ki-data { font-size:.74rem; color:var(--text-tertiary,#6b7280); margin-top:4px; }
+
+/* Planejamento — mover pedido para corredor (busca) */
+.plan-pedido-acoes { margin-top:8px; }
+.plan-mover-btn { width:100%; padding:6px 10px; border:1px solid rgba(255,106,0,.35); border-radius:7px; background:rgba(255,106,0,.08); color:#ff6a00; font-size:.76rem; font-weight:700; cursor:pointer; }
+.plan-mover-btn:hover { background:rgba(255,106,0,.18); }
+.plan-busca-corr-item { display:flex; flex-direction:column; gap:2px; text-align:left; padding:10px 12px; border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:9px; background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; cursor:pointer; transition:border-color .12s, background .12s; }
+.plan-busca-corr-item:hover { border-color:#ff6a00; background:rgba(255,106,0,.08); }
+.plan-busca-corr-item.atual { border-color:rgba(34,197,94,.5); }
+.pbc-nome { font-weight:700; font-size:.88rem; }
+.pbc-rota { font-size:.76rem; color:var(--text-secondary,#9ca3af); }
+
+/* Item 3 — autocomplete de cliente nos endereços */
+.cli-auto-wrap { position:relative; margin-bottom:6px; }
+.cli-auto-input { width:100%; padding:7px 10px; border-radius:8px; border:1px dashed rgba(255,106,0,.4); background:rgba(255,106,0,.04); color:inherit; font-size:.82rem; }
+.cli-auto-input:focus { border-style:solid; border-color:#ff6a00; outline:none; }
+.cli-auto-lista { position:absolute; top:100%; left:0; right:0; z-index:50; background:var(--surface-0,#14151a); border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:9px; margin-top:3px; max-height:240px; overflow-y:auto; display:none; box-shadow:0 8px 24px rgba(0,0,0,.35); }
+.cli-auto-lista.aberta { display:block; }
+.cli-auto-item { padding:8px 11px; cursor:pointer; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
+.cli-auto-item:hover { background:rgba(255,106,0,.1); }
+.cai-nome { font-weight:600; font-size:.85rem; }
+.cai-end { font-size:.75rem; color:var(--text-secondary,#9ca3af); }
+.cli-auto-vazio { padding:10px; font-size:.8rem; color:var(--text-tertiary,#6b7280); text-align:center; }
+
+/* Item 6 — bloco carreta (secundário) */
+.carreta-bloco { margin:8px 0 16px; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:10px; background:var(--surface-1,rgba(255,255,255,.02)); }
+.carreta-bloco summary { cursor:pointer; padding:12px 14px; font-size:.85rem; font-weight:600; color:var(--text-secondary,#9ca3af); user-select:none; }
+.carreta-bloco summary:hover { color:inherit; }
+.carreta-bloco[open] summary { border-bottom:1px solid var(--border,rgba(255,255,255,.08)); color:inherit; }
+.carreta-bloco-conteudo { padding:12px 14px; }
+
+/* Item 5 — botão enviar fiscal na viagem */
+.jv-acao-fiscal { background:#0891b2; }
