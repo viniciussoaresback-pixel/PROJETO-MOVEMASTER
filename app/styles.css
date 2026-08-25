@@ -8983,8 +8983,8 @@ html span.log-passo-bolinha {
 
 /* Planejamento — mover pedido para corredor (busca) */
 .plan-pedido-acoes { margin-top:8px; }
-.plan-mover-btn { width:100%; padding:6px 10px; border:1px solid rgba(255,106,0,.35); border-radius:7px; background:rgba(255,106,0,.08); color:#ff6a00; font-size:.76rem; font-weight:700; cursor:pointer; }
-.plan-mover-btn:hover { background:rgba(255,106,0,.18); }
+.plan-mover-btn { width:100%; padding:5px 10px; border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:7px; background:transparent; color:var(--text-secondary,#9ca3af); font-size:.72rem; font-weight:500; cursor:pointer; transition:color .12s, border-color .12s; }
+.plan-mover-btn:hover { color:#ff6a00; border-color:rgba(255,106,0,.4); background:rgba(255,106,0,.06); }
 .plan-busca-corr-item { display:flex; flex-direction:column; gap:2px; text-align:left; padding:10px 12px; border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:9px; background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; cursor:pointer; transition:border-color .12s, background .12s; }
 .plan-busca-corr-item:hover { border-color:#ff6a00; background:rgba(255,106,0,.08); }
 .plan-busca-corr-item.atual { border-color:rgba(34,197,94,.5); }
@@ -9012,3 +9012,13 @@ html span.log-passo-bolinha {
 
 /* Item 5 — botão enviar fiscal na viagem */
 .jv-acao-fiscal { background:#0891b2; }
+
+/* Item 4 — corredor clicável + painel de pedidos separados */
+.cg-corr-click { cursor:pointer; transition:border-color .15s, transform .1s; }
+.cg-corr-click:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.15); }
+.cg-corr-top { display:flex; justify-content:space-between; align-items:center; }
+.cg-corr-chevron { color:var(--text-tertiary,#6b7280); font-size:1.3rem; line-height:1; }
+.cg-corr-sec { margin-bottom:20px; }
+.cg-corr-sec-tit { font-size:.85rem; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+.cg-corr-sec-num { background:rgba(255,255,255,.08); border-radius:999px; padding:1px 9px; font-size:.75rem; }
+.cg-corr-sec .cg-kpi-item { margin-bottom:8px; }
