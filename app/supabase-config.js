@@ -19,7 +19,7 @@ const PERMISSOES = {
     financeiro: ['faturamento','cobranca'],
     motorista:  ['motorista'],
     equipe:     ['equipes'],
-    fiscal:     ['fiscal'],
+    fiscal:     ['fiscal','comercialPedidos','comercialViagens'],
     diretoria:  ['diretoria'],
     manutencao: ['manutencao']
 };
