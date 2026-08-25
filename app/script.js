@@ -15812,7 +15812,7 @@ function renderizarVisaoGlobal(){
         corredores.map(c => {
           const cor = _cgCorCor(c.total);
           const totalBar = c.aguardando + c.emViagem + c.concluidos || 1;
-          return `<div class="cg-corr-card cg-corr-click" style="border-left:4px solid ${cor}" onclick="_cgAbrirCorredor(${c.corredor.id})">
+          return `<div class="cg-corr-card cg-corr-click" style="border-left:3px solid ${cor}" onclick="_cgAbrirCorredor(${c.corredor.id})">
             <div class="cg-corr-top">
               <span class="cg-corr-nome">${c.nome}</span>
               <span class="cg-corr-chevron">›</span>
