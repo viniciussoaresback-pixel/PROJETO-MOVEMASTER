@@ -13964,7 +13964,7 @@ function abrirFecharEnviarCarga(rotaId){
     const local = p.localCarro || p.patioAtual || p.enderecoColeta || '';
     const ehPatioFixo = PATIOS_FIXOS.includes(local);
     const chips = PATIOS_FIXOS.map(pt =>
-      `<button type="button" class="rm-patio-chip ${local===pt?'sel':''}" onclick="_rmSelecionarPatio(${p.id}, '${pt.replace(/'/g,"\\'")}')">${pt}</button>`
+      `<button type="button" class="rm-patio-chip ${local===pt?'sel':''}" data-patio="${pt.replace(/"/g,'&quot;')}" onclick="_rmSelecionarPatio(${p.id}, '${pt.replace(/'/g,"\\'")}')">${_labelPatio(pt)}</button>`
     ).join('');
     return `<div class="rm-carro" id="rmCarro_${p.id}">
       <div class="rm-carro-head">
@@ -13996,12 +13996,18 @@ function abrirFecharEnviarCarga(rotaId){
   document.body.appendChild(div);
 }
 
+// Rótulo amigável do pátio para os chips: "Maringá/PR" -> "PÁTIO MARINGÁ"
+function _labelPatio(pt){
+  const cidade = String(pt).split('/')[0].trim().toUpperCase();
+  return '🅿️ PÁTIO ' + cidade;
+}
+
 // Romaneio Opção B: chips de pátio + endereço editável
 function _rmSelecionarPatio(pedidoId, patio){
   const input = document.getElementById('rmLocal_'+pedidoId);
   if (input) input.value = patio;
   const cont = document.getElementById('rmCarro_'+pedidoId);
-  if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.textContent === patio)); }
+  if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.getAttribute('data-patio') === patio)); }
   const hidden = document.getElementById('rmPatio_'+pedidoId);
   if (hidden) hidden.value = '1';
 }
@@ -14013,7 +14019,7 @@ function _rmLocalDigitado(pedidoId){
   if (!input || !cont) return;
   const val = input.value.trim();
   const ehPatio = PATIOS_FIXOS.includes(val);
-  cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.textContent === val));
+  cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.getAttribute('data-patio') === val));
   const hidden = document.getElementById('rmPatio_'+pedidoId);
   if (hidden) hidden.value = ehPatio ? '1' : '0';
 }
@@ -14087,7 +14093,6 @@ function _gerarPdfRomaneio(rotaId){
     <tr>
       <td>#${p.id}</td><td><strong>${p.placa||'—'}</strong></td><td>${p.modelo||'—'}</td>
       <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
-      <td style="text-align:center">${p._noPatio?'✅ Sim':'⏳ Não'}</td>
       <td>${p._local||'—'}</td>
     </tr>`).join('');
   const corpo = `
@@ -14098,10 +14103,10 @@ function _gerarPdfRomaneio(rotaId){
     </div>
     <h3>Veículos da carga</h3>
     <table>
-      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>No pátio?</th><th>Onde está o carro</th></tr></thead>
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Onde está o carro</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
-    <div class="totalgeral">Total: ${carros.length} veículo(s) — ${carros.filter(c=>c._noPatio).length} no pátio · ${carros.filter(c=>!c._noPatio).length} a coletar/localizar</div>`;
+    <div class="totalgeral">Total: ${carros.length} veículo(s)</div>`;
   if (typeof _abrirPDF === 'function') _abrirPDF('Romaneio da sua carga — Motorista', corpo);
   else alert('Gerador de PDF indisponível.');
 }
