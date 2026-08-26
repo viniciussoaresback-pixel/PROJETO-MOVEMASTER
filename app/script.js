@@ -111,6 +111,7 @@ function trocarAba(event) {
     if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
     if (tabAlvo === 'comercialPedidos' && typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
     if (tabAlvo === 'comercialViagens' && typeof renderizarComercialViagens === 'function') renderizarComercialViagens();
+    if (tabAlvo === 'fiscal' && typeof renderizarEnvioDocsFiscal === 'function') renderizarEnvioDocsFiscal();
     if (tabAlvo === 'orcamento') prepararOrcamento();
 
     if (tabAlvo === 'painel') carregarPainel();
@@ -327,6 +328,8 @@ async function carregarDadosDoSupabase(opts) {
                 precisaEquipeEntrega: p.precisa_equipe_entrega || false,
                 numeroCte: p.numero_cte || null,
                 cteEmitidoEm: p.cte_emitido_em || null,
+                aprovado: p.aprovado !== false,
+                aprovadoEm: p.aprovado_em || null,
                 fluxoEntrega: p.fluxo_entrega || null,
                 equipeEntregaId: p.equipe_entrega_id || null,
                 coletaEquipeEm: p.coleta_equipe_em || null,
@@ -589,8 +592,47 @@ function gerarGrupoId() {
 // LANÇAMENTO COMERCIAL
 // ============================================
 
+// Item 1 — modal ao finalizar o lançamento: aguardando aprovação ou já aprovado
+function _abrirModalAprovacaoLancamento(){
+  const old = document.getElementById('modalAprovLanc'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalAprovLanc';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:440px;width:92%;border-radius:14px;padding:24px">
+      <h2 style="margin:0 0 6px">✅ Como registrar este pedido?</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1.2rem">Escolha se o pedido já entra aprovado no fluxo ou se fica aguardando aprovação.</p>
+      <button class="aprov-opt" onclick="_confirmarAprovacaoLanc(true)">
+        <div class="aprov-ic" style="background:rgba(34,197,94,.15)">✅</div>
+        <div><div class="aprov-tit">Já aprovado</div><div class="aprov-sub">Entra direto nos corredores / sem rota para planejamento.</div></div>
+      </button>
+      <button class="aprov-opt" onclick="_confirmarAprovacaoLanc(false)">
+        <div class="aprov-ic" style="background:rgba(245,158,11,.15)">⏳</div>
+        <div><div class="aprov-tit">Aguardando aprovação</div><div class="aprov-sub">Fica numa área separada até alguém (comercial ou logística) aprovar.</div></div>
+      </button>
+      <button class="btn btn-secondary" style="width:100%;margin-top:10px" onclick="document.getElementById('modalAprovLanc').remove()">Cancelar</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function _confirmarAprovacaoLanc(aprovado){
+  window._lancamentoJaAprovado = aprovado;
+  window._lancamentoAprovacaoEscolhida = true;
+  document.getElementById('modalAprovLanc')?.remove();
+  // dispara o submit de novo, agora com a escolha feita
+  const form = document.getElementById('formComercial');
+  if (form) form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', {cancelable:true}));
+}
+
 async function salvarPedidoComercial(event) {
     event.preventDefault();
+
+    // Item 1 — pergunta se o pedido já nasce aprovado ou aguardando aprovação
+    if (window._lancamentoAprovacaoEscolhida !== true){
+        _abrirModalAprovacaoLancamento();
+        return;
+    }
+    window._lancamentoAprovacaoEscolhida = false; // reseta para o próximo
 
     // Item 1 — modo Reserva (fluxo leve, sem veículos, com timer)
     if (document.getElementById('pedidoReserva')?.checked) {
@@ -668,6 +710,9 @@ async function salvarPedidoComercial(event) {
                 origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
                 criado_por_nome: (document.getElementById('usuarioLogado')?.textContent || null),
                 corredor_manual_id: (parseInt(document.getElementById('pedidoCorredor')?.value) || null),
+                aprovado: (window._lancamentoJaAprovado === true),
+                aprovado_em: (window._lancamentoJaAprovado === true) ? new Date().toISOString() : null,
+                aprovado_por: (window._lancamentoJaAprovado === true) ? (document.getElementById('usuarioLogado')?.textContent || null) : null,
                 status: 'Pendente'
             };
 
@@ -3713,6 +3758,18 @@ const STATUS_PLANILHA_LISTA = Object.keys(STATUS_PLANILHA);
 // Status planilha "visível" a partir do estado real do pedido.
 // Guarda o rótulo escolhido em p.statusPlanilha (coluna status_planilha);
 // se não houver, deduz do status interno.
+// Item 8 — a data do pedido considerada em todo o sistema é a do LANÇAMENTO (criação real).
+// Usa created_at (data real em que foi lançado); cai para data_solicitacao se não houver.
+function _dataLancamento(p){
+  if (!p) return null;
+  return p.createdAt || p.created_at || p.dataSolicitacao || p.data_solicitacao || null;
+}
+function _dataLancamentoFmt(p){
+  const d = _dataLancamento(p);
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('pt-BR'); } catch(e){ return String(d); }
+}
+
 function statusPlanilhaDoPedido(p){
   if (!p) return 'Aguardando coleta';
   if (p.statusPlanilha && STATUS_PLANILHA[p.statusPlanilha]) return p.statusPlanilha;
@@ -5079,11 +5136,11 @@ function renderizarPedidosComercial() {
             <td style="font-size:0.78rem">${p.cidadeOrigem || ''}/${p.ufOrigem || ''}${p.cidadeTransbordo ? `<br><span class="${p.status === 'Transbordo' ? 'badge-transbordo transbordo-atual' : 'badge-transbordo transbordo-feito'}" title="${p.status === 'Transbordo' ? 'Veículo no pátio aguardando nova cegonha' : 'Transbordo já realizado'}">${p.status === 'Transbordo' ? '🔁' : '✔'} ${p.cidadeTransbordo}</span>` : ''}<br>→ ${p.cidadeDestino || ''}/${p.ufDestino || ''}</td>
             <td style="color:#4ade80;font-weight:600">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
             <td>${typeof _statusPillPlanilha === 'function' ? _statusPillPlanilha(p) : `<span style="font-size:0.7rem;font-weight:600;padding:0.15rem 0.5rem;border-radius:4px;background:${cor}20;color:${cor};border:1px solid ${cor}40">${p.status || '—'}</span>`}</td>
-            <td style="font-size:0.78rem">${p.dataSolicitacao || '—'}</td>
+            <td style="font-size:0.78rem">${_dataLancamentoFmt(p)}</td>
             <td>
                 <div style="display:flex;gap:0.3rem;flex-wrap:wrap">
                     ${podeChecklist ? `<button class="btn btn-primary btn-sm" onclick="abrirChecklist(${p.id})">✅ Confirmar</button>` : ''}
-                    <button class="btn btn-secondary btn-sm" onclick="solicitarEdicaoPedido(${p.id})" title="Solicitar edição à logística">✏️ Editar</button>
+                    <button class="btn btn-secondary btn-sm" onclick="solicitarEdicaoPedido(${p.id})" title="Editar pedido">✏️ Editar</button>
                     <button class="btn btn-secondary btn-sm" onclick="abrirHistorico(${p.id})">Histórico</button>
                     <button class="btn btn-sm" style="background:#7f1d1d;color:#fff" onclick="excluirPedido(${p.id})" title="Excluir pedido">🗑️</button>
                     <button class="btn btn-secondary btn-sm" onclick="verFotosPlaca(${p.id},'${(p.cliente||'').replace(/'/g,"\'")}')">📸</button>
@@ -5225,7 +5282,7 @@ async function abrirHistoricoCliente() {
             <td style="font-size:0.78rem">${p.cidadeOrigem || ''}/${p.ufOrigem || ''} → ${p.cidadeDestino || ''}/${p.ufDestino || ''}</td>
             <td style="color:#4ade80;font-weight:600">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
             <td><span style="font-size:0.68rem;font-weight:600;padding:0.12rem 0.4rem;border-radius:4px;background:${cor}20;color:${cor}">${p.status}</span></td>
-            <td style="font-size:0.78rem">${p.dataSolicitacao || '—'}</td>
+            <td style="font-size:0.78rem">${_dataLancamentoFmt(p)}</td>
         </tr>`;
     }).join('');
 }
@@ -5252,7 +5309,7 @@ function exportarPedidosPDF() {
             <td>${p.cidadeOrigem || ''}/${p.ufOrigem || ''} → ${p.cidadeDestino || ''}/${p.ufDestino || ''}</td>
             <td>R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
             <td>${p.status || '—'}</td>
-            <td>${p.dataSolicitacao || '—'}</td>
+            <td>${_dataLancamentoFmt(p)}</td>
         </tr>
     `).join('');
 
@@ -5797,6 +5854,10 @@ const CAMPOS_EDITAVEIS = [
 
 // ---------- COMERCIAL: solicitar edição ----------
 async function solicitarEdicaoPedido(pedidoId) {
+    // Comercial agora edita diretamente, sem precisar de autorização da logística.
+    if (typeof abrirEdicaoPedido === 'function') { abrirEdicaoPedido(pedidoId); return; }
+}
+async function _solicitarEdicaoPedidoAntigo(pedidoId) {
     const p = pedidosGlobais.find(x => String(x.id) === String(pedidoId));
     if (!p || !supabase) return;
 
@@ -12324,6 +12385,11 @@ function _statusPill(status){
 
 // Pill de status no MESMO padrão do dropdown planilha (mesmo texto e cor em todo o sistema)
 function _statusPillPlanilha(p){
+  // Aguardando aprovação tem etiqueta própria (âmbar)
+  if (p && p.aprovado === false){
+    const cor = '#f59e0b';
+    return `<span class="status-pill-cor" style="background:${cor}22;color:${cor};border:1px solid ${cor}55">⏳ Aguardando aprovação</span>`;
+  }
   // Aguardando transbordo tem etiqueta própria (roxo), para o comercial e a logística
   if (p && p.aguardandoTransbordo){
     const cor = '#a855f7';
@@ -14243,20 +14309,32 @@ function renderizarEnvioDocsFiscal(){
     const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(r.id));
     const mans = docs.filter(d => d.tipo==='manifesto');
     const ctes = docs.filter(d => d.tipo==='cte');
-    const listaDocs = (arr) => arr.length === 0 ? '' : `<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${arr.map(d => `<div style="font-size:.76rem;display:flex;align-items:center;gap:6px"><a href="${d.url}" target="_blank" style="color:#60a5fa">📎 ${d.nome_arquivo||'documento'}</a><button class="btn btn-sm btn-secondary" style="padding:1px 6px" onclick="_excluirDocRota(${d.id})">🗑️</button></div>`).join('')}</div>`;
-    return `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:10px;padding:12px 14px;margin-bottom:10px">
-      <div style="font-weight:600;margin-bottom:4px">🚛 ${r.placa_cegonha} · ${r.nome||('rota #'+r.id)}${r.motorista_1?' · 👤 '+r.motorista_1:''}</div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
-        <div style="flex:1;min-width:200px">
-          <label style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">📋 Manifesto(s) (PDF) ${mans.length?`✅ ${mans.length}`:''}</label><br>
-          <input type="file" id="docMan_${r.id}" accept="application/pdf" multiple style="font-size:.8rem">
-          <button class="btn btn-sm btn-primary" onclick="_enviarDocRota(${r.id},'manifesto')">Enviar</button>
+    const stLabel = r.status === 'em_andamento' ? 'Em viagem' : 'Planejada';
+    const stCor = r.status === 'em_andamento' ? '#2563eb' : '#f59e0b';
+    const listaDocs = (arr, cor) => arr.length === 0
+      ? '<div class="fisc-vazio">Nenhum arquivo enviado ainda.</div>'
+      : `<div class="fisc-arquivos">${arr.map(d => `<div class="fisc-arq"><a href="${d.url}" target="_blank" class="fisc-arq-link">📎 ${d.nome_arquivo||'documento'}</a><button class="fisc-arq-del" onclick="_excluirDocRota(${d.id})" title="Excluir">🗑️</button></div>`).join('')}</div>`;
+    return `<div class="fisc-card">
+      <div class="fisc-card-head">
+        <div class="fisc-cegonha">🚛 ${r.placa_cegonha} <span class="fisc-rota-nome">${r.nome||('rota #'+r.id)}</span></div>
+        <span class="fisc-status" style="background:${stCor}22;color:${stCor};border:1px solid ${stCor}55">${stLabel}</span>
+      </div>
+      ${r.motorista_1?`<div class="fisc-motorista">👤 ${r.motorista_1}</div>`:''}
+      <div class="fisc-docs-grid">
+        <div class="fisc-doc-box">
+          <div class="fisc-doc-tit">📋 Manifestos ${mans.length?`<span class="fisc-badge">${mans.length}</span>`:''}</div>
+          <div class="fisc-upload">
+            <input type="file" id="docMan_${r.id}" accept="application/pdf" multiple class="fisc-file">
+            <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'manifesto')">📤 Enviar</button>
+          </div>
           ${listaDocs(mans)}
         </div>
-        <div style="flex:1;min-width:200px">
-          <label style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">🧾 CTe(s) (PDF) ${ctes.length?`✅ ${ctes.length}`:''}</label><br>
-          <input type="file" id="docCte_${r.id}" accept="application/pdf" multiple style="font-size:.8rem">
-          <button class="btn btn-sm btn-primary" onclick="_enviarDocRota(${r.id},'cte')">Enviar</button>
+        <div class="fisc-doc-box">
+          <div class="fisc-doc-tit">🧾 CTes ${ctes.length?`<span class="fisc-badge">${ctes.length}</span>`:''}</div>
+          <div class="fisc-upload">
+            <input type="file" id="docCte_${r.id}" accept="application/pdf" multiple class="fisc-file">
+            <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'cte')">📤 Enviar</button>
+          </div>
           ${listaDocs(ctes)}
         </div>
       </div>
@@ -15040,7 +15118,8 @@ function _planPedidosDoCorredor(c){
   const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
   const paradasStr = seq.filter(Boolean);
   const vivos = (pedidosGlobais||[]).filter(p =>
-    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha);
+    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha
+    && p.aprovado !== false && !p.aguardandoTransbordo);
   return vivos.filter(p => {
     // Corredor manual MANDA e é EXCLUSIVO: se o pedido foi jogado num corredor, só aparece nele
     if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
@@ -15063,11 +15142,18 @@ function _planPedidosSemRota(){
   const corredores = corredoresGlobais || [];
   const vivos = (pedidosGlobais||[]).filter(p =>
     !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha
-    && !p.aguardandoTransbordo);  // aguardando transbordo tem área própria
+    && !p.aguardandoTransbordo   // aguardando transbordo tem área própria
+    && p.aprovado !== false);    // não-aprovados têm área própria
   return vivos.filter(p => {
     // se está em algum corredor (encaixe ou manual), não é "sem rota"
     return !corredores.some(c => _planPedidosDoCorredor(c).some(x => String(x.id)===String(p.id)));
   });
+}
+
+// Pedidos aguardando aprovação (área própria, separada de tudo)
+function _planPedidosAguardandoAprovacao(){
+  return (pedidosGlobais||[]).filter(p =>
+    !['Entregue','Cancelado'].includes(p.status||'') && p.aprovado === false);
 }
 
 // Pedidos aguardando transbordo (área própria, separada de "sem rota")
@@ -15093,15 +15179,17 @@ function renderizarPlanejamentoRotas(){
   }
   const modoSemRota = String(_planCorredorSel) === '__semrota__';
   const modoTransbordo = String(_planCorredorSel) === '__transbordo__';
-  const cor = (modoSemRota||modoTransbordo) ? null : corredores.find(c => String(c.id)===String(_planCorredorSel));
-  const pedidosCol = modoSemRota ? _planPedidosSemRota() : modoTransbordo ? _planPedidosAguardandoTransbordo() : _planPedidosDoCorredor(cor);
+  const modoAprovacao = String(_planCorredorSel) === '__aprovacao__';
+  const cor = (modoSemRota||modoTransbordo||modoAprovacao) ? null : corredores.find(c => String(c.id)===String(_planCorredorSel));
+  const pedidosCol = modoSemRota ? _planPedidosSemRota() : modoTransbordo ? _planPedidosAguardandoTransbordo() : modoAprovacao ? _planPedidosAguardandoAprovacao() : _planPedidosDoCorredor(cor);
   const semRotaLista = _planPedidosSemRota();
   const transbordoLista = _planPedidosAguardandoTransbordo();
+  const aprovacaoLista = _planPedidosAguardandoAprovacao();
 
   // KPIs
   const totalPedidos = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'')).length;
   const semRotaTotal = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha && !p.aguardandoTransbordo).length;
-  const tituloCol = modoSemRota ? '⚠️ Sem rota (não encaixam em corredor)' : modoTransbordo ? '🟣 Aguardando transbordo' : ('Pedidos · ' + cor.nome);
+  const tituloCol = modoSemRota ? '⚠️ Sem rota (não encaixam em corredor)' : modoTransbordo ? '🟣 Aguardando transbordo' : modoAprovacao ? '⏳ Aguardando aprovação' : ('Pedidos · ' + cor.nome);
 
   cont.innerHTML = `
     ${_planFolgasHTML()}
@@ -15127,6 +15215,10 @@ function renderizarPlanejamentoRotas(){
           <div class="plan-corr-nome">🟣 Aguardando transbordo</div>
           <div class="plan-corr-sub">${transbordoLista.length} pedido(s) na próxima perna</div>
         </div>` : ''}
+        ${aprovacaoLista.length > 0 ? `<div class="plan-corr-item plan-corr-aprovacao ${modoAprovacao?'sel':''}" onclick="_planSelAprovacao()">
+          <div class="plan-corr-nome">⏳ Aguardando aprovação</div>
+          <div class="plan-corr-sub">${aprovacaoLista.length} pedido(s) a aprovar</div>
+        </div>` : ''}
         ${corredores.map(c => {
           const ped = _planPedidosDoCorredor(c);
           const sel = String(c.id)===String(_planCorredorSel);
@@ -15142,10 +15234,10 @@ function renderizarPlanejamentoRotas(){
       <div class="plan-col plan-col-pedidos">
         <div class="plan-col-tit">
           <span>${tituloCol} <span class="plan-col-badge">${pedidosCol.length}</span></span>
-          ${(modoSemRota||modoTransbordo) ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
+          ${(modoSemRota||modoTransbordo||modoAprovacao) ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
         </div>
         <div id="planPedidosLista" class="plan-pedidos-lista">
-          ${modoSemRota ? _planSemRotaListaHTML() : modoTransbordo ? _planTransbordoListaHTML() : _planPedidosListaHTML(cor)}
+          ${modoSemRota ? _planSemRotaListaHTML() : modoTransbordo ? _planTransbordoListaHTML() : modoAprovacao ? _planAprovacaoListaHTML() : _planPedidosListaHTML(cor)}
         </div>
       </div>
     </div>`;
@@ -15297,17 +15389,18 @@ function _planPedidosListaHTML(cor){
 
 // Datas do pedido: criação e entrega prevista (para priorização no planejamento)
 function _planPedidoDatasHTML(p){
-  const criacao = p.dataSolicitacao ? _planFmtDataCurta(p.dataSolicitacao) : null;
+  const dataLanc = _dataLancamento(p);
+  const criacao = dataLanc ? _planFmtDataCurta(dataLanc) : null;
   const entrega = (p.dataPrevEntrega || p.prazoEntregaEstimado) ? _planFmtDataCurta(p.dataPrevEntrega || p.prazoEntregaEstimado) : null;
-  // dias esperando desde a criação
+  // dias esperando desde o lançamento
   let diasTag = '';
-  if (p.dataSolicitacao){
-    const dias = Math.floor((Date.now() - new Date(p.dataSolicitacao).getTime()) / 86400000);
+  if (dataLanc){
+    const dias = Math.floor((Date.now() - new Date(dataLanc).getTime()) / 86400000);
     if (dias >= 1){ const cor = dias >= 5 ? '#ef4444' : dias >= 3 ? '#f59e0b' : '#9ca3af'; diasTag = ` <span style="color:${cor};font-weight:600">• ${dias}d esperando</span>`; }
   }
   if (!criacao && !entrega) return '';
   return `<div class="plan-pedido-datas">
-    ${criacao ? `<span title="Data de criação do pedido">📅 Criado: ${criacao}${diasTag}</span>` : ''}
+    ${criacao ? `<span title="Data de lançamento do pedido">📅 Lançado: ${criacao}${diasTag}</span>` : ''}
     ${entrega ? `<span title="Data prevista de entrega">🏁 Entrega: ${entrega}</span>` : ''}
   </div>`;
 }
@@ -15319,6 +15412,41 @@ function _planFmtDataCurta(d){
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
 function _planSelSemRota(){ _planCorredorSel = '__semrota__'; renderizarPlanejamentoRotas(); }
 function _planSelTransbordo(){ _planCorredorSel = '__transbordo__'; renderizarPlanejamentoRotas(); }
+function _planSelAprovacao(){ _planCorredorSel = '__aprovacao__'; renderizarPlanejamentoRotas(); }
+
+// Lista de pedidos aguardando aprovação — com botão aprovar
+function _planAprovacaoListaHTML(){
+  const pedidos = _planPedidosAguardandoAprovacao();
+  if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando aprovação.</p>';
+  return pedidos.map(p => `<div class="plan-aprov-card" draggable="true" ondragstart="_planDragStart(event, ${p.id})">
+    <div class="plan-aprov-top">
+      <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
+      <span class="plan-aprov-selo">⏳ Aguardando</span>
+    </div>
+    <div class="plan-aprov-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
+    ${_planPedidoDatasHTML(p)}
+    <div class="plan-aprov-acoes">
+      <button class="plan-aprov-btn" onclick="_aprovarPedido(${p.id})">✅ Aprovar pedido</button>
+    </div>
+    <div class="plan-aprov-hint">👉 aprovar joga no fluxo. Ou arraste direto para um corredor (também aprova).</div>
+  </div>`).join('');
+}
+
+// Aprova o pedido — entra no fluxo normal
+async function _aprovarPedido(pedidoId, corredorId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+  try {
+    const upd = { aprovado: true, aprovado_em: new Date().toISOString(), aprovado_por: usuario };
+    if (corredorId) upd.corredor_manual_id = parseInt(corredorId);
+    await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    p.aprovado = true; p.aprovadoEm = upd.aprovado_em;
+    if (corredorId) p.corredorManualId = parseInt(corredorId);
+    if (typeof renderizarPlanejamentoRotas === 'function') renderizarPlanejamentoRotas();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ Pedido #${pedidoId} aprovado e liberado para o fluxo.`, 'success');
+  } catch(e){ alert('Erro ao aprovar: '+(e.message||e)); }
+}
 
 // Lista de pedidos aguardando transbordo — com linha do tempo e comando de próxima ação
 function _planTransbordoListaHTML(){
@@ -15403,10 +15531,18 @@ async function _planDropCorr(ev, corredorId){
   if (!p) return;
   // se soltou no mesmo corredor de origem, ignora
   try {
-    await supabase.from('pedidos').update({ corredor_manual_id: parseInt(corredorId) }).eq('id', parseInt(pedidoId));
+    const upd = { corredor_manual_id: parseInt(corredorId) };
+    // se o pedido estava aguardando aprovação, jogar num corredor APROVA
+    if (p.aprovado === false){
+      upd.aprovado = true; upd.aprovado_em = new Date().toISOString();
+      upd.aprovado_por = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+    }
+    await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
     p.corredorManualId = parseInt(corredorId);
+    if (upd.aprovado){ p.aprovado = true; p.aprovadoEm = upd.aprovado_em; }
     _planCorredorSel = corredorId; // segue o pedido para o corredor destino
     renderizarPlanejamentoRotas();
+    if (upd.aprovado && typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ Pedido #${pedidoId} aprovado e movido para o corredor.`, 'success');
   } catch(e){ alert('Erro ao mover pedido: '+(e.message||e)); }
 }
 
@@ -16168,7 +16304,7 @@ function _cgCorredores(){
       else aguardando++;
     });
     return { corredor:c, nome:c.nome, total:pedidos.length, aguardando, emViagem, concluidos };
-  }).filter(c => c.total > 0).sort((a,b) => b.total - a.total);
+  }).filter(c => c.total > 0).sort((a,b) => b.aguardando - a.aguardando);
 }
 
 function _cgCorCor(total){ return total >= 20 ? '#ef4444' : total >= 10 ? '#f59e0b' : '#22c55e'; }
@@ -16203,21 +16339,15 @@ function renderizarVisaoGlobal(){
     <div class="cg-corredores">
       ${corredores.length === 0 ? '<p class="text-muted">Nenhum pedido em corredores no momento.</p>' :
         corredores.map(c => {
-          const cor = _cgCorCor(c.total);
-          const totalBar = c.aguardando + c.emViagem + c.concluidos || 1;
+          const cor = _cgCorCor(c.aguardando);
           return `<div class="cg-corr-card cg-corr-click" style="border-left:3px solid ${cor}" onclick="_cgAbrirCorredor(${c.corredor.id})">
             <div class="cg-corr-top">
               <span class="cg-corr-nome">${c.nome}</span>
               <span class="cg-corr-chevron">›</span>
             </div>
-            <div class="cg-corr-total" style="color:${cor}">● ${c.total} pedidos</div>
+            <div class="cg-corr-total" style="color:${cor}">● ${c.aguardando} aguardando transporte</div>
             <div class="cg-corr-detalhe">
-              <div><span class="cg-dot" style="background:#f59e0b"></span> ${c.aguardando} aguardando transporte</div>
-              <div><span class="cg-dot" style="background:#2563eb"></span> ${c.emViagem} em viagem</div>
-            </div>
-            <div class="cg-corr-barra">
-              <div style="width:${c.aguardando/(c.aguardando+c.emViagem||1)*100}%;background:#f59e0b"></div>
-              <div style="width:${c.emViagem/(c.aguardando+c.emViagem||1)*100}%;background:#2563eb"></div>
+              <div><span class="cg-dot" style="background:#2563eb"></span> ${c.emViagem} já em viagem</div>
             </div>
           </div>`;
         }).join('')}
@@ -16282,7 +16412,7 @@ function _cgAbrirListaKpi(tipo){
         ${pedidos.map(p => `<div class="cg-kpi-item" onclick="_cgAbrirRastreio(${p.id})">
           <div class="cg-ki-top"><strong>#${p.id}</strong> · ${p.placa||'—'} <span class="cg-ki-status">${_cgStatusPill(p)}</span></div>
           <div class="cg-ki-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
-          <div class="cg-ki-data">📅 Lançado: ${_cgFmtData(p.dataSolicitacao)}${p.dataPrevEntrega||p.prazoEntregaEstimado?` · 🏁 Entrega: ${_cgFmtData(p.dataPrevEntrega||p.prazoEntregaEstimado)}`:''}</div>
+          <div class="cg-ki-data">📅 Lançado: ${_dataLancamentoFmt(p)}${p.dataPrevEntrega||p.prazoEntregaEstimado?` · 🏁 Entrega: ${_cgFmtData(p.dataPrevEntrega||p.prazoEntregaEstimado)}`:''}</div>
         </div>`).join('')}
       </div>`}
       <div id="cgRastreioOverlay"></div>
@@ -16328,7 +16458,7 @@ function _cgAbrirCorredor(corredorId){
         arr.sort((a,b)=>new Date(a.dataSolicitacao||0)-new Date(b.dataSolicitacao||0)).map(p => `<div class="cg-kpi-item" onclick="_cgAbrirRastreio(${p.id})">
           <div class="cg-ki-top"><strong>#${p.id}</strong> · ${p.placa||'—'} <span class="cg-ki-status">${_cgStatusPill(p)}</span></div>
           <div class="cg-ki-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
-          <div class="cg-ki-data">📅 Lançado: ${_cgFmtData(p.dataSolicitacao)}${p.dataPrevEntrega||p.prazoEntregaEstimado?` · 🏁 Entrega: ${_cgFmtData(p.dataPrevEntrega||p.prazoEntregaEstimado)}`:''}</div>
+          <div class="cg-ki-data">📅 Lançado: ${_dataLancamentoFmt(p)}${p.dataPrevEntrega||p.prazoEntregaEstimado?` · 🏁 Entrega: ${_cgFmtData(p.dataPrevEntrega||p.prazoEntregaEstimado)}`:''}</div>
         </div>`).join('')}
     </div>`;
   overlay.innerHTML = `
@@ -16391,6 +16521,14 @@ function _cgStatusPill(p){
   return typeof _statusPillPlanilha === 'function' ? _statusPillPlanilha(p) : (statusPlanilhaDoPedido(p)||'—');
 }
 
+// Comercial aprova o pedido pelo rastreio
+async function _aprovarPedidoComercial(pedidoId){
+  if (typeof _aprovarPedido === 'function') await _aprovarPedido(pedidoId);
+  _cgFecharRastreio();
+  if (typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
+  if (typeof exibirMensagem === 'function') exibirMensagem('mensagemComercial', `✅ Pedido #${pedidoId} aprovado.`, 'success');
+}
+
 function renderizarComercialPedidos(){
   const cont = document.getElementById('comercialPedidosConteudo');
   if (!cont) return;
@@ -16426,21 +16564,21 @@ function renderizarComercialPedidos(){
 
     <div class="cg-tabela-wrap">
       <table class="cg-tabela">
-        <thead><tr><th>Pedido</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Atualizado</th><th></th></tr></thead>
+        <thead><tr><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Lançado</th><th></th></tr></thead>
         <tbody>
-          ${pagina.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum pedido encontrado.</td></tr>' :
+          ${pagina.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum pedido encontrado.</td></tr>' :
             pagina.map(p => {
               const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
-              const atualizado = p.atualizadoEm || p.dataSolicitacao || '';
               return `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
                 <td><strong>#${p.id}</strong></td>
+                <td>${p.cliente||'—'}</td>
                 <td>${p.placa||'—'} ${_selosPedidoHTML(p)}</td>
                 <td>${p.cidadeOrigem||'—'}</td>
                 <td>${p.cidadeDestino||'—'}</td>
                 <td class="cg-corr-cel">${_cgCorredorDoPedido(p)}</td>
                 <td>${rota ? (rota.nome||('R-'+rota.id)) : '—'}</td>
                 <td>${_cgStatusPill(p)}</td>
-                <td class="cg-sub">${_cgFmtData(atualizado)}</td>
+                <td class="cg-sub">${_dataLancamentoFmt(p)}</td>
                 <td class="cg-chevron">›</td>
               </tr>`;
             }).join('')}
@@ -16470,7 +16608,21 @@ async function _cgAbrirRastreio(pedidoId){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
   const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
-  const overlay = document.getElementById('cgRastreioOverlay');
+  // Pode haver vários #cgRastreioOverlay no DOM (Pedidos, Viagem, etc).
+  // Usa o que estiver dentro de um painel atualmente visível (o último visível).
+  let overlay = null;
+  const todos = [...document.querySelectorAll('#cgRastreioOverlay')];
+  for (const o of todos){
+    // está dentro de um container visível?
+    let el = o, visivel = true;
+    while (el && el !== document.body){
+      const st = window.getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden'){ visivel = false; break; }
+      el = el.parentElement;
+    }
+    if (visivel) overlay = o; // pega o último visível
+  }
+  if (!overlay) overlay = todos[0];
   if (!overlay) return;
 
   // busca o histórico real do banco
@@ -16487,6 +16639,11 @@ async function _cgAbrirRastreio(pedidoId){
         <h3>Pedido #${p.id} ${_selosPedidoHTML(p)}</h3>
         <div style="display:flex;gap:8px;align-items:center">${_cgStatusPill(p)}<button class="cg-rastreio-x" onclick="_cgFecharRastreio()">✕</button></div>
       </div>
+      <div class="cg-rastreio-acoes">
+        <button class="cg-acao-btn" onclick="abrirEdicaoPedido(${p.id})">✏️ Editar</button>
+        <button class="cg-acao-btn" onclick="abrirHistorico(${p.id})">📜 Histórico</button>
+        <button class="cg-acao-btn cg-acao-del" onclick="excluirPedido(${p.id})">🗑️ Excluir</button>
+      </div>
       <div class="cg-rastreio-dados">
         <div><span class="cg-rd-lbl">🚗 Veículo</span><span class="cg-rd-val">${p.placa||'—'} ${p.modelo?('· '+p.modelo):''}</span></div>
         <div><span class="cg-rd-lbl">📍 Corredor</span><span class="cg-rd-val">${_cgCorredorDoPedido(p)}</span></div>
@@ -16495,6 +16652,11 @@ async function _cgAbrirRastreio(pedidoId){
         <div><span class="cg-rd-lbl">Origem</span><span class="cg-rd-val">${p.cidadeOrigem||'—'}/${p.ufOrigem||''}</span></div>
         <div><span class="cg-rd-lbl">Destino</span><span class="cg-rd-val">${p.cidadeDestino||'—'}/${p.ufDestino||''}</span></div>
       </div>
+
+      ${p.aprovado === false ? `<div style="margin:12px 0;padding:12px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35)">
+        <div style="font-size:.85rem;margin-bottom:8px">⏳ Este pedido está <strong>aguardando aprovação</strong>. Aprove para liberá-lo ao planejamento.</div>
+        <button class="btn btn-primary btn-sm" style="background:#22c55e" onclick="_aprovarPedidoComercial(${p.id})">✅ Aprovar pedido</button>
+      </div>` : ''}
 
       ${(p.qtdTransbordos>0 || p.aguardandoTransbordo) ? `<div class="cg-rastreio-tit">🚚 Jornada do veículo</div>${_linhaDoTempoPedidoHTML(p)}${p.aguardandoTransbordo?'<p style="font-size:.8rem;color:#a855f7;margin:4px 0 0">🟣 Aguardando transbordo — o veículo está no pátio aguardando a próxima etapa do transporte.</p>':''}` : ''}
 
@@ -16687,7 +16849,7 @@ function _cgViagemDetalheHTML(rota){
               <td>${p.cliente||'—'}</td>
               <td>${p.placa||'—'}</td>
               <td>${p.cidadeDestino||'—'}</td>
-              <td class="cg-sub" style="white-space:nowrap">${_cgFmtData(p.dataSolicitacao)}</td>
+              <td class="cg-sub" style="white-space:nowrap">${_dataLancamentoFmt(p)}</td>
               <td>${p.numeroCte?`<span style="color:#22c55e;font-size:.75rem;white-space:nowrap">🧾 ${p.numeroCte}</span>`:'<span class="text-muted" style="font-size:.72rem">—</span>'}</td>
               <td>${transbordou ? `<span style="color:#a855f7;font-size:.75rem">🔀 ${v.motivo_saida||'transbordado'}</span>` : _cgStatusPill(p)}</td>
             </tr>`;
