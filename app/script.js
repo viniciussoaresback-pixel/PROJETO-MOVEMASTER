@@ -3514,6 +3514,18 @@ function mascaraCEP(input) {
     input.value = v;
 }
 
+// Máscara de telefone GLOBAL — aceita o elemento (this) ou um evento
+function mascaraTelefone(elOuEvento) {
+    const el = (elOuEvento && elOuEvento.target) ? elOuEvento.target : elOuEvento;
+    if (!el) return;
+    let v = el.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 10) v = v.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+    else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+    else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+    else if (v.length > 0) v = '(' + v;
+    el.value = v;
+}
+
 // Buscar endereço pelo CEP (ViaCEP)
 async function buscarCEP(cep) {
     const digits = cep.replace(/\D/g, '');
@@ -8618,15 +8630,17 @@ async function renderizarPainelPatios() {
     if (!painel) return;
 
     const carros = pedidosGlobais.filter(p =>
-        p.patioAtual && !['Entregue', 'Cancelado'].includes(p.status)
+        p.patioAtual && PATIOS_FIXOS.includes(p.patioAtual) && !['Entregue', 'Cancelado'].includes(p.status)
     );
 
-    // Agrupar por pátio (pátios fixos sempre aparecem, mesmo vazios)
+    // Agrupar por pátio — SOMENTE pátios fixos (evita "pátios fantasma"
+    // criados por carros cujo patio_atual é a cidade de destino aguardando equipe).
     const grupos = {};
     PATIOS_FIXOS.forEach(pt => grupos[pt] = []);
     carros.forEach(p => {
-        if (!grupos[p.patioAtual]) grupos[p.patioAtual] = [];
-        grupos[p.patioAtual].push(p);
+        if (grupos[p.patioAtual]) {          // só entra se for um pátio fixo conhecido
+            grupos[p.patioAtual].push(p);
+        }
     });
 
     // Alerta de permanência: 48h+ no pátio merece atenção
@@ -13073,122 +13087,519 @@ async function _aplicarAvancarRota(rotaId){
 // Só visualização. Aparece no Painel (logística) e no Faturamento (financeiro).
 // ============================================================
 function renderizarHistoricoCargas(containerId){
-  const cont = document.getElementById(containerId || 'historicoCargasWrap');
-  if (!cont) return;
+  const lista = document.getElementById('histvLista');
+  if (!lista) return;
 
+  const fBusca = _norm(document.getElementById('histBusca')?.value || '');
   const fMot = _norm(document.getElementById('histMotorista')?.value || '');
   const fCeg = _norm(document.getElementById('histCegonha')?.value || '');
+  const fDest = _norm(document.getElementById('histDestino')?.value || '');
   const fDe = document.getElementById('histDataDe')?.value || '';
   const fAte = document.getElementById('histDataAte')?.value || '';
 
-  // Cargas concluídas = rotas com status 'concluida'
-  let rotas = (rotasGlobais||[]).filter(r => r.status === 'concluida');
+  // Histórico mostra viagens concluídas E em andamento (registro do que aconteceu)
+  let rotas = (rotasGlobais||[]).filter(r => ['concluida','em_andamento','planejada'].includes(r.status));
 
-  // monta os dados de cada carga (rota + seus pedidos)
-  let cargas = rotas.map(r => {
-    const pedidos = _pedidosHistoricoDaViagem(r.id);
-    const data = r.data_saida || (pedidos[0]?.dataSolicitacao) || null;
-    const total = pedidos.reduce((s,p)=>s+Number(p.valorFrete||0),0);
-    const totalMotorista = pedidos.reduce((s,p)=>{
-      const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null};
-      return s + (vm.valor||0);
-    }, 0);
-    return {
-      id: r.id, nome: r.nome, data,
-      motorista: r.motorista_1 || pedidos[0]?.motorista1 || '—',
-      cegonha: r.placa_cegonha || '—',
-      paradas: Array.isArray(r.paradas) ? r.paradas : [],
-      pedidos, total, totalMotorista
-    };
-  });
+  let viagens = rotas.map(_histDadosViagem);
 
   // filtros
-  if (fMot) cargas = cargas.filter(c => _norm(c.motorista).includes(fMot));
-  if (fCeg) cargas = cargas.filter(c => _norm(c.cegonha).includes(fCeg));
-  if (fDe) cargas = cargas.filter(c => c.data && c.data >= fDe);
-  if (fAte) cargas = cargas.filter(c => c.data && c.data <= fAte);
+  if (fMot) viagens = viagens.filter(v => _norm(v.motorista).includes(fMot));
+  if (fCeg) viagens = viagens.filter(v => _norm(v.cegonha).includes(fCeg));
+  if (fDest) viagens = viagens.filter(v => v.pedidos.some(p => _norm(p.cidadeDestino||'').includes(fDest)));
+  if (fDe) viagens = viagens.filter(v => v.data && v.data >= fDe);
+  if (fAte) viagens = viagens.filter(v => v.data && v.data <= fAte);
+  if (fBusca) viagens = viagens.filter(v =>
+    _norm('#'+v.id).includes(fBusca) || _norm(v.motorista).includes(fBusca) ||
+    _norm(v.cegonha).includes(fBusca) || v.pedidos.some(p => _norm(p.placa||'').includes(fBusca)));
 
   // ordena por data desc
-  cargas.sort((a,b) => (b.data||'').localeCompare(a.data||''));
+  viagens.sort((a,b) => String(b.data||'').localeCompare(String(a.data||'')));
 
-  if (cargas.length === 0){ cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhuma carga concluída no filtro.</p>'; return; }
+  if (viagens.length === 0){
+    lista.innerHTML = '<p class="text-muted" style="padding:1rem">Nenhuma viagem no filtro.</p>';
+    const det = document.getElementById('histvDetalhe'); if (det) det.innerHTML = '';
+    return;
+  }
 
-  // agrupa por motorista
-  const porMot = {};
-  cargas.forEach(c => { (porMot[c.motorista] = porMot[c.motorista] || []).push(c); });
-  const motoristas = Object.keys(porMot).sort();
+  // seleção padrão: primeira viagem
+  if (!_histViagemSel || !viagens.some(v => String(v.id)===String(_histViagemSel))){
+    _histViagemSel = viagens[0].id;
+  }
 
-  cont.innerHTML = motoristas.map(mot => {
-    const lista = porMot[mot];
-    const totalMot = lista.reduce((s,c)=>s+c.total,0);
-    const totalCarros = lista.reduce((s,c)=>s+c.pedidos.length,0);
-    return `<div class="hist-motorista">
-      <div class="hist-mot-cab">
-        <strong>👤 ${mot}</strong>
-        <span class="text-muted">${lista.length} viagem(ns) · ${totalCarros} carro(s) · R$ ${totalMot.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+  const mostradas = viagens.slice(0, _histLimite);
+  lista.innerHTML = `
+    <div class="histv-lista-cab">VIAGENS (${viagens.length})</div>
+    ${mostradas.map(v => {
+      const st = _histStatusInfo(v.status);
+      const sel = String(v.id)===String(_histViagemSel);
+      const rotaTxt = v.paradas.length ? `${v.paradas[0]} → ${v.paradas[v.paradas.length-1]}` :
+        (v.pedidos[0] ? `${v.pedidos[0].cidadeOrigem||''} → ${v.pedidos[0].cidadeDestino||''}` : (v.nome||'—'));
+      return `<div class="histv-card ${sel?'sel':''}" onclick="_histSelViagem(${v.id})">
+        <div class="histv-card-top">
+          <span class="histv-card-id">#${v.id}</span>
+          <span class="histv-badge ${st.cls}">${st.label}</span>
+        </div>
+        <div class="histv-card-lin">🚛 <strong>${v.cegonha}</strong> <span class="text-muted">· 📅 ${v.data ? new Date(v.data+(v.data.length<=10?'T12:00':'')).toLocaleDateString('pt-BR') : '—'}</span></div>
+        <div class="histv-card-rota">${rotaTxt}</div>
+        <div class="histv-card-mot">Motorista: ${v.motorista}</div>
+        <div class="histv-card-rod">
+          <span class="text-muted">${v.pedidos.length} veículo(s)</span>
+          <span class="histv-card-total">R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+        </div>
+      </div>`;
+    }).join('')}
+    ${viagens.length > _histLimite ? `<button class="histv-vermais" onclick="_histVerMais()">Ver mais viagens</button>` : ''}`;
+
+  _histRenderDetalhe();
+}
+
+function _histSelViagem(id){ _histViagemSel = id; renderizarHistoricoCargas(); }
+function _histVerMais(){ _histLimite += 8; renderizarHistoricoCargas(); }
+
+// Coleta as viagens conforme os filtros atuais (reutiliza a mesma lógica da lista)
+function _histViagensFiltradas(){
+  const fBusca = _norm(document.getElementById('histBusca')?.value || '');
+  const fMot = _norm(document.getElementById('histMotorista')?.value || '');
+  const fCeg = _norm(document.getElementById('histCegonha')?.value || '');
+  const fDest = _norm(document.getElementById('histDestino')?.value || '');
+  const fDe = document.getElementById('histDataDe')?.value || '';
+  const fAte = document.getElementById('histDataAte')?.value || '';
+
+  let rotas = (rotasGlobais||[]).filter(r => ['concluida','em_andamento','planejada'].includes(r.status));
+  let viagens = rotas.map(_histDadosViagem);
+  if (fMot) viagens = viagens.filter(v => _norm(v.motorista).includes(fMot));
+  if (fCeg) viagens = viagens.filter(v => _norm(v.cegonha).includes(fCeg));
+  if (fDest) viagens = viagens.filter(v => v.pedidos.some(p => _norm(p.cidadeDestino||'').includes(fDest)));
+  if (fDe) viagens = viagens.filter(v => v.data && v.data >= fDe);
+  if (fAte) viagens = viagens.filter(v => v.data && v.data <= fAte);
+  if (fBusca) viagens = viagens.filter(v =>
+    _norm('#'+v.id).includes(fBusca) || _norm(v.motorista).includes(fBusca) ||
+    _norm(v.cegonha).includes(fBusca) || v.pedidos.some(p => _norm(p.placa||'').includes(fBusca)));
+  viagens.sort((a,b) => String(b.data||'').localeCompare(String(a.data||'')));
+  return viagens;
+}
+
+// RELATÓRIO CONSOLIDADO — visão gerencial de todas as viagens do período
+function _histAbrirRelatorio(){
+  const viagens = _histViagensFiltradas();
+  const fDe = document.getElementById('histDataDe')?.value || '';
+  const fAte = document.getElementById('histDataAte')?.value || '';
+  const periodo = (fDe || fAte) ? `${fDe?new Date(fDe+'T12:00').toLocaleDateString('pt-BR'):'início'} a ${fAte?new Date(fAte+'T12:00').toLocaleDateString('pt-BR'):'hoje'}` : 'Todas as viagens';
+
+  // totais
+  const totViagens = viagens.length;
+  const totVeiculos = viagens.reduce((s,v)=>s+v.pedidos.length,0);
+  const totFat = viagens.reduce((s,v)=>s+v.total,0);
+  const totMot = viagens.reduce((s,v)=>s+v.totalMotorista,0);
+  const totCteOk = viagens.reduce((s,v)=>s+v.comCte,0);
+  const totPend = totVeiculos - totCteOk;
+
+  const old = document.getElementById('histRelatOverlay'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'histRelatOverlay';
+  div.className = 'histrelat-overlay';
+  div.innerHTML = `
+    <div class="histrelat-bg" onclick="document.getElementById('histRelatOverlay').remove()"></div>
+    <div class="histrelat-painel">
+      <div class="histrelat-head">
+        <div>
+          <h2>📊 Relatório Consolidado</h2>
+          <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 0">${periodo}</p>
+        </div>
+        <div class="histrelat-head-acoes">
+          <button class="btn btn-secondary btn-sm" onclick="_histExportarRelatorioCSV()">⬇️ Exportar Excel/CSV</button>
+          <button class="histrelat-x" onclick="document.getElementById('histRelatOverlay').remove()">✕</button>
+        </div>
       </div>
-      ${lista.map(c => {
-        const aberto = _histViagensAbertas.has(String(c.id));
-        return `
-        <div class="hist-carga">
-          <div class="hist-carga-cab hist-carga-toggle" onclick="_toggleHistViagem('${c.id}')">
-            <span class="hist-chevron">${aberto ? '▾' : '▸'}</span>
-            <span>📅 ${c.data ? new Date(c.data+'T12:00').toLocaleDateString('pt-BR') : '—'}</span>
-            <span>🚛 <strong>${c.cegonha}</strong></span>
-            <span class="hist-rota">${c.paradas.length ? c.paradas.join(' → ') : (c.nome||'—')}</span>
-            <span class="text-muted">${c.pedidos.length} carro(s)</span>
-            <span class="hist-total" title="Faturado do caminhão (soma dos fretes)">💰 R$ ${c.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
-            <span class="hist-total-mot" title="Total que os motoristas recebem (tabela)">👤 R$ ${c.totalMotorista.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+
+      <div class="histrelat-totais">
+        <div class="histrelat-tz"><strong>${totViagens}</strong><span>Viagens</span></div>
+        <div class="histrelat-tz"><strong>${totVeiculos}</strong><span>Veículos</span></div>
+        <div class="histrelat-tz"><strong class="v-verde">R$ ${totFat.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>Faturamento</span></div>
+        <div class="histrelat-tz"><strong class="v-laranja">R$ ${totMot.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>Motoristas</span></div>
+        <div class="histrelat-tz"><strong class="v-azul">R$ ${(totFat-totMot).toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>Resultado</span></div>
+        <div class="histrelat-tz"><strong class="${totPend?'v-laranja':'v-verde'}">${totCteOk}/${totVeiculos}</strong><span>CTes conferidos</span></div>
+      </div>
+
+      <div class="histrelat-tabwrap">
+        <table class="histrelat-tab">
+          <thead><tr><th>Viagem</th><th>Data</th><th>Motorista</th><th>Cegonha</th><th>Rota</th><th>Veíc.</th><th>Faturamento</th><th>Motorista</th><th>CTe</th></tr></thead>
+          <tbody>
+            ${viagens.length===0 ? '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Nenhuma viagem no período.</td></tr>' :
+              viagens.map(v => {
+                const rotaTxt = v.paradas.length ? `${v.paradas[0]} → ${v.paradas[v.paradas.length-1]}` :
+                  (v.pedidos[0] ? `${v.pedidos[0].cidadeOrigem||''} → ${v.pedidos[0].cidadeDestino||''}` : (v.nome||'—'));
+                const cteOk = v.comCte === v.pedidos.length && v.pedidos.length>0;
+                return `<tr>
+                  <td><strong>#${v.id}</strong></td>
+                  <td>${v.data ? new Date(v.data+(String(v.data).length<=10?'T12:00':'')).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td>${v.motorista}</td>
+                  <td>${v.cegonha}</td>
+                  <td>${rotaTxt}</td>
+                  <td style="text-align:center">${v.pedidos.length}</td>
+                  <td>R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+                  <td>R$ ${v.totalMotorista.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+                  <td>${cteOk?'<span class="histv-ok">✅ '+v.comCte+'/'+v.pedidos.length+'</span>':'<span style="color:#f59e0b">⚠️ '+v.comCte+'/'+v.pedidos.length+'</span>'}</td>
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+// Exporta o relatório para CSV (abre no Excel)
+function _histExportarRelatorioCSV(){
+  const viagens = _histViagensFiltradas();
+  const linhas = [['Viagem','Data','Motorista','Cegonha','Rota','Veiculos','Faturamento','Motorista','CTe_conferidos','CTe_total']];
+  viagens.forEach(v => {
+    const rotaTxt = v.paradas.length ? `${v.paradas[0]} > ${v.paradas[v.paradas.length-1]}` :
+      (v.pedidos[0] ? `${v.pedidos[0].cidadeOrigem||''} > ${v.pedidos[0].cidadeDestino||''}` : (v.nome||'-'));
+    linhas.push([
+      '#'+v.id,
+      v.data ? new Date(v.data+(String(v.data).length<=10?'T12:00':'')).toLocaleDateString('pt-BR') : '-',
+      v.motorista, v.cegonha, rotaTxt, v.pedidos.length,
+      v.total.toFixed(2).replace('.',','), v.totalMotorista.toFixed(2).replace('.',','),
+      v.comCte, v.pedidos.length
+    ]);
+  });
+  const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `relatorio_viagens_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Aba selecionada no detalhe
+let _histAbaSel = 'carga';
+function _histSelAba(aba){ _histAbaSel = aba; _histRenderDetalhe(); }
+
+function _histRenderDetalhe(){
+  const det = document.getElementById('histvDetalhe');
+  if (!det) return;
+  const r = (rotasGlobais||[]).find(x => String(x.id)===String(_histViagemSel));
+  if (!r){ det.innerHTML = ''; return; }
+  const v = _histDadosViagem(r);
+  const st = _histStatusInfo(v.status);
+  const saida = r.iniciada_em ? new Date(r.iniciada_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const chegada = r.concluida_em ? new Date(r.concluida_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const rotaTxt = v.paradas.length ? v.paradas.join(' → ') :
+    (v.pedidos[0] ? `${v.pedidos[0].cidadeOrigem||''} → ${v.pedidos[0].cidadeDestino||''}` : (v.nome||'—'));
+
+  det.innerHTML = `
+    <div class="histv-det-cab">
+      <div class="histv-det-vnum">
+        <div class="histv-det-hash">VIAGEM</div>
+        <div class="histv-det-num">#${v.id}</div>
+        <span class="histv-badge ${st.cls}">${st.label}</span>
+      </div>
+      <div class="histv-det-info">
+        <div class="histv-di"><span class="histv-di-lbl">👤 MOTORISTA</span><span class="histv-di-val">${v.motorista}</span></div>
+        <div class="histv-di"><span class="histv-di-lbl">🚛 CEGONHA</span><span class="histv-di-val">${v.cegonha}${v.modelo?`<br><span class="text-muted" style="font-size:.75rem">Modelo: ${v.modelo}</span>`:''}</span></div>
+        <div class="histv-di"><span class="histv-di-lbl">📅 DATA</span><span class="histv-di-val">${v.data ? new Date(v.data+(String(v.data).length<=10?'T12:00':'')).toLocaleDateString('pt-BR') : '—'}<br><span class="text-muted" style="font-size:.75rem">Saída: ${saida} · Chegada: ${chegada}</span></span></div>
+        <div class="histv-di"><span class="histv-di-lbl">📍 ROTA</span><span class="histv-di-val">${rotaTxt}</span></div>
+      </div>
+      <div class="histv-resumo">
+        <div class="histv-resumo-tit">RESUMO DA VIAGEM</div>
+        <div class="histv-resumo-grid">
+          <div class="histv-rz"><strong>${v.pedidos.length}</strong><span>VEÍCULOS</span></div>
+          <div class="histv-rz histv-rz-fat"><strong>R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>FATURAMENTO</span></div>
+          <div class="histv-rz histv-rz-mot"><strong>R$ ${v.totalMotorista.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>MOTORISTA</span></div>
+          <div class="histv-rz histv-rz-res"><strong>R$ ${v.resultado.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>RESULTADO</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="histv-abas">
+      <button class="histv-aba ${_histAbaSel==='carga'?'sel':''}" onclick="_histSelAba('carga')">CARGA DA VIAGEM</button>
+      <button class="histv-aba ${_histAbaSel==='timeline'?'sel':''}" onclick="_histSelAba('timeline')">LINHA DO TEMPO</button>
+      <button class="histv-aba ${_histAbaSel==='conferencia'?'sel':''}" onclick="_histSelAba('conferencia')">CONFERÊNCIA E DOCUMENTOS</button>
+      <button class="histv-aba ${_histAbaSel==='financeiro'?'sel':''}" onclick="_histSelAba('financeiro')">FINANCEIRO</button>
+    </div>
+
+    <div class="histv-aba-conteudo">${_histAbaConteudo(v)}</div>
+
+    <div class="histv-rodape-info">ℹ️ Esta viagem está registrada no histórico. Transbordos, ocorrências e alterações ficam registrados na linha do tempo.</div>`;
+}
+
+// Conteúdo de cada aba
+function _histAbaConteudo(v){
+  if (_histAbaSel === 'carga') return _histAbaCarga(v);
+  if (_histAbaSel === 'timeline') return _histAbaTimeline(v);
+  if (_histAbaSel === 'conferencia') return _histAbaConferencia(v);
+  if (_histAbaSel === 'financeiro') return _histAbaFinanceiro(v);
+  return `<p class="text-muted" style="padding:2rem;text-align:center">Esta aba será construída na próxima etapa.</p>`;
+}
+
+// ABA FINANCEIRO — Status + Resumo financeiro + Detalhamento da remuneração
+function _histAbaFinanceiro(v){
+  const st = _histStatusInfo(v.status);
+  const chegada = v.rota.concluida_em ? new Date(v.rota.concluida_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : null;
+
+  // Remuneração: soma dos valores por pedido (com origem)
+  let temPendente = false;
+  const detPed = v.pedidos.map(p => {
+    const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null,origem:'pendente'};
+    if (vm.valor == null) temPendente = true;
+    return { p, vm };
+  });
+  const valorBase = detPed.reduce((s,d)=> s + (d.vm.valor||0), 0);
+
+  // status textual
+  const statusTxt = v.status === 'concluida' ? `Viagem concluída com sucesso.${chegada?` Entregas finalizadas às ${chegada}.`:''}`
+    : v.status === 'em_andamento' ? 'Viagem em andamento.'
+    : 'Viagem aguardando início.';
+  const statusIc = v.status === 'concluida' ? '✅' : v.status === 'em_andamento' ? '🚛' : '⏳';
+
+  return `<div class="histv-fin">
+    <div class="histv-fin-col">
+      <div class="histv-sec-tit">STATUS DA VIAGEM</div>
+      <div class="histv-fin-status ${st.cls}">
+        <div class="histv-fin-status-ic">${statusIc}</div>
+        <div>
+          <div class="histv-fin-status-lbl">${st.label}</div>
+          <div class="histv-fin-status-sub">${statusTxt}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="histv-fin-col">
+      <div class="histv-sec-tit">RESUMO FINANCEIRO</div>
+      <div class="histv-fin-linha"><span>Faturamento bruto</span><strong class="v-verde">R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      <div class="histv-fin-linha"><span>Remuneração do motorista</span><strong class="v-laranja">− R$ ${valorBase.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      <div class="histv-fin-linha"><span>Despesas operacionais</span><strong class="text-muted">− R$ 0,00</strong></div>
+      <div class="histv-fin-linha histv-fin-resultado"><span>Resultado operacional</span><strong class="v-azul">R$ ${(v.total - valorBase).toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      ${temPendente?'<div class="histv-fin-aviso">⚠️ Há pedido(s) com remuneração a definir — o total do motorista pode mudar.</div>':''}
+    </div>
+
+    <div class="histv-fin-col histv-fin-full">
+      <div class="histv-sec-tit">DETALHAMENTO DA REMUNERAÇÃO</div>
+      <table class="histv-tab">
+        <thead><tr><th>PEDIDO</th><th>TRECHO</th><th>ORIGEM DO VALOR</th><th>VALOR</th></tr></thead>
+        <tbody>
+          ${detPed.map(({p,vm}) => `<tr>
+            <td><strong>#${p.id}</strong> ${p.placa||''}</td>
+            <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
+            <td>${_histOrigemValorLabel(vm.origem)}</td>
+            <td>${vm.valor!=null ? 'R$ '+vm.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '<span style="color:#f87171">a definir</span>'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="histv-tab-total"><span>TOTAL MOTORISTA</span><strong class="v-azul">R$ ${valorBase.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      <div class="histv-fin-nota">💡 Excedente e bônus por meta ainda não são calculados automaticamente — quando essa regra for definida, entra aqui.</div>
+    </div>
+  </div>`;
+}
+
+function _histOrigemValorLabel(origem){
+  if (origem === 'pedido') return '✏️ Ajuste do pedido';
+  if (origem === 'tabela') return '📋 Tabela oficial';
+  if (origem === 'manual') return '✍️ Valor do trecho';
+  return '⏳ Pendente';
+}
+
+// ABA LINHA DO TEMPO — agrega os eventos reais (historico_status) de todos os pedidos da viagem
+function _histAbaTimeline(v){
+  // dispara a busca async e renderiza quando chegar
+  _histCarregarTimeline(v);
+  return `<div class="histv-timeline" id="histvTimeline"><p class="text-muted" style="padding:2rem;text-align:center">Carregando linha do tempo...</p></div>`;
+}
+
+// Mapeia o tipo de evento para ícone e cor
+function _histEventoVisual(ev){
+  const txt = ((ev.observacao||'') + ' ' + (ev.status_novo||'')).toLowerCase();
+  if (txt.includes('coleta')) return { ic:'📥', cls:'ev-verde', titulo:'Coleta' };
+  if (txt.includes('transbordo')) return { ic:'🔀', cls:'ev-roxo', titulo:'Transbordo' };
+  if (txt.includes('entreg')) return { ic:'✅', cls:'ev-verde', titulo:'Entrega' };
+  if (txt.includes('conferid') || txt.includes('cte')) return { ic:'📄', cls:'ev-azul', titulo:'Documento' };
+  if (txt.includes('início') || txt.includes('inicio') || txt.includes('em transporte') || txt.includes('viagem')) return { ic:'🚛', cls:'ev-azul', titulo:'Transporte' };
+  if (txt.includes('pátio') || txt.includes('patio')) return { ic:'📍', cls:'ev-cinza', titulo:'Pátio' };
+  if (txt.includes('aprovad')) return { ic:'✅', cls:'ev-verde', titulo:'Aprovação' };
+  return { ic:'🟢', cls:'ev-cinza', titulo:'Evento' };
+}
+
+async function _histCarregarTimeline(v){
+  const alvo = document.getElementById('histvTimeline');
+  if (!alvo) return;
+  const ids = v.pedidos.map(p => parseInt(p.id));
+  let eventos = [];
+
+  // marcos da própria rota (saída/chegada) quando existem
+  if (v.rota.iniciada_em) eventos.push({ created_at: v.rota.iniciada_em, _marco:true, ic:'🚛', cls:'ev-azul', titulo:'Início da viagem', obs: (v.paradas[0]||'') , quem: v.motorista });
+  if (v.rota.concluida_em) eventos.push({ created_at: v.rota.concluida_em, _marco:true, ic:'🏁', cls:'ev-verde', titulo:'Viagem concluída', obs:'', quem: v.motorista });
+
+  try {
+    if (ids.length){
+      const { data } = await supabase.from('historico_status').select('*').in('pedido_id', ids).order('created_at', { ascending: true });
+      (data||[]).forEach(ev => {
+        // ignora ruído: eventos sem observação e sem mudança real
+        if (!ev.observacao && ev.status_anterior === ev.status_novo) return;
+        const vis = _histEventoVisual(ev);
+        eventos.push({ created_at: ev.created_at, ic:vis.ic, cls:vis.cls, titulo:vis.titulo, obs: ev.observacao || ev.status_novo || '', quem: ev.usuario_nome || '', pedido: ev.pedido_id });
+      });
+    }
+  } catch(e){ /* silencioso */ }
+
+  if (eventos.length === 0){
+    alvo.innerHTML = '<p class="text-muted" style="padding:2rem;text-align:center">Nenhum evento registrado nesta viagem ainda.<br><span style="font-size:.8rem">Os eventos aparecem conforme a operação executa as ações (coleta, transbordo, entrega...).</span></p>';
+    return;
+  }
+
+  eventos.sort((a,b) => String(a.created_at).localeCompare(String(b.created_at)));
+
+  alvo.innerHTML = `<div class="histv-sec-tit">LINHA DO TEMPO DA VIAGEM</div>
+    <div class="histv-tl">
+      ${eventos.map(ev => {
+        const d = ev.created_at ? new Date(ev.created_at) : null;
+        const dia = d ? d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) : '--';
+        const hora = d ? d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '--:--';
+        return `<div class="histv-tl-item">
+          <div class="histv-tl-data">${dia}<br><span>${hora}</span></div>
+          <div class="histv-tl-linha"><span class="histv-tl-dot ${ev.cls}">${ev.ic}</span></div>
+          <div class="histv-tl-conteudo">
+            <div class="histv-tl-tit">${ev.titulo}${ev.pedido?` <span class="histv-tl-ped">#${ev.pedido}</span>`:''}</div>
+            <div class="histv-tl-obs">${ev.obs||''}</div>
+            ${ev.quem?`<div class="histv-tl-quem">${ev.quem}</div>`:''}
           </div>
-          ${aberto ? `<table class="corr-tabela">
-            <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th>Frete</th><th>Motorista (R$)</th><th>CTe</th><th>Cobrança</th><th>Entrega</th></tr></thead>
-            <tbody>${c.pedidos.map(p => {
-              const cte = (typeof cteInfoDoPedido==='function') ? cteInfoDoPedido(p.id) : null;
-              const entregaTxt = p.entregaEquipeEm ? `📤 equipe${p.entregaEquipePor?' ('+p.entregaEquipePor+')':''}`
-                : (p.fluxoEntrega === 'direta' ? '✅ motorista' : (p.status==='Entregue'?'entregue':'—'));
-              const cobr = p.cobrancaStatus ? (typeof _COB_LABEL!=='undefined' ? (_COB_LABEL[p.cobrancaStatus]||p.cobrancaStatus) : p.cobrancaStatus) : 'a cobrar';
-              const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null,origem:'pendente'};
-              const vmTxt = vm.valor!=null ? 'R$ '+vm.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '<span style="color:#f87171">a definir</span>';
-              const transb = p.cidadeTransbordo ? `<div style="font-size:.72rem;color:#d99e18;margin-top:2px">🔄 transbordo em ${p.cidadeTransbordo}</div>` : '';
-              return `<tr class="corr-tr">
-                <td class="ct-id">#${p.id}</td>
-                <td class="ct-placa"><strong>${p.placa||'—'}</strong></td>
-                <td class="ct-modelo">${p.modelo||'—'}</td>
-                <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong>${transb}</td>
-                <td class="ct-cli">${p.cliente||'—'}</td>
-                <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-                <td class="ct-frete">${vmTxt}</td>
-                <td>${cte ? '🧾 '+(cte.numero||'sim') : '—'}</td>
-                <td>${cobr}</td>
-                <td>${entregaTxt}</td>
-              </tr>`;
-            }).join('')}</tbody>
-          </table>` : ''}
         </div>`;
       }).join('')}
     </div>`;
-  }).join('');
 }
 
-let _histViagensAbertas = new Set();
-function _toggleHistViagem(id){
-  const k = String(id);
-  if (_histViagensAbertas.has(k)) _histViagensAbertas.delete(k); else _histViagensAbertas.add(k);
-  renderizarHistoricoCargas();
-  // re-render pode ter alvo diferente (faturamento); tenta os dois
-  if (document.getElementById('historicoCargasWrap')) renderizarHistoricoCargas('historicoCargasWrap');
+// ABA CONFERÊNCIA E DOCUMENTOS
+function _histAbaConferencia(v){
+  const total = v.pedidos.length;
+  const comCte = v.comCte;
+  const pend = total - comCte;
+  const pct = total ? Math.round(comCte/total*100) : 0;
+  const okConf = pend === 0 && total > 0;
+  const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(v.id));
+  const mans = docs.filter(d => d.tipo==='manifesto');
+  const ctes = docs.filter(d => d.tipo==='cte');
+
+  // donut simples via conic-gradient
+  const donut = `conic-gradient(#22c55e ${pct*3.6}deg, rgba(148,163,184,.2) ${pct*3.6}deg)`;
+
+  return `<div class="histv-conf">
+    <div class="histv-conf-col">
+      <div class="histv-sec-tit">CONFERÊNCIA DE CTes</div>
+      <div class="histv-donut-wrap">
+        <div class="histv-donut" style="background:${donut}">
+          <div class="histv-donut-centro"><strong>${comCte}</strong><span>de ${total}</span></div>
+        </div>
+        <div class="histv-donut-leg">
+          <div><span class="histv-dot-v"></span> Conferidos: ${comCte} (${pct}%)</div>
+          <div><span class="histv-dot-c"></span> Pendentes: ${pend} (${100-pct}%)</div>
+        </div>
+      </div>
+      <div class="histv-conf-status ${okConf?'ok':'pend'}">
+        ${okConf ? '🟢 CONFERÊNCIA OK<br><span>Todos os CTes foram conferidos.</span>'
+                 : `🟠 PENDÊNCIA DE CONFERÊNCIA<br><span>${pend} pedido(s) sem CTe registrado.</span>`}
+      </div>
+      ${pend>0 ? `<div class="histv-conf-pendentes">
+        <div class="histv-sec-tit" style="margin-top:12px">Pendentes:</div>
+        ${v.pedidos.filter(p => !(p.numeroCte || ((typeof cteInfoDoPedido==='function') && cteInfoDoPedido(p.id)))).map(p =>
+          `<div class="histv-conf-pend-item">⚠️ #${p.id} · ${p.placa||''} · ${p.cliente||''} → ${p.cidadeDestino||''}</div>`).join('')}
+      </div>` : ''}
+    </div>
+
+    <div class="histv-conf-col">
+      <div class="histv-sec-tit">DOCUMENTOS DA VIAGEM</div>
+      <div class="histv-docs">
+        <div class="histv-doc-lin"><span>🧾 CTes da viagem (${ctes.length})</span>${ctes.length?`<a href="${ctes[0].url}" target="_blank" class="histv-doc-ver">VER</a>`:'<span class="text-muted">—</span>'}</div>
+        <div class="histv-doc-lin"><span>📋 Manifestos (${mans.length})</span>${mans.length?`<a href="${mans[0].url}" target="_blank" class="histv-doc-ver">VER</a>`:'<span class="text-muted">—</span>'}</div>
+        <div class="histv-doc-lin"><span>📄 Romaneio de carga</span><button class="histv-doc-ver" onclick="abrirFecharEnviarCarga(${v.id})">VER</button></div>
+      </div>
+      ${docs.length ? `<div class="histv-docs-todos">
+        <div class="histv-sec-tit" style="margin-top:12px">Arquivos enviados</div>
+        ${docs.map(d => `<div class="histv-doc-arq"><a href="${d.url}" target="_blank">📎 ${d.nome_arquivo||'documento'}</a> <span class="text-muted" style="font-size:.72rem">${d.tipo}</span></div>`).join('')}
+      </div>` : '<p class="text-muted" style="font-size:.8rem;margin-top:10px">Nenhum documento enviado ainda.</p>'}
+    </div>
+  </div>`;
 }
 
-// casca com filtros (reutilizada nos dois lugares)
+function _histAbaCarga(v){
+  return `<div class="histv-carga">
+    <div class="histv-veiculos">
+      <div class="histv-sec-tit">VEÍCULOS TRANSPORTADOS (${v.pedidos.length})</div>
+      <table class="histv-tab">
+        <thead><tr><th>PEDIDO</th><th>PLACA</th><th>MODELO</th><th>CLIENTE</th><th>ORIGEM</th><th>DESTINO</th><th>FRETE</th><th>CTe</th><th>ENTREGA</th></tr></thead>
+        <tbody>
+          ${v.pedidos.map(p => {
+            const vinc = _vinculoViagemPedido(v.id, p.id);
+            const transb = vinc && vinc.saiu_em;
+            const temCte = p.numeroCte || ((typeof cteInfoDoPedido==='function') && cteInfoDoPedido(p.id));
+            return `<tr>
+              <td><strong>#${p.id}</strong></td>
+              <td>${p.placa||'—'}</td>
+              <td>${p.modelo||'—'}</td>
+              <td>${p.cliente||'—'}</td>
+              <td>${p.cidadeOrigem||'—'}</td>
+              <td>${p.cidadeDestino||'—'}${transb?`<br><span style="font-size:.7rem;color:#a855f7">🔀 transbordado</span>`:''}</td>
+              <td>R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+              <td>${temCte?'<span class="histv-ok">✅ OK</span>':'<span class="histv-pend">— </span>'}</td>
+              <td>${p.status==='Entregue'?'<span class="histv-ok">✅ OK</span>':'<span class="text-muted">—</span>'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <div class="histv-tab-total"><span>TOTAL DA VIAGEM</span><strong>R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+    </div>
+  </div>`;
+}
+
+// ===== HISTÓRICO DE CARGAS — visão viagem (master-detail) =====
+let _histViagemSel = null;
+let _histLimite = 8;
+
 function _histCargasCasca(){
   return `
-    <div class="hist-filtros">
-      <input type="text" id="histMotorista" class="ocup-busca" placeholder="👤 Motorista..." oninput="renderizarHistoricoCargas()">
-      <input type="text" id="histCegonha" class="ocup-busca" placeholder="🚛 Cegonha..." oninput="renderizarHistoricoCargas()">
+    <div class="histv-filtros">
+      <input type="text" id="histBusca" class="histv-busca" placeholder="🔎 Buscar viagem, motorista, placa..." oninput="renderizarHistoricoCargas()">
+      <input type="text" id="histMotorista" class="histv-fil" placeholder="👤 Motorista" oninput="renderizarHistoricoCargas()">
+      <input type="text" id="histCegonha" class="histv-fil" placeholder="🚛 Cegonha" oninput="renderizarHistoricoCargas()">
+      <input type="text" id="histDestino" class="histv-fil" placeholder="📍 Destino" oninput="renderizarHistoricoCargas()">
       <label class="hist-data">De <input type="date" id="histDataDe" onchange="renderizarHistoricoCargas()"></label>
       <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
+      <button class="histv-btn-relatorio" onclick="_histAbrirRelatorio()">📊 Relatório do período</button>
     </div>
-    <div id="historicoCargasWrap"></div>`;
+    <div class="histv-layout">
+      <div class="histv-lista" id="histvLista"></div>
+      <div class="histv-detalhe" id="histvDetalhe"></div>
+    </div>`;
+}
+
+// Monta os dados de uma viagem (rota + pedidos vinculados) — só dados reais
+function _histDadosViagem(r){
+  const pedidos = _pedidosHistoricoDaViagem(r.id).filter(p => p.status !== 'Cancelado');
+  const total = pedidos.reduce((s,p)=>s+Number(p.valorFrete||0),0);
+  const totalMotorista = pedidos.reduce((s,p)=>{
+    const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null};
+    return s + (vm.valor||0);
+  }, 0);
+  const comCte = pedidos.filter(p => p.numeroCte || ((typeof cteInfoDoPedido==='function') && cteInfoDoPedido(p.id))).length;
+  const entregues = pedidos.filter(p => p.status === 'Entregue').length;
+  const data = r.data_saida || r.iniciada_em || (pedidos[0] && _dataLancamento(pedidos[0])) || null;
+  return {
+    id: r.id, nome: r.nome, rota: r,
+    motorista: r.motorista_1 || (pedidos[0]&&pedidos[0].motorista1) || '—',
+    cegonha: r.placa_cegonha || '—',
+    modelo: (veiculosGlobais||[]).find(v => v.placa === r.placa_cegonha)?.tipo || '',
+    data, status: r.status,
+    paradas: Array.isArray(r.paradas) ? r.paradas : [],
+    pedidos, total, totalMotorista, comCte, entregues,
+    resultado: total - totalMotorista
+  };
+}
+
+function _histStatusInfo(st){
+  if (st === 'concluida') return { label:'CONCLUÍDA', cls:'histv-st-ok' };
+  if (st === 'em_andamento') return { label:'EM VIAGEM', cls:'histv-st-viagem' };
+  if (st === 'planejada') return { label:'AGUARDANDO', cls:'histv-st-aguard' };
+  return { label:(st||'—').toUpperCase(), cls:'' };
 }
 
 // Popula o seletor de corredor no lançamento, marcando os que combinam com origem→destino
