@@ -9198,3 +9198,6 @@ html span.log-passo-bolinha {
 
 /* Item 3 — ações do corredor */
 .corredor-acoes { display:flex; gap:6px; flex-shrink:0; }
+
+/* Cliente no card do romaneio */
+.rm-carro-cliente { font-size:.82rem; color:var(--text-secondary,#9ca3af); margin:-2px 0 8px; }
