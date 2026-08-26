@@ -16564,7 +16564,7 @@ function renderizarComercialPedidos(){
 
     <div class="cg-tabela-wrap">
       <table class="cg-tabela">
-        <thead><tr><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Lançado</th><th></th></tr></thead>
+        <thead><tr><th>Pedido</th><th> Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Lançado</th><th></th></tr></thead>
         <tbody>
           ${pagina.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum pedido encontrado.</td></tr>' :
             pagina.map(p => {
