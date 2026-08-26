@@ -9201,3 +9201,148 @@ html span.log-passo-bolinha {
 
 /* Cliente no card do romaneio */
 .rm-carro-cliente { font-size:.82rem; color:var(--text-secondary,#9ca3af); margin:-2px 0 8px; }
+
+/* ===== HISTÓRICO DE CARGAS — master-detail ===== */
+.histv-filtros { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+.histv-busca { flex:1; min-width:220px; padding:8px 12px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; font-size:.85rem; }
+.histv-fil { width:150px; padding:8px 10px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; font-size:.82rem; }
+.hist-data { font-size:.78rem; color:var(--text-secondary,#9ca3af); display:flex; align-items:center; gap:4px; }
+.hist-data input { padding:6px 8px; border-radius:6px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; font-size:.8rem; }
+
+.histv-layout { display:grid; grid-template-columns:300px 1fr; gap:16px; align-items:start; }
+@media (max-width:900px){ .histv-layout { grid-template-columns:1fr; } }
+
+.histv-lista { display:flex; flex-direction:column; gap:10px; }
+.histv-lista-cab { font-size:.72rem; font-weight:700; letter-spacing:.5px; color:var(--text-muted,#9ca3af); padding:4px 2px; }
+.histv-card { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:12px 14px; cursor:pointer; background:var(--surface-1,rgba(255,255,255,.02)); transition:all .12s; }
+.histv-card:hover { border-color:rgba(255,106,0,.4); }
+.histv-card.sel { border-color:#ff6a00; border-width:2px; background:rgba(255,106,0,.04); }
+.histv-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.histv-card-id { font-weight:800; font-size:1.05rem; color:#ff6a00; }
+.histv-badge { font-size:.62rem; font-weight:700; padding:2px 8px; border-radius:999px; letter-spacing:.3px; }
+.histv-st-ok { background:rgba(34,197,94,.15); color:#22c55e; }
+.histv-st-viagem { background:rgba(37,99,235,.15); color:#3b82f6; }
+.histv-st-aguard { background:rgba(168,85,247,.15); color:#a855f7; }
+.histv-card-lin { font-size:.82rem; margin-bottom:3px; }
+.histv-card-rota { font-size:.82rem; color:var(--text-secondary,#9ca3af); margin-bottom:3px; }
+.histv-card-mot { font-size:.76rem; color:var(--text-tertiary,#6b7280); margin-bottom:8px; }
+.histv-card-rod { display:flex; justify-content:space-between; align-items:center; padding-top:8px; border-top:1px solid var(--border-soft,rgba(255,255,255,.06)); }
+.histv-card-total { font-weight:700; color:#22c55e; font-size:.92rem; }
+.histv-vermais { width:100%; padding:10px; border:1px dashed var(--border,rgba(255,255,255,.2)); border-radius:10px; background:transparent; color:var(--text-secondary,#9ca3af); cursor:pointer; font-size:.82rem; font-weight:600; }
+.histv-vermais:hover { border-color:#ff6a00; color:#ff6a00; }
+
+.histv-detalhe { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:14px; padding:18px; background:var(--surface-1,rgba(255,255,255,.02)); min-height:400px; }
+.histv-det-cab { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; padding-bottom:16px; border-bottom:1px solid var(--border,rgba(255,255,255,.08)); }
+.histv-det-vnum { display:flex; flex-direction:column; gap:4px; }
+.histv-det-hash { font-size:.7rem; color:var(--text-muted,#9ca3af); font-weight:700; }
+.histv-det-num { font-size:2rem; font-weight:800; color:#ff6a00; line-height:1; }
+.histv-det-info { display:flex; gap:22px; flex-wrap:wrap; flex:1; }
+.histv-di { display:flex; flex-direction:column; gap:3px; }
+.histv-di-lbl { font-size:.66rem; color:var(--text-muted,#9ca3af); font-weight:700; letter-spacing:.3px; }
+.histv-di-val { font-size:.86rem; font-weight:600; }
+.histv-resumo { background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border-soft,rgba(255,255,255,.07)); border-radius:12px; padding:12px 16px; }
+.histv-resumo-tit { font-size:.66rem; font-weight:700; color:var(--text-muted,#9ca3af); letter-spacing:.4px; margin-bottom:8px; }
+.histv-resumo-grid { display:flex; gap:18px; }
+.histv-rz { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.histv-rz strong { font-size:1.1rem; font-weight:800; }
+.histv-rz span { font-size:.6rem; color:var(--text-muted,#9ca3af); font-weight:700; letter-spacing:.3px; }
+.histv-rz-fat strong { color:#22c55e; }
+.histv-rz-mot strong { color:#f59e0b; }
+.histv-rz-res strong { color:#3b82f6; }
+
+.histv-abas { display:flex; gap:4px; flex-wrap:wrap; margin:16px 0; border-bottom:1px solid var(--border,rgba(255,255,255,.08)); }
+.histv-aba { padding:10px 14px; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-secondary,#9ca3af); font-size:.78rem; font-weight:700; letter-spacing:.3px; cursor:pointer; }
+.histv-aba:hover { color:inherit; }
+.histv-aba.sel { color:#ff6a00; border-bottom-color:#ff6a00; }
+
+.histv-sec-tit { font-size:.72rem; font-weight:700; color:var(--text-muted,#9ca3af); letter-spacing:.4px; margin-bottom:10px; }
+.histv-tab { width:100%; border-collapse:collapse; font-size:.8rem; }
+.histv-tab thead th { text-align:left; font-size:.64rem; text-transform:uppercase; letter-spacing:.3px; color:var(--text-muted,#9ca3af); font-weight:700; padding:6px 8px; border-bottom:1px solid var(--border,rgba(255,255,255,.1)); }
+.histv-tab td { padding:8px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
+.histv-ok { color:#22c55e; font-weight:600; font-size:.76rem; }
+.histv-pend { color:var(--text-muted,#9ca3af); }
+.histv-tab-total { display:flex; justify-content:space-between; align-items:center; padding:12px 8px 4px; font-size:.85rem; }
+.histv-tab-total strong { font-size:1.05rem; color:#22c55e; }
+.histv-rodape-info { margin-top:16px; padding:10px 14px; background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.2); border-radius:8px; font-size:.78rem; color:var(--text-secondary,#9ca3af); }
+
+/* Histórico — Linha do tempo */
+.histv-tl { display:flex; flex-direction:column; }
+.histv-tl-item { display:grid; grid-template-columns:52px 28px 1fr; gap:10px; }
+.histv-tl-data { font-size:.72rem; color:var(--text-muted,#9ca3af); text-align:right; padding-top:2px; }
+.histv-tl-data span { font-size:.7rem; }
+.histv-tl-linha { display:flex; flex-direction:column; align-items:center; }
+.histv-tl-dot { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.8rem; flex-shrink:0; z-index:1; }
+.histv-tl-item:not(:last-child) .histv-tl-linha::after { content:''; width:2px; flex:1; background:var(--border,rgba(255,255,255,.12)); margin:2px 0; }
+.ev-verde { background:rgba(34,197,94,.15); }
+.ev-azul { background:rgba(59,130,246,.15); }
+.ev-roxo { background:rgba(168,85,247,.15); }
+.ev-cinza { background:rgba(148,163,184,.15); }
+.histv-tl-conteudo { padding-bottom:16px; }
+.histv-tl-tit { font-weight:700; font-size:.85rem; }
+.histv-tl-ped { font-size:.7rem; color:#ff6a00; font-weight:600; }
+.histv-tl-obs { font-size:.8rem; color:var(--text-secondary,#9ca3af); margin-top:1px; }
+.histv-tl-quem { font-size:.72rem; color:var(--text-tertiary,#6b7280); margin-top:2px; }
+
+/* Histórico — Conferência e documentos */
+.histv-conf { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media (max-width:700px){ .histv-conf { grid-template-columns:1fr; } }
+.histv-donut-wrap { display:flex; align-items:center; gap:16px; margin-bottom:14px; }
+.histv-donut { width:100px; height:100px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.histv-donut-centro { width:70px; height:70px; border-radius:50%; background:var(--surface-1,#1a1c20); display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.histv-donut-centro strong { font-size:1.4rem; font-weight:800; color:#22c55e; }
+.histv-donut-centro span { font-size:.66rem; color:var(--text-muted,#9ca3af); }
+.histv-donut-leg { font-size:.8rem; display:flex; flex-direction:column; gap:6px; }
+.histv-dot-v, .histv-dot-c { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+.histv-dot-v { background:#22c55e; }
+.histv-dot-c { background:rgba(148,163,184,.4); }
+.histv-conf-status { padding:12px 14px; border-radius:10px; font-weight:700; font-size:.9rem; text-align:center; }
+.histv-conf-status span { font-weight:400; font-size:.78rem; }
+.histv-conf-status.ok { background:rgba(34,197,94,.1); color:#22c55e; border:1px solid rgba(34,197,94,.3); }
+.histv-conf-status.pend { background:rgba(245,158,11,.1); color:#f59e0b; border:1px solid rgba(245,158,11,.3); }
+.histv-conf-pend-item { font-size:.78rem; color:#f59e0b; padding:3px 0; }
+.histv-docs { display:flex; flex-direction:column; gap:8px; }
+.histv-doc-lin { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border-soft,rgba(255,255,255,.06)); border-radius:8px; font-size:.82rem; }
+.histv-doc-ver { font-size:.72rem; font-weight:700; color:#3b82f6; background:none; border:1px solid rgba(59,130,246,.4); border-radius:6px; padding:3px 12px; cursor:pointer; text-decoration:none; }
+.histv-doc-ver:hover { background:rgba(59,130,246,.1); }
+.histv-doc-arq { padding:5px 0; font-size:.8rem; }
+.histv-doc-arq a { color:#60a5fa; text-decoration:none; }
+
+/* Histórico — aba Financeiro */
+.histv-fin { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.histv-fin-full { grid-column:1 / -1; }
+@media (max-width:700px){ .histv-fin { grid-template-columns:1fr; } }
+.histv-fin-status { display:flex; align-items:center; gap:12px; padding:16px; border-radius:12px; background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border-soft,rgba(255,255,255,.07)); }
+.histv-fin-status-ic { font-size:2rem; }
+.histv-fin-status-lbl { font-weight:800; font-size:1.05rem; }
+.histv-fin-status.histv-st-ok .histv-fin-status-lbl { color:#22c55e; }
+.histv-fin-status.histv-st-viagem .histv-fin-status-lbl { color:#3b82f6; }
+.histv-fin-status.histv-st-aguard .histv-fin-status-lbl { color:#a855f7; }
+.histv-fin-status-sub { font-size:.8rem; color:var(--text-secondary,#9ca3af); margin-top:2px; }
+.histv-fin-linha { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); font-size:.86rem; }
+.histv-fin-resultado { border-bottom:none; border-top:2px solid var(--border,rgba(255,255,255,.12)); margin-top:4px; padding-top:12px; font-weight:700; }
+.v-verde { color:#22c55e; }
+.v-laranja { color:#f59e0b; }
+.v-azul { color:#3b82f6; }
+.histv-fin-aviso, .histv-fin-nota { font-size:.76rem; color:#f59e0b; margin-top:10px; padding:8px 10px; background:rgba(245,158,11,.08); border-radius:6px; }
+.histv-fin-nota { color:var(--text-secondary,#9ca3af); background:rgba(148,163,184,.08); }
+
+/* Histórico — botão e relatório consolidado */
+.histv-btn-relatorio { padding:8px 14px; border-radius:8px; border:1px solid #ff6a00; background:rgba(255,106,0,.08); color:#ff6a00; font-weight:700; font-size:.82rem; cursor:pointer; white-space:nowrap; }
+.histv-btn-relatorio:hover { background:#ff6a00; color:#fff; }
+.histrelat-overlay { position:fixed; inset:0; z-index:100060; display:flex; align-items:center; justify-content:center; }
+.histrelat-bg { position:absolute; inset:0; background:rgba(0,0,0,.6); }
+.histrelat-painel { position:relative; background:var(--surface-1,#14141a); border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:16px; width:94%; max-width:1100px; max-height:90vh; overflow:auto; padding:22px; }
+.histrelat-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.histrelat-head h2 { margin:0; }
+.histrelat-head-acoes { display:flex; gap:8px; align-items:center; }
+.histrelat-x { background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-secondary,#9ca3af); }
+.histrelat-totais { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:18px; }
+@media (max-width:800px){ .histrelat-totais { grid-template-columns:repeat(3,1fr); } }
+.histrelat-tz { background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border-soft,rgba(255,255,255,.07)); border-radius:10px; padding:12px; text-align:center; }
+.histrelat-tz strong { display:block; font-size:1.2rem; font-weight:800; }
+.histrelat-tz span { font-size:.66rem; color:var(--text-muted,#9ca3af); font-weight:700; letter-spacing:.3px; }
+.histrelat-tabwrap { overflow-x:auto; }
+.histrelat-tab { width:100%; border-collapse:collapse; font-size:.82rem; min-width:800px; }
+.histrelat-tab thead th { text-align:left; font-size:.66rem; text-transform:uppercase; letter-spacing:.3px; color:var(--text-muted,#9ca3af); font-weight:700; padding:8px; border-bottom:1px solid var(--border,rgba(255,255,255,.12)); position:sticky; top:0; background:var(--surface-1,#14141a); }
+.histrelat-tab td { padding:8px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
+.histrelat-tab tbody tr:hover { background:var(--surface-2,rgba(255,255,255,.02)); }
