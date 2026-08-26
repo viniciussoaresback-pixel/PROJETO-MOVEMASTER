@@ -11678,9 +11678,11 @@ function _buscarClienteEndereco(qual, termo){
   if (achados.length === 0){ lista.innerHTML = '<div class="cli-auto-vazio">Nenhum cliente encontrado</div>'; lista.classList.add('aberta'); return; }
   lista.innerHTML = achados.map(c => {
     const endResumo = [c.endereco, c.numero, c.bairro].filter(Boolean).join(', ');
+    const cidadeUf = `${c.cidade||''}${c.uf?('/'+c.uf):''}`;
+    const doc = c.cnpj || c.cpf || '';
     return `<div class="cli-auto-item" onmousedown="event.preventDefault();_selecionarClienteEndereco('${qual}', ${c.id})">
-      <div class="cai-nome">${c.nome||''}</div>
-      <div class="cai-end">${c.cidade||''}${c.uf?('/'+c.uf):''}${endResumo?(' · '+endResumo):''}</div>
+      <div class="cai-nome">${c.nome||''}${cidadeUf?` <span class="cai-cidade">📍 ${cidadeUf}</span>`:''}</div>
+      <div class="cai-end">${doc?`🏢 ${doc}`:''}${doc&&endResumo?' · ':''}${endResumo||''}</div>
     </div>`;
   }).join('');
   lista.classList.add('aberta');
@@ -13207,7 +13209,8 @@ function _histAbrirRelatorio(){
           <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 0">${periodo}</p>
         </div>
         <div class="histrelat-head-acoes">
-          <button class="btn btn-secondary btn-sm" onclick="_histExportarRelatorioCSV()">⬇️ Exportar Excel/CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="_histExportarRelatorioCSV()">⬇️ Excel/CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="_histExportarRelatorioPDF()">📄 PDF</button>
           <button class="histrelat-x" onclick="document.getElementById('histRelatOverlay').remove()">✕</button>
         </div>
       </div>
@@ -13271,6 +13274,60 @@ function _histExportarRelatorioCSV(){
   a.href = url; a.download = `relatorio_viagens_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// Exporta o relatório em PDF no estilo do sistema (usa o template _abrirPDF)
+function _histExportarRelatorioPDF(){
+  const viagens = _histViagensFiltradas();
+  const fDe = document.getElementById('histDataDe')?.value || '';
+  const fAte = document.getElementById('histDataAte')?.value || '';
+  const periodo = (fDe || fAte)
+    ? `${fDe?new Date(fDe+'T12:00').toLocaleDateString('pt-BR'):'início'} a ${fAte?new Date(fAte+'T12:00').toLocaleDateString('pt-BR'):'hoje'}`
+    : 'Todas as viagens';
+
+  const totViagens = viagens.length;
+  const totVeiculos = viagens.reduce((s,v)=>s+v.pedidos.length,0);
+  const totFat = viagens.reduce((s,v)=>s+v.total,0);
+  const totMot = viagens.reduce((s,v)=>s+v.totalMotorista,0);
+  const totCteOk = viagens.reduce((s,v)=>s+v.comCte,0);
+
+  const linhas = viagens.map(v => {
+    const rotaTxt = v.paradas.length ? `${v.paradas[0]} → ${v.paradas[v.paradas.length-1]}` :
+      (v.pedidos[0] ? `${v.pedidos[0].cidadeOrigem||''} → ${v.pedidos[0].cidadeDestino||''}` : (v.nome||'—'));
+    const cteOk = v.comCte === v.pedidos.length && v.pedidos.length>0;
+    return `<tr>
+      <td><strong>#${v.id}</strong></td>
+      <td>${v.data ? new Date(v.data+(String(v.data).length<=10?'T12:00':'')).toLocaleDateString('pt-BR') : '—'}</td>
+      <td>${v.motorista}</td>
+      <td>${v.cegonha}</td>
+      <td>${rotaTxt}</td>
+      <td style="text-align:center">${v.pedidos.length}</td>
+      <td>R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td>R$ ${v.totalMotorista.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td style="text-align:center">${cteOk?'✅':'⚠️'} ${v.comCte}/${v.pedidos.length}</td>
+    </tr>`;
+  }).join('');
+
+  const corpo = `
+    <div class="filtros">
+      <span><strong>Período:</strong> ${periodo}</span>
+    </div>
+    <div class="rescards">
+      <div class="rescard"><div class="restopo"><span>Viagens</span><span>${totViagens}</span></div></div>
+      <div class="rescard"><div class="restopo"><span>Veículos</span><span>${totVeiculos}</span></div></div>
+      <div class="rescard"><div class="restopo"><span>Faturamento</span><span>R$ ${totFat.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
+      <div class="rescard"><div class="restopo"><span>Motoristas</span><span>R$ ${totMot.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
+      <div class="rescard"><div class="restopo"><span>Resultado</span><span>R$ ${(totFat-totMot).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
+      <div class="rescard"><div class="restopo"><span>CTes conferidos</span><span>${totCteOk}/${totVeiculos}</span></div></div>
+    </div>
+    <h3>Viagens do período</h3>
+    <table>
+      <thead><tr><th>Viagem</th><th>Data</th><th>Motorista</th><th>Cegonha</th><th>Rota</th><th>Veíc.</th><th>Faturamento</th><th>Motorista</th><th>CTe</th></tr></thead>
+      <tbody>${linhas || '<tr><td colspan="9" style="text-align:center">Nenhuma viagem no período.</td></tr>'}</tbody>
+    </table>
+    <div class="totalgeral">Total faturado: R$ ${totFat.toLocaleString('pt-BR',{minimumFractionDigits:2})} · Resultado: R$ ${(totFat-totMot).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>`;
+
+  if (typeof _abrirPDF === 'function') _abrirPDF('Relatório de Viagens', corpo);
 }
 
 // Aba selecionada no detalhe
@@ -14531,36 +14588,43 @@ async function _salvarLocaisRomaneio(rotaId, enviar){
   const d = _romaneioDados(rotaId);
   if (!d) return;
   try {
-    for (const p of d.carros){
+    // Otimização: 1 update por carro (não 2) e todos em paralelo (não em fila).
+    const updates = d.carros.map(p => {
       const noPatio = document.getElementById('rmPatio_'+p.id)?.value === '1';
       const local = document.getElementById('rmLocal_'+p.id)?.value.trim() || null;
-      await supabase.from('pedidos').update({ local_carro: local }).eq('id', p.id);
       const pg = (pedidosGlobais||[]).find(x => String(x.id)===String(p.id));
-      if (pg){ pg.localCarro = local; if (noPatio && !pg.patioAtual){ pg.patioAtual = local || pg.patioAtual; } }
-      // reflete pátio conforme o checkbox
-      if (noPatio){ await supabase.from('pedidos').update({ patio_atual: local || p.patioAtual || (p.cidadeOrigem?`${p.cidadeOrigem}${p.ufOrigem?'/'+p.ufOrigem:''}`:null) }).eq('id', p.id); }
-      else { await supabase.from('pedidos').update({ patio_atual: null, patio_desde: null }).eq('id', p.id); if(pg) pg.patioAtual = null; }
-    }
+      const patch = { local_carro: local };
+      if (noPatio){
+        patch.patio_atual = local || p.patioAtual || (p.cidadeOrigem?`${p.cidadeOrigem}${p.ufOrigem?'/'+p.ufOrigem:''}`:null);
+        if (pg){ pg.localCarro = local; if (!pg.patioAtual) pg.patioAtual = patch.patio_atual; }
+      } else {
+        patch.patio_atual = null; patch.patio_desde = null;
+        if (pg){ pg.localCarro = local; pg.patioAtual = null; }
+      }
+      return supabase.from('pedidos').update(patch).eq('id', p.id);
+    });
+    await Promise.all(updates);
     if (enviar){
       const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
       await supabase.from('rotas_planejadas').update({ carga_enviada_em: new Date().toISOString(), carga_enviada_por: usuario }).eq('id', rotaId);
       const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
       if (rota){ rota.carga_enviada_em = new Date().toISOString(); rota.carga_enviada_por = usuario; }
-      // Notifica o motorista da carga
-      if (rota && rota.motorista_1 && typeof notificar === 'function'){
-        await notificar({
-          nome: rota.motorista_1, tipo: 'romaneio',
-          titulo: '📋 Romaneio da sua carga',
-          mensagem: `Você recebeu o romaneio da carga ${rota.placa_cegonha||''}${rota.nome?(' · '+rota.nome):''}. Veja onde pegar cada carro na sua área.`
-        });
-      }
-      // Confirma para a própria logística que o envio foi feito (fica no sininho)
+      // Notifica motorista + logística em paralelo (não trava o clique)
       if (rota && typeof notificar === 'function'){
-        await notificar({
+        const notifs = [];
+        if (rota.motorista_1){
+          notifs.push(notificar({
+            nome: rota.motorista_1, tipo: 'romaneio',
+            titulo: '📋 Romaneio da sua carga',
+            mensagem: `Você recebeu o romaneio da carga ${rota.placa_cegonha||''}${rota.nome?(' · '+rota.nome):''}. Veja onde pegar cada carro na sua área.`
+          }));
+        }
+        notifs.push(notificar({
           perfil: 'logistica', tipo: 'romaneio',
           titulo: '✅ Romaneio enviado',
           mensagem: `Romaneio da carga ${rota.placa_cegonha||''}${rota.nome?(' · '+rota.nome):''} enviado${rota.motorista_1?(' ao motorista '+rota.motorista_1):''}.`
-        });
+        }));
+        Promise.all(notifs); // não aguarda — roda em segundo plano
       }
       document.getElementById('modalRomaneio')?.remove();
       if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `📤 Carga enviada ao motorista${rota&&rota.motorista_1?' ('+rota.motorista_1+')':''} com a localização de cada carro.`, 'success');
@@ -14810,33 +14874,53 @@ function _selosPedidoHTML(p){
 function _fiscalNumerosCteHTML(rotaId){
   const pedidos = _pedidosHistoricoDaViagem(rotaId).filter(p => p.status !== 'Cancelado');
   if (pedidos.length === 0) return '';
+  // Agrupa por grupo_id (carros do mesmo pedido = mesma CTe). Sem grupo, cada pedido é um grupo.
+  const grupos = [];
+  const vistos = {};
+  pedidos.forEach(p => {
+    const chave = p.grupoId ? 'g'+p.grupoId : 'p'+p.id;
+    if (!vistos[chave]){ vistos[chave] = { chave, itens:[], lider:p }; grupos.push(vistos[chave]); }
+    vistos[chave].itens.push(p);
+  });
   return `<div style="margin-top:10px;border-top:1px dashed var(--border,rgba(255,255,255,.12));padding-top:10px">
-    <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe por pedido (1 pedido = 1 CTe):</div>
-    ${pedidos.map(p => `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:8px;padding:8px 10px;margin-bottom:6px">
-      <div style="font-size:.82rem;margin-bottom:5px">
-        <strong>#${p.id}</strong> · 🚗 ${p.placa||'—'}${p.modelo?(' · '+p.modelo):''} ${_selosPedidoHTML(p)}<br>
-        <span style="color:var(--text-secondary,#9ca3af);font-size:.78rem">${p.cliente||'—'} · ${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <input type="text" id="cteNum_${p.id}" value="${p.numeroCte||''}" placeholder="nº da CTe" style="font-size:.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:140px">
-        <button class="btn btn-sm btn-primary" onclick="_salvarNumeroCte(${p.id})">Salvar CTe</button>
-        ${p.numeroCte?`<span style="font-size:.75rem;color:#22c55e">✅ CTe ${p.numeroCte}</span>`:''}
-      </div>
-    </div>`).join('')}
+    <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe por pedido (1 pedido = 1 CTe, mesmo com vários carros):</div>
+    ${grupos.map(g => {
+      const lider = g.lider;
+      const placas = g.itens.map(x => x.placa||'—').join(', ');
+      const multi = g.itens.length > 1;
+      return `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:8px;padding:8px 10px;margin-bottom:6px" id="cteGrupo_${g.chave}">
+        <div style="font-size:.82rem;margin-bottom:5px">
+          <strong>#${lider.id}</strong>${multi?` <span style="background:rgba(255,106,0,.15);color:#ff6a00;font-size:.68rem;padding:1px 7px;border-radius:999px">🔗 ${g.itens.length} carros</span>`:''} · 🚗 ${placas} ${_selosPedidoHTML(lider)}<br>
+          <span style="color:var(--text-secondary,#9ca3af);font-size:.78rem">${lider.cliente||'—'} · ${lider.cidadeOrigem||'—'} → <strong>${lider.cidadeDestino||'—'}</strong></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="text" id="cteNum_${g.chave}" value="${lider.numeroCte||''}" placeholder="nº da CTe" style="font-size:.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:140px">
+          <button class="btn btn-sm btn-primary" onclick="_salvarNumeroCteGrupo('${g.chave}', [${g.itens.map(x=>x.id).join(',')}])">Salvar CTe</button>
+          <span id="cteOk_${g.chave}" style="font-size:.75rem;color:#22c55e">${lider.numeroCte?`✅ CTe ${lider.numeroCte}`:''}</span>
+        </div>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
-async function _salvarNumeroCte(pedidoId){
-  const val = document.getElementById(`cteNum_${pedidoId}`)?.value.trim();
-  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
-  if (!p) return;
+// Salva o número da CTe para todos os carros do grupo, SEM re-renderizar o card inteiro
+async function _salvarNumeroCteGrupo(chave, ids){
+  const val = document.getElementById(`cteNum_${chave}`)?.value.trim();
+  const okSpan = document.getElementById(`cteOk_${chave}`);
   try {
-    await supabase.from('pedidos').update({ numero_cte: val||null, cte_emitido_em: val?new Date().toISOString():null }).eq('id', parseInt(pedidoId));
-    p.numeroCte = val||null; p.cteEmitidoEm = val?new Date().toISOString():null;
-    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFiscal', val?`✅ CTe ${val} registrada no pedido #${pedidoId}.`:`CTe removida do pedido #${pedidoId}.`, 'success');
-    renderizarEnvioDocsFiscal();
+    for (const id of ids){
+      await supabase.from('pedidos').update({ numero_cte: val||null, cte_emitido_em: val?new Date().toISOString():null }).eq('id', parseInt(id));
+      const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+      if (p){ p.numeroCte = val||null; p.cteEmitidoEm = val?new Date().toISOString():null; }
+    }
+    if (okSpan) okSpan.textContent = val ? `✅ CTe ${val}` : '';
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFiscal', val?`✅ CTe ${val} registrada (${ids.length} carro(s)).`:`CTe removida.`, 'success');
+    // NÃO re-renderiza o card inteiro (não fecha o container)
   } catch(e){ alert('Erro ao salvar CTe: '+(e.message||e)); }
 }
+
+// mantida por compatibilidade
+async function _salvarNumeroCte(pedidoId){ return _salvarNumeroCteGrupo('p'+pedidoId, [pedidoId]); }
 
 async function _enviarDocRota(rotaId, tipo){
   const input = document.getElementById((tipo==='cte'?'docCte_':'docMan_')+rotaId);
@@ -14861,6 +14945,16 @@ async function _enviarDocRota(rotaId, tipo){
       enviados++;
     }
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFiscal', `📄 ${enviados} ${tipo==='cte'?'CTe(s)':'manifesto(s)'} enviado(s) ao motorista.`, 'success');
+    // Notifica o motorista da rota que há novos documentos
+    const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
+    if (rota && rota.motorista_1 && typeof notificar === 'function'){
+      await notificar({
+        nome: rota.motorista_1, tipo: 'documento',
+        titulo: tipo==='cte' ? '🧾 CTe da sua viagem' : '📋 Manifesto da sua viagem',
+        mensagem: `O fiscal enviou ${enviados} ${tipo==='cte'?'CTe(s)':'manifesto(s)'} para a sua viagem ${rota.placa_cegonha||''}. Veja em Documentos da Viagem.`
+      });
+    }
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`✅ ${enviados} ${tipo==='cte'?'CTe(s)':'manifesto(s)'} enviado(s) ao motorista!`);
     renderizarEnvioDocsFiscal();
   } catch(e){ alert('Erro ao enviar: '+(e.message||e)); }
 }
@@ -15815,23 +15909,68 @@ function _planPedidosListaHTML(cor){
       : `Há ${semRotaGeral} pedido(s) sem rota no sistema, mas nenhum encaixa neste corredor (confira as paradas/cidades do corredor).`;
     return `<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">Nenhum pedido neste corredor.<br>${dica}<br><span style="font-size:.78rem">Arraste pedidos de outro corredor para cá, ou verifique as cidades do corredor.</span></p>`;
   }
-  return pedidos.map(p => {
+  return _planAgruparErenderizar(pedidos);
+}
+
+// Agrupa carros do mesmo pedido (grupo_id) num card só, expansível
+function _planAgruparErenderizar(pedidos){
+  const grupos = [];
+  const vistos = {};
+  pedidos.forEach(p => {
+    const chave = p.grupoId ? 'g'+p.grupoId : 'p'+p.id;
+    if (!vistos[chave]){ vistos[chave] = { chave, itens:[], lider:p }; grupos.push(vistos[chave]); }
+    vistos[chave].itens.push(p);
+  });
+
+  return grupos.map(g => {
+    const p = g.lider;
+    const multi = g.itens.length > 1;
     const indicado = p.corredorManualId ? ' <span class="plan-ped-tag" title="Direcionado a este corredor">📌</span>' : '';
-    return `
-    <div class="plan-pedido" draggable="true" data-pedido="${p.id}" ondragstart="_planDragStart(event,${p.id})">
+    const totalFrete = g.itens.reduce((s,x)=>s+Number(x.valorFrete||0),0);
+
+    if (!multi){
+      // card normal (1 carro)
+      return `<div class="plan-pedido" draggable="true" data-pedido="${p.id}" ondragstart="_planDragStart(event,${p.id})">
+        <div class="plan-pedido-top">
+          <span class="plan-pedido-id">#${p.id}</span>
+          <span class="plan-pedido-placa">${p.placa||'—'}</span>${indicado}
+          <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
+        </div>
+        <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''} ${_selosPedidoHTML(p)}</div>
+        <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
+        ${_planPedidoDatasHTML(p)}
+        <div class="plan-pedido-acoes">
+          <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover para outro corredor →</button>
+        </div>
+      </div>`;
+    }
+
+    // card AGRUPADO (múltiplos carros do mesmo pedido)
+    const idsGrupo = g.itens.map(x=>x.id);
+    return `<div class="plan-pedido plan-pedido-grupo" draggable="true" data-pedido="${p.id}" ondragstart="_planDragStartGrupo(event, [${idsGrupo.join(',')}])">
       <div class="plan-pedido-top">
         <span class="plan-pedido-id">#${p.id}</span>
-        <span class="plan-pedido-placa">${p.placa||'—'}</span>${indicado}
-        <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
+        <span class="plan-grupo-badge">🔗 ${g.itens.length} carros</span>${indicado}
+        <span class="plan-pedido-valor">${totalFrete?('R$ '+totalFrete.toLocaleString('pt-BR')):''}</span>
       </div>
-      <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''} ${_selosPedidoHTML(p)}</div>
+      <div class="plan-pedido-sub">${p.cliente||''} ${_selosPedidoHTML(p)}</div>
       <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
       ${_planPedidoDatasHTML(p)}
+      <details class="plan-grupo-det" onclick="event.stopPropagation()">
+        <summary>Ver os ${g.itens.length} carros</summary>
+        ${g.itens.map(x => `<div class="plan-grupo-carro">🚗 <strong>${x.placa||'—'}</strong> · ${x.modelo||''}</div>`).join('')}
+      </details>
       <div class="plan-pedido-acoes">
-        <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover para outro corredor →</button>
+        <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover o grupo para outro corredor →</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// Arrasta o grupo todo
+function _planDragStartGrupo(ev, ids){
+  ev.dataTransfer.setData('text/plain', JSON.stringify({ grupo: ids }));
+  ev.dataTransfer.effectAllowed = 'move';
 }
 
 // Datas do pedido: criação e entrega prevista (para priorização no planejamento)
@@ -15953,21 +16092,7 @@ function _linhaDoTempoPedidoHTML(p){
 function _planSemRotaListaHTML(){
   const pedidos = _planPedidosSemRota();
   if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido sem rota. Todos encaixaram em algum corredor.</p>';
-  return pedidos.map(p => `
-    <div class="plan-pedido" draggable="true" data-pedido="${p.id}" ondragstart="_planDragStart(event,${p.id})">
-      <div class="plan-pedido-top">
-        <span class="plan-pedido-id">#${p.id}</span>
-        <span class="plan-pedido-placa">${p.placa||'—'}</span>
-        <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
-      </div>
-      <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''} ${_selosPedidoHTML(p)}</div>
-      <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
-      ${_planPedidoDatasHTML(p)}
-      <div class="plan-pedido-acoes">
-        <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover para corredor →</button>
-      </div>
-      <div class="plan-pedido-hint">👉 ou arraste para um corredor à esquerda</div>
-    </div>`).join('');
+  return _planAgruparErenderizar(pedidos);
 }
 
 // Stubs do Bloco 1 (o drag & drop completo vem no Bloco 2)
@@ -16053,15 +16178,20 @@ function _planFiltrarBuscaCorredor(termo){
 async function _planMoverParaCorredor(pedidoId, corredorId){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
+  // move o grupo todo (carros do mesmo pedido) se houver grupo_id
+  const alvos = p.grupoId ? (pedidosGlobais||[]).filter(x => x.grupoId === p.grupoId) : [p];
   try {
-    await supabase.from('pedidos').update({ corredor_manual_id: parseInt(corredorId) }).eq('id', parseInt(pedidoId));
-    p.corredorManualId = parseInt(corredorId);
+    for (const alvo of alvos){
+      await supabase.from('pedidos').update({ corredor_manual_id: parseInt(corredorId) }).eq('id', parseInt(alvo.id));
+      alvo.corredorManualId = parseInt(corredorId);
+    }
     _planCorredorSel = corredorId; // segue o pedido pro corredor destino
     document.getElementById('modalBuscaCorredor')?.remove();
     renderizarPlanejamentoRotas();
     if (typeof exibirMensagem === 'function'){
       const c = (corredoresGlobais||[]).find(x => String(x.id)===String(corredorId));
-      exibirMensagem('mensagemLogistica', `🔀 Pedido #${pedidoId} movido para o corredor "${c?c.nome:''}".`, 'success');
+      const qtd = alvos.length > 1 ? ` (${alvos.length} carros)` : '';
+      exibirMensagem('mensagemLogistica', `🔀 Pedido #${pedidoId}${qtd} movido para o corredor "${c?c.nome:''}".`, 'success');
     }
   } catch(e){ alert('Erro ao mover pedido: '+(e.message||e)); }
 }
