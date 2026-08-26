@@ -9172,3 +9172,9 @@ html span.log-passo-bolinha {
 .cg-acao-btn { padding:6px 12px; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:8px; background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; font-size:.8rem; font-weight:600; cursor:pointer; transition:all .12s; }
 .cg-acao-btn:hover { border-color:#ff6a00; color:#ff6a00; }
 .cg-acao-del:hover { border-color:#ef4444; color:#ef4444; background:rgba(239,68,68,.08); }
+
+/* Item 9 — botões de ação na linha da tabela de pedidos */
+.cg-acoes-cel { white-space:nowrap; }
+.cg-acao-mini { background:none; border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:6px; padding:3px 7px; cursor:pointer; font-size:.82rem; margin:0 1px; transition:all .12s; }
+.cg-acao-mini:hover { border-color:#ff6a00; background:rgba(255,106,0,.08); }
+.cg-acao-mini-del:hover { border-color:#ef4444; background:rgba(239,68,68,.1); }
