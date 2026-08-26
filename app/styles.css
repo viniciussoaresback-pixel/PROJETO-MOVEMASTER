@@ -998,7 +998,8 @@ body::after {
 .login-overlay {
     position: fixed;
     inset: 0;
-    background:
+    background-color: #050507;
+    background-image:
         linear-gradient(rgba(5,5,7,0.62), rgba(5,5,7,0.70)),
         var(--hero-image, none);
     background-size: cover, cover;
@@ -7302,6 +7303,16 @@ input:focus, select:focus, textarea:focus {
    Reaplica os tokens escuros só dentro dessas telas + desfaz
    os overrides de logo e inputs que vieram do modo claro.
    ============================================================ */
+/* A tela de login/acesso deve ficar SEMPRE escura (foto nítida), mesmo no modo claro.
+   Sem isso, o brightness(1.5) do body no modo claro lavava a foto de fundo. */
+[data-tema="claro"] .login-overlay {
+    background:
+        linear-gradient(rgba(5,5,7,0.62), rgba(5,5,7,0.70)),
+        var(--hero-image, none) !important;
+    background-size: cover, cover !important;
+    background-position: center, center !important;
+}
+
 [data-tema="claro"] .login-overlay {
     --surface-0: #0a0a0c;
     --surface-1: #14141a;
