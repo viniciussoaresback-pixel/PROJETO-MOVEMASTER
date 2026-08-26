@@ -14623,7 +14623,7 @@ function renderizarRomaneiosMotorista(){
   if (typeof nomesDoMotoristaLogado === 'function'){
     const { nomes } = nomesDoMotoristaLogado();
     minhas = (rotasGlobais||[]).filter(r => r.carga_enviada_em && r.status !== 'concluida' && r.status !== 'cancelada' &&
-      nomes.has((r.motorista_1||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()));
+      nomes.has(normNomeMotorista(r.motorista_1||'')));
   }
   if (minhas.length === 0){ cont.innerHTML = '<p class="text-muted">Nenhuma carga enviada para você no momento.</p>'; return; }
   cont.innerHTML = minhas.map(r => `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:12px;padding:14px;margin-bottom:12px">${_romaneioHTML(r.id)}<div style="margin-top:10px"><button class="btn btn-secondary btn-sm" onclick="_gerarPdfRomaneio(${r.id})">📄 Baixar PDF</button></div></div>`).join('');
@@ -14655,7 +14655,7 @@ function renderizarDocsMotorista(){
     const { nomes } = nomesDoMotoristaLogado();
     rotasAtivas = (rotasGlobais||[]).filter(r =>
       r.status !== 'concluida' && r.status !== 'cancelada' &&
-      nomes.has((r.motorista_1||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()));
+      nomes.has(normNomeMotorista(r.motorista_1||'')));
   }
   const rotaIds = rotasAtivas.map(r => String(r.id));
   const docs = (documentosRotaGlobais||[]).filter(d => rotaIds.includes(String(d.rota_id)));
@@ -14683,7 +14683,7 @@ function renderizarViagensMotorista(){
     const { nomes } = nomesDoMotoristaLogado();
     viagens = (rotasGlobais||[]).filter(r =>
       r.status === 'concluida' &&
-      nomes.has((r.motorista_1||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()));
+      nomes.has(normNomeMotorista(r.motorista_1||'')));
   }
   if (viagens.length === 0){ cont.innerHTML = '<p class="text-muted">Você ainda não tem viagens concluídas.</p>'; return; }
   viagens.sort((a,b)=>(b.data_saida||'').localeCompare(a.data_saida||''));
@@ -15863,20 +15863,28 @@ function _planSelAprovacao(){ _planCorredorSel = '__aprovacao__'; renderizarPlan
 
 // Lista de pedidos aguardando aprovação — com botão aprovar
 function _planAprovacaoListaHTML(){
-  const pedidos = _planPedidosAguardandoAprovacao();
-  if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando aprovação.</p>';
-  return pedidos.map(p => `<div class="plan-aprov-card" draggable="true" ondragstart="_planDragStart(event, ${p.id})">
-    <div class="plan-aprov-top">
-      <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
-      <span class="plan-aprov-selo">⏳ Aguardando</span>
-    </div>
-    <div class="plan-aprov-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
-    ${_planPedidoDatasHTML(p)}
-    <div class="plan-aprov-acoes">
-      <button class="plan-aprov-btn" onclick="_aprovarPedido(${p.id})">✅ Aprovar pedido</button>
-    </div>
-    <div class="plan-aprov-hint">👉 aprovar joga no fluxo. Ou arraste direto para um corredor (também aprova).</div>
-  </div>`).join('');
+  try {
+    const pedidos = _planPedidosAguardandoAprovacao();
+    if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando aprovação.</p>';
+    return pedidos.map(p => {
+      let datasHTML = '';
+      try { datasHTML = _planPedidoDatasHTML(p); } catch(e){ datasHTML = ''; }
+      return `<div class="plan-aprov-card" draggable="true" ondragstart="_planDragStart(event, ${p.id})">
+        <div class="plan-aprov-top">
+          <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
+          <span class="plan-aprov-selo">⏳ Aguardando</span>
+        </div>
+        <div class="plan-aprov-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
+        ${datasHTML}
+        <div class="plan-aprov-acoes">
+          <button class="plan-aprov-btn" onclick="_aprovarPedido(${p.id})">✅ Aprovar pedido</button>
+        </div>
+        <div class="plan-aprov-hint">👉 aprovar joga no fluxo. Ou arraste direto para um corredor (também aprova).</div>
+      </div>`;
+    }).join('');
+  } catch(e){
+    return '<p class="text-muted" style="padding:1rem">Erro ao carregar a lista. Recarregue a página (Ctrl+Shift+R).</p>';
+  }
 }
 
 // Aprova o pedido — entra no fluxo normal
