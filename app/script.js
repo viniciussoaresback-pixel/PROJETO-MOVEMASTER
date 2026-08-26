@@ -14059,6 +14059,7 @@ function abrirFecharEnviarCarga(rotaId){
         <span><strong>#${p.id}</strong> · <strong>${p.placa||'—'}</strong> ${p.modelo?('· '+p.modelo):''}</span>
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
+      ${p.cliente?`<div class="rm-carro-cliente">👤 ${p.cliente}</div>`:''}
       <details class="rm-patio-det">
         <summary>🅿️ Selecionar pátio</summary>
         <div class="rm-patio-chips">${chips}</div>
@@ -14183,6 +14184,7 @@ function _gerarPdfRomaneio(rotaId){
   const linhas = carros.map(p => `
     <tr>
       <td>#${p.id}</td><td><strong>${p.placa||'—'}</strong></td><td>${p.modelo||'—'}</td>
+      <td>${p.cliente||'—'}</td>
       <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
       <td>${p._local||'—'}</td>
     </tr>`).join('');
@@ -14194,7 +14196,7 @@ function _gerarPdfRomaneio(rotaId){
     </div>
     <h3>Veículos da carga</h3>
     <table>
-      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Onde está o carro</th></tr></thead>
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Onde está o carro</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     <div class="totalgeral">Total: ${carros.length} veículo(s)</div>`;
