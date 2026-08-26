@@ -9346,3 +9346,14 @@ html span.log-passo-bolinha {
 .histrelat-tab thead th { text-align:left; font-size:.66rem; text-transform:uppercase; letter-spacing:.3px; color:var(--text-muted,#9ca3af); font-weight:700; padding:8px; border-bottom:1px solid var(--border,rgba(255,255,255,.12)); position:sticky; top:0; background:var(--surface-1,#14141a); }
 .histrelat-tab td { padding:8px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
 .histrelat-tab tbody tr:hover { background:var(--surface-2,rgba(255,255,255,.02)); }
+
+/* Cidade destacada no autocomplete de cliente */
+.cai-cidade { font-size:.75rem; color:#ff6a00; font-weight:600; margin-left:6px; }
+
+/* Planejamento — card de grupo (múltiplos carros do mesmo pedido) */
+.plan-pedido-grupo { border-left:3px solid #ff6a00; }
+.plan-grupo-badge { background:rgba(255,106,0,.15); color:#ff6a00; font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:999px; }
+.plan-grupo-det { margin:6px 0; }
+.plan-grupo-det summary { font-size:.76rem; color:var(--text-secondary,#9ca3af); cursor:pointer; padding:2px 0; }
+.plan-grupo-det summary:hover { color:#ff6a00; }
+.plan-grupo-carro { font-size:.78rem; padding:3px 0 3px 12px; color:var(--text-secondary,#9ca3af); }
