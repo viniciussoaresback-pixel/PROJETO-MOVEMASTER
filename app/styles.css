@@ -9127,3 +9127,48 @@ html span.log-passo-bolinha {
 .rm-toast.sai { animation:rmToastOut .4s ease forwards; }
 @keyframes rmToastIn { from { opacity:0; transform:translate(-50%,-16px); } to { opacity:1; transform:translate(-50%,0); } }
 @keyframes rmToastOut { to { opacity:0; transform:translate(-50%,-16px); } }
+
+/* Item 5 — Área Fiscal mais bonita */
+.fisc-card { border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:14px; padding:16px 18px; margin-bottom:14px; background:var(--surface-1,rgba(255,255,255,.02)); }
+.fisc-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.fisc-cegonha { font-weight:700; font-size:1rem; }
+.fisc-rota-nome { color:var(--text-secondary,#9ca3af); font-weight:500; font-size:.86rem; margin-left:6px; }
+.fisc-status { font-size:.72rem; font-weight:700; padding:2px 10px; border-radius:999px; }
+.fisc-motorista { font-size:.82rem; color:var(--text-secondary,#9ca3af); margin-top:4px; }
+.fisc-docs-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+@media (max-width:640px){ .fisc-docs-grid { grid-template-columns:1fr; } }
+.fisc-doc-box { border:1px solid var(--border-soft,rgba(255,255,255,.07)); border-radius:10px; padding:12px; background:var(--surface-2,rgba(255,255,255,.02)); }
+.fisc-doc-tit { font-weight:700; font-size:.85rem; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+.fisc-badge { background:#22c55e; color:#fff; font-size:.68rem; padding:1px 7px; border-radius:999px; }
+.fisc-upload { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.fisc-file { font-size:.76rem; flex:1; min-width:120px; }
+.fisc-arquivos { margin-top:8px; display:flex; flex-direction:column; gap:4px; }
+.fisc-arq { display:flex; align-items:center; gap:8px; padding:4px 8px; background:var(--surface-1,rgba(255,255,255,.03)); border-radius:6px; }
+.fisc-arq-link { color:#60a5fa; font-size:.78rem; text-decoration:none; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fisc-arq-del { background:none; border:none; cursor:pointer; font-size:.8rem; opacity:.6; }
+.fisc-arq-del:hover { opacity:1; }
+.fisc-vazio { font-size:.75rem; color:var(--text-tertiary,#6b7280); margin-top:8px; font-style:italic; }
+
+/* Item 1 — aguardando aprovação */
+.plan-corr-aprovacao { border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.06); }
+.plan-corr-aprovacao.sel { border-color:#f59e0b; background:rgba(245,158,11,.12); }
+.plan-corr-aprovacao .plan-corr-nome { color:#f59e0b; }
+.plan-aprov-card { border:1px solid rgba(245,158,11,.25); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--surface-1,rgba(255,255,255,.02)); }
+.plan-aprov-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.plan-aprov-selo { font-size:.72rem; font-weight:700; color:#f59e0b; background:rgba(245,158,11,.12); padding:2px 8px; border-radius:999px; white-space:nowrap; }
+.plan-aprov-sub { font-size:.82rem; color:var(--text-secondary,#9ca3af); margin:2px 0 8px; }
+.plan-aprov-acoes { margin-top:8px; }
+.plan-aprov-btn { width:100%; padding:8px; border:none; border-radius:8px; background:#22c55e; color:#fff; font-weight:700; font-size:.8rem; cursor:pointer; }
+.plan-aprov-btn:hover { filter:brightness(1.1); }
+.plan-aprov-hint { font-size:.72rem; color:var(--text-tertiary,#6b7280); margin-top:6px; text-align:center; }
+.aprov-opt { display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:14px; margin-bottom:10px; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:10px; background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; cursor:pointer; transition:border-color .15s, background .15s; }
+.aprov-opt:hover { border-color:#ff6a00; background:rgba(255,106,0,.06); }
+.aprov-ic { font-size:1.5rem; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:10px; flex:0 0 auto; }
+.aprov-tit { font-weight:700; font-size:.9rem; }
+.aprov-sub { font-size:.78rem; color:var(--text-secondary,#9ca3af); }
+
+/* Item 9 — ações no rastreio comercial */
+.cg-rastreio-acoes { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
+.cg-acao-btn { padding:6px 12px; border:1px solid var(--border,rgba(255,255,255,.15)); border-radius:8px; background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; font-size:.8rem; font-weight:600; cursor:pointer; transition:all .12s; }
+.cg-acao-btn:hover { border-color:#ff6a00; color:#ff6a00; }
+.cg-acao-del:hover { border-color:#ef4444; color:#ef4444; background:rgba(239,68,68,.08); }
