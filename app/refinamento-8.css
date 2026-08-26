@@ -1,0 +1,218 @@
+/* MoveMaster — Refinamento 8
+   (1) Densidade e respiro: escala de espaçamento consistente
+   (7) Modo escuro afinado: cinza-carvão em vez de preto puro
+   Somente estética. Nada de lógica. */
+
+:root {
+  --esp-1: 8px;
+  --esp-2: 16px;
+  --esp-3: 24px;
+  --esp-4: 32px;
+}
+
+/* ============ (1) DENSIDADE E RESPIRO ============ */
+
+.tab-content,
+.tab-content.ativo,
+main,
+.conteudo,
+.container {
+  padding-left: var(--esp-3);
+  padding-right: var(--esp-3);
+}
+
+.tab-content > * + * {
+  margin-top: var(--esp-3);
+}
+
+/* Blocos principais respiram igual */
+.dash-card,
+.card,
+.painel,
+.bloco,
+.secao,
+form,
+fieldset {
+  padding: var(--esp-3);
+}
+
+.cg-kpi {
+  padding: var(--esp-2) var(--esp-3);
+}
+
+/* Grades com gutter uniforme */
+.dash-grid,
+.cards,
+.kpi-grid,
+.cg-kpis,
+.grid,
+.form-row {
+  gap: var(--esp-2);
+}
+
+/* Formulários: ritmo vertical previsível */
+.form-group {
+  margin-bottom: var(--esp-2);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  line-height: 1.35;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 10px 12px;
+}
+
+/* Títulos de seção com respiro acima e pouco abaixo */
+h1, h2, h3 {
+  line-height: 1.25;
+  margin-top: 0;
+  margin-bottom: var(--esp-1);
+}
+
+h2 + p,
+h3 + p {
+  margin-top: 0;
+}
+
+/* Tabelas: respiro interno e distância do que vem antes */
+.tabela-scroll,
+.table-wrap,
+table {
+  margin-top: var(--esp-2);
+}
+
+table th,
+table td {
+  padding: 10px 14px;
+}
+
+/* Barras de ação e rodapés de modal */
+.acoes,
+.form-actions,
+.modal-footer {
+  gap: var(--esp-1);
+  margin-top: var(--esp-3);
+}
+
+.modal-body,
+.modal-content {
+  padding: var(--esp-3);
+}
+
+@media (max-width: 640px) {
+  .tab-content,
+  .tab-content.ativo,
+  main,
+  .conteudo,
+  .container {
+    padding-left: var(--esp-2);
+    padding-right: var(--esp-2);
+  }
+
+  .dash-card,
+  .card,
+  .painel,
+  .bloco,
+  .secao,
+  form,
+  .modal-body,
+  .modal-content {
+    padding: var(--esp-2);
+  }
+}
+
+/* ============ (7) MODO ESCURO AFINADO ============ */
+/* Carvão em camadas: fundo < superfície < superfície elevada */
+
+html:not([data-tema="claro"]) body {
+  background-color: #14161a;
+  color: #e7e9ee;
+}
+
+html:not([data-tema="claro"]) header,
+html:not([data-tema="claro"]) .topbar,
+html:not([data-tema="claro"]) nav {
+  background-color: #191c21;
+  border-bottom: 1px solid #24282f;
+}
+
+html:not([data-tema="claro"]) .dash-card,
+html:not([data-tema="claro"]) .card,
+html:not([data-tema="claro"]) .painel,
+html:not([data-tema="claro"]) .bloco,
+html:not([data-tema="claro"]) .cg-kpi,
+html:not([data-tema="claro"]) .modal-content,
+html:not([data-tema="claro"]) fieldset {
+  background-color: #1c2027;
+  border: 1px solid #262b33;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+html:not([data-tema="claro"]) .cg-kpi * {
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+html:not([data-tema="claro"]) table {
+  background-color: #1c2027;
+}
+
+html:not([data-tema="claro"]) table thead th {
+  background-color: #232830;
+  color: #cfd4dd;
+  border-bottom: 1px solid #2d333c;
+}
+
+html:not([data-tema="claro"]) table tbody tr {
+  border-bottom: 1px solid #23272e;
+}
+
+html:not([data-tema="claro"]) table tbody tr:nth-child(even) {
+  background-color: #1f232a;
+}
+
+html:not([data-tema="claro"]) table tbody tr:hover {
+  background-color: #262b33;
+}
+
+html:not([data-tema="claro"]) input,
+html:not([data-tema="claro"]) select,
+html:not([data-tema="claro"]) textarea {
+  background-color: #171a1f;
+  border: 1px solid #2b313a;
+  color: #e7e9ee;
+}
+
+html:not([data-tema="claro"]) input:focus,
+html:not([data-tema="claro"]) select:focus,
+html:not([data-tema="claro"]) textarea:focus {
+  border-color: #ff7a1a;
+  box-shadow: 0 0 0 3px rgba(255, 122, 26, 0.18);
+  outline: none;
+}
+
+html:not([data-tema="claro"]) label,
+html:not([data-tema="claro"]) .cg-kpi-lbl,
+html:not([data-tema="claro"]) .muted,
+html:not([data-tema="claro"]) small {
+  color: #a6adba;
+}
+
+html:not([data-tema="claro"]) hr,
+html:not([data-tema="claro"]) .divisor {
+  border-color: #262b33;
+}
+
+html:not([data-tema="claro"]) ::-webkit-scrollbar-track {
+  background: #14161a;
+}
+
+html:not([data-tema="claro"]) ::-webkit-scrollbar-thumb {
+  background: #333a44;
+}
