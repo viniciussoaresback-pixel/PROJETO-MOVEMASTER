@@ -16345,7 +16345,7 @@ function renderizarVisaoGlobal(){
               <span class="cg-corr-nome">${c.nome}</span>
               <span class="cg-corr-chevron">›</span>
             </div>
-            <div class="cg-corr-total" style="color:${cor}">● ${c.aguardando} aguardando transporte</div>
+            <div class="cg-corr-total" style="color:#f59e0b">● ${c.aguardando} aguardando transporte</div>
             <div class="cg-corr-detalhe">
               <div><span class="cg-dot" style="background:#2563eb"></span> ${c.emViagem} já em viagem</div>
             </div>
@@ -16564,7 +16564,7 @@ function renderizarComercialPedidos(){
 
     <div class="cg-tabela-wrap">
       <table class="cg-tabela">
-        <thead><tr><th>Pedido</th><th> Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Lançado</th><th></th></tr></thead>
+        <thead><tr><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Lançado</th><th>Ações</th></tr></thead>
         <tbody>
           ${pagina.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum pedido encontrado.</td></tr>' :
             pagina.map(p => {
@@ -16579,7 +16579,11 @@ function renderizarComercialPedidos(){
                 <td>${rota ? (rota.nome||('R-'+rota.id)) : '—'}</td>
                 <td>${_cgStatusPill(p)}</td>
                 <td class="cg-sub">${_dataLancamentoFmt(p)}</td>
-                <td class="cg-chevron">›</td>
+                <td class="cg-acoes-cel" onclick="event.stopPropagation()">
+                  <button class="cg-acao-mini" onclick="abrirEdicaoPedido(${p.id})" title="Editar">✏️</button>
+                  <button class="cg-acao-mini" onclick="abrirHistorico(${p.id})" title="Histórico">📜</button>
+                  <button class="cg-acao-mini cg-acao-mini-del" onclick="excluirPedido(${p.id})" title="Excluir">🗑️</button>
+                </td>
               </tr>`;
             }).join('')}
         </tbody>
@@ -16608,21 +16612,15 @@ async function _cgAbrirRastreio(pedidoId){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
   const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
-  // Pode haver vários #cgRastreioOverlay no DOM (Pedidos, Viagem, etc).
-  // Usa o que estiver dentro de um painel atualmente visível (o último visível).
-  let overlay = null;
-  const todos = [...document.querySelectorAll('#cgRastreioOverlay')];
-  for (const o of todos){
-    // está dentro de um container visível?
-    let el = o, visivel = true;
-    while (el && el !== document.body){
-      const st = window.getComputedStyle(el);
-      if (st.display === 'none' || st.visibility === 'hidden'){ visivel = false; break; }
-      el = el.parentElement;
-    }
-    if (visivel) overlay = o; // pega o último visível
+  // Overlay ÚNICO dedicado no body (evita conflito de IDs duplicados e z-index de painéis).
+  let overlay = document.getElementById('cgRastreioOverlayGlobal');
+  if (!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'cgRastreioOverlayGlobal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100050;pointer-events:none';
+    document.body.appendChild(overlay);
   }
-  if (!overlay) overlay = todos[0];
+  overlay.style.pointerEvents = 'auto';
   if (!overlay) return;
 
   // busca o histórico real do banco
@@ -16685,6 +16683,8 @@ async function _cgAbrirRastreio(pedidoId){
   overlay.classList.add('aberto');
 }
 function _cgFecharRastreio(){
+  const g = document.getElementById('cgRastreioOverlayGlobal');
+  if (g){ g.classList.remove('aberto'); g.innerHTML = ''; g.style.pointerEvents = 'none'; }
   const overlay = document.getElementById('cgRastreioOverlay');
   if (overlay){ overlay.classList.remove('aberto'); overlay.innerHTML = ''; }
 }
