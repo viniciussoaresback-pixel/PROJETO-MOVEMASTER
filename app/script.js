@@ -10786,9 +10786,28 @@ function _renderCorredores(){
         <span class="text-muted">${c.origem} → ${c.destino} · SLA ${c.sla_horas}h</span>
         <span class="corredor-seq">🛣️ ${seq}</span>
       </div>
-      <button class="btn btn-sm btn-secondary" onclick="excluirCorredor(${c.id})">🗑️ Excluir</button>
+      <div class="corredor-acoes">
+        <button class="btn btn-sm btn-secondary" onclick="_editarNomeCorredor(${c.id})">✏️ Nome</button>
+        <button class="btn btn-sm btn-secondary" onclick="excluirCorredor(${c.id})">🗑️ Excluir</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+// Editar o nome de um corredor (caso tenha digitado errado)
+async function _editarNomeCorredor(id){
+  const c = (corredoresGlobais||[]).find(x => String(x.id)===String(id));
+  if (!c) return;
+  const novo = prompt(`Editar o nome do corredor:`, c.nome || '');
+  if (novo === null) return;
+  const nome = novo.trim();
+  if (!nome){ alert('O nome não pode ficar vazio.'); return; }
+  try {
+    await supabase.from('corredores').update({ nome }).eq('id', id);
+    c.nome = nome;
+    _renderCorredores();
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemCorredor', `✅ Nome do corredor atualizado para "${nome}".`, 'success');
+  } catch(e){ alert('Erro ao editar: '+(e.message||e)); }
 }
 
 async function salvarCorredor(){
@@ -14028,18 +14047,23 @@ function abrirFecharEnviarCarga(rotaId){
   const linhaEdit = (p) => {
     // pré-preenche com: local já definido > pátio atual > endereço de coleta do lançamento
     const local = p.localCarro || p.patioAtual || p.enderecoColeta || '';
-    const ehPatioFixo = PATIOS_FIXOS.includes(local);
-    const chips = PATIOS_FIXOS.map(pt =>
-      `<button type="button" class="rm-patio-chip ${local===pt?'sel':''}" data-patio="${pt.replace(/"/g,'&quot;')}" onclick="_rmSelecionarPatio(${p.id}, '${pt.replace(/'/g,"\\'")}')">${_labelPatio(pt)}</button>`
-    ).join('');
+    // detecta se o local salvo corresponde a um pátio (pelo valor real OU pelo label)
+    const patioReal = PATIOS_FIXOS.find(pt => local === pt || local === _labelPatio(pt).replace('🅿️ ',''));
+    const ehPatioFixo = !!patioReal;
+    const chips = PATIOS_FIXOS.map(pt => {
+      const lbl = _labelPatio(pt).replace('🅿️ ',''); // ex: "PÁTIO MARINGÁ"
+      return `<button type="button" class="rm-patio-chip ${ehPatioFixo && patioReal===pt?'sel':''}" data-patio="${lbl.replace(/"/g,'&quot;')}" onclick="_rmSelecionarPatio(${p.id}, '${lbl.replace(/'/g,"\\'")}')">🅿️ ${lbl.replace('PÁTIO ','')}</button>`;
+    }).join('');
     return `<div class="rm-carro" id="rmCarro_${p.id}">
       <div class="rm-carro-head">
         <span><strong>#${p.id}</strong> · <strong>${p.placa||'—'}</strong> ${p.modelo?('· '+p.modelo):''}</span>
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
-      <div class="rm-patio-lbl">🅿️ Selecione o pátio (ou deixe o endereço abaixo):</div>
-      <div class="rm-patio-chips">${chips}</div>
-      <input type="text" id="rmLocal_${p.id}" value="${(local||'').replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input" oninput="_rmLocalDigitado(${p.id})">
+      <details class="rm-patio-det">
+        <summary>🅿️ Selecionar pátio</summary>
+        <div class="rm-patio-chips">${chips}</div>
+      </details>
+      <input type="text" id="rmLocal_${p.id}" value="${(ehPatioFixo ? _labelPatio(patioReal).replace('🅿️ ','') : local).replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input" oninput="_rmLocalDigitado(${p.id})">
       <input type="hidden" id="rmPatio_${p.id}" value="${ehPatioFixo?'1':'0'}">
       <div class="rm-local-hint">📍 Endereço vindo do lançamento — clique num pátio ou edite o endereço se o carro estiver em local diferente.</div>
     </div>`;
@@ -14084,7 +14108,8 @@ function _rmLocalDigitado(pedidoId){
   const cont = document.getElementById('rmCarro_'+pedidoId);
   if (!input || !cont) return;
   const val = input.value.trim();
-  const ehPatio = PATIOS_FIXOS.includes(val);
+  // reconhece "PÁTIO X" (label) como pátio
+  const ehPatio = PATIOS_FIXOS.some(pt => _labelPatio(pt).replace('🅿️ ','') === val);
   cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.getAttribute('data-patio') === val));
   const hidden = document.getElementById('rmPatio_'+pedidoId);
   if (hidden) hidden.value = ehPatio ? '1' : '0';
@@ -14314,32 +14339,41 @@ function renderizarEnvioDocsFiscal(){
     const listaDocs = (arr, cor) => arr.length === 0
       ? '<div class="fisc-vazio">Nenhum arquivo enviado ainda.</div>'
       : `<div class="fisc-arquivos">${arr.map(d => `<div class="fisc-arq"><a href="${d.url}" target="_blank" class="fisc-arq-link">📎 ${d.nome_arquivo||'documento'}</a><button class="fisc-arq-del" onclick="_excluirDocRota(${d.id})" title="Excluir">🗑️</button></div>`).join('')}</div>`;
-    return `<div class="fisc-card">
-      <div class="fisc-card-head">
-        <div class="fisc-cegonha">🚛 ${r.placa_cegonha} <span class="fisc-rota-nome">${r.nome||('rota #'+r.id)}</span></div>
-        <span class="fisc-status" style="background:${stCor}22;color:${stCor};border:1px solid ${stCor}55">${stLabel}</span>
-      </div>
-      ${r.motorista_1?`<div class="fisc-motorista">👤 ${r.motorista_1}</div>`:''}
-      <div class="fisc-docs-grid">
-        <div class="fisc-doc-box">
-          <div class="fisc-doc-tit">📋 Manifestos ${mans.length?`<span class="fisc-badge">${mans.length}</span>`:''}</div>
-          <div class="fisc-upload">
-            <input type="file" id="docMan_${r.id}" accept="application/pdf" multiple class="fisc-file">
-            <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'manifesto')">📤 Enviar</button>
-          </div>
-          ${listaDocs(mans)}
+    const totalDocs = mans.length + ctes.length;
+    return `<details class="fisc-card fisc-card-det">
+      <summary class="fisc-card-summary">
+        <div class="fisc-sum-esq">
+          <span class="fisc-cegonha">🚛 ${r.placa_cegonha}</span>
+          <span class="fisc-rota-nome">${r.nome||('rota #'+r.id)}</span>
+          ${r.motorista_1?`<span class="fisc-sum-mot">👤 ${r.motorista_1}</span>`:''}
         </div>
-        <div class="fisc-doc-box">
-          <div class="fisc-doc-tit">🧾 CTes ${ctes.length?`<span class="fisc-badge">${ctes.length}</span>`:''}</div>
-          <div class="fisc-upload">
-            <input type="file" id="docCte_${r.id}" accept="application/pdf" multiple class="fisc-file">
-            <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'cte')">📤 Enviar</button>
-          </div>
-          ${listaDocs(ctes)}
+        <div class="fisc-sum-dir">
+          ${totalDocs?`<span class="fisc-sum-badge">📎 ${totalDocs}</span>`:''}
+          <span class="fisc-status" style="background:${stCor}22;color:${stCor};border:1px solid ${stCor}55">${stLabel}</span>
         </div>
+      </summary>
+      <div class="fisc-card-corpo">
+        <div class="fisc-docs-grid">
+          <div class="fisc-doc-box">
+            <div class="fisc-doc-tit">📋 Manifestos ${mans.length?`<span class="fisc-badge">${mans.length}</span>`:''}</div>
+            <div class="fisc-upload">
+              <input type="file" id="docMan_${r.id}" accept="application/pdf" multiple class="fisc-file">
+              <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'manifesto')">📤 Enviar</button>
+            </div>
+            ${listaDocs(mans)}
+          </div>
+          <div class="fisc-doc-box">
+            <div class="fisc-doc-tit">🧾 CTes ${ctes.length?`<span class="fisc-badge">${ctes.length}</span>`:''}</div>
+            <div class="fisc-upload">
+              <input type="file" id="docCte_${r.id}" accept="application/pdf" multiple class="fisc-file">
+              <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'cte')">📤 Enviar</button>
+            </div>
+            ${listaDocs(ctes)}
+          </div>
+        </div>
+        ${_fiscalNumerosCteHTML(r.id)}
       </div>
-      ${_fiscalNumerosCteHTML(r.id)}
-    </div>`;
+    </details>`;
   }).join('');
 }
 
