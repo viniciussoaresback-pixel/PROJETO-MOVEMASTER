@@ -16276,11 +16276,16 @@ function _planViagemPreencheMot(){
 }
 
 async function _planConfirmarViagem(corId){
+  if (window._criandoViagem){ return; } // trava anti-duplo-clique
   const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(corId));
   const ids = [...document.querySelectorAll('.plan-viagem-ped:checked')].map(c => parseInt(c.value));
   const cegonha = document.getElementById('planViagemCegonha')?.value || null;
   const motorista = document.getElementById('planViagemMotorista')?.value.trim() || null;
   if (ids.length === 0 && !cegonha){ alert('Para criar a rota, selecione ao menos um pedido OU escolha o veículo.'); return; }
+  window._criandoViagem = true;
+  // desabilita o botão visualmente
+  const btnCriar = document.querySelector('#modalPlanViagem .btn-primary, [onclick^="_planConfirmarViagem"]');
+  if (btnCriar){ btnCriar.disabled = true; btnCriar.textContent = '⏳ Criando...'; }
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
     // cria a rota
@@ -16313,6 +16318,7 @@ async function _planConfirmarViagem(corId){
       }
     }, 400);
   } catch(e){ alert('Erro ao criar viagem: '+(e.message||e)); }
+  finally { window._criandoViagem = false; }
 }
 
 // Puxar um pedido (sem rota ou aguardando transbordo) para dentro de uma viagem em andamento
