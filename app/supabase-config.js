@@ -461,6 +461,9 @@ function aplicarPermissoes(perfil) {
     const cardCli = document.getElementById('cardCadastroClientes');
     if (cardCli) cardCli.style.display = '';
 
+    // Sub-abas do Painel: por padrão TODAS visíveis (restaura caso o fiscal tenha escondido)
+    document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => { b.style.display = ''; });
+
     // Fiscal: dentro do Painel, vê apenas a sub-aba "Histórico de Cargas"
     if (perfil === 'fiscal') {
         setTimeout(() => {
@@ -473,6 +476,13 @@ function aplicarPermissoes(perfil) {
             const btnHist = [...document.querySelectorAll('.painel-subtabs .cad-subtab-btn')]
                 .find(b => (b.getAttribute('onclick')||'').includes("'historico'"));
             if (btnHist && typeof mostrarViewPainel === 'function') mostrarViewPainel('historico', btnHist);
+        }, 700);
+    } else {
+        // Não-fiscal: garante que o painel volte à sub-aba padrão (Planejamento)
+        setTimeout(() => {
+            const btnPlan = [...document.querySelectorAll('.painel-subtabs .cad-subtab-btn')]
+                .find(b => (b.getAttribute('onclick')||'').includes("'planejamento'"));
+            if (btnPlan && typeof mostrarViewPainel === 'function') mostrarViewPainel('planejamento', btnPlan);
         }, 700);
     }
 
