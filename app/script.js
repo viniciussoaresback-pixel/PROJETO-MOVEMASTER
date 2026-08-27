@@ -5853,20 +5853,24 @@ async function responderOcorrencia(ocorrenciaId, pedidoId) {
 // ============================================
 
 const CAMPOS_EDITAVEIS = [
-    { k: 'cliente',        label: 'Cliente',            tipo: 'text' },
-    { k: 'modelo',         label: 'Modelo',             tipo: 'text' },
-    { k: 'placa',          label: 'Placa',              tipo: 'text' },
-    { k: 'cidadeOrigem',   label: 'Cidade Origem',      tipo: 'text',   col: 'cidade_origem' },
-    { k: 'ufOrigem',       label: 'UF Origem',          tipo: 'text',   col: 'uf_origem' },
-    { k: 'cidadeDestino',  label: 'Cidade Destino',     tipo: 'text',   col: 'cidade_destino' },
-    { k: 'ufDestino',      label: 'UF Destino',         tipo: 'text',   col: 'uf_destino' },
-    { k: 'valorFrete',     label: 'Valor do Frete (R$)',tipo: 'number', col: 'valor_frete' },
-    { k: 'dataPrevColeta', label: 'Coleta Prevista',    tipo: 'datetime-local', col: 'data_prev_coleta' },
-    { k: 'dataPrevEntrega',label: 'Entrega Prevista',   tipo: 'datetime-local', col: 'data_prev_entrega' },
-    { k: 'referencia',     label: 'Referência (OC/ID)', tipo: 'text',   col: 'referencia' },
-    { k: 'categoriaVeiculo', label: 'Categoria (hatch/sedan/suv/caminhonete)', tipo: 'text', col: 'categoria_veiculo' },
-    { k: 'prazoEntregaEstimado', label: 'Prazo de Entrega Estimado', tipo: 'date', col: 'prazo_entrega_estimado' },
-    { k: 'observacaoPedido',label: 'Observações',       tipo: 'text',   col: 'observacao_pedido' }
+    { k: 'cliente',        label: 'Cliente',            tipo: 'text',   sec: 'Cliente' },
+    { k: 'referencia',     label: 'Referência (OC/ID)', tipo: 'text',   col: 'referencia', sec: 'Cliente' },
+    { k: 'modelo',         label: 'Modelo',             tipo: 'text',   sec: 'Veículo' },
+    { k: 'placa',          label: 'Placa',              tipo: 'text',   sec: 'Veículo' },
+    { k: 'categoriaVeiculo', label: 'Categoria (hatch/sedan/suv/caminhonete)', tipo: 'text', col: 'categoria_veiculo', sec: 'Veículo' },
+    { k: 'cidadeOrigem',   label: 'Cidade Origem',      tipo: 'text',   col: 'cidade_origem', sec: 'Origem' },
+    { k: 'ufOrigem',       label: 'UF Origem',          tipo: 'text',   col: 'uf_origem', sec: 'Origem' },
+    { k: 'enderecoColeta', label: 'Endereço de Coleta', tipo: 'text',   col: 'endereco_coleta', sec: 'Origem' },
+    { k: 'cnpjColeta',     label: 'CNPJ do local de coleta', tipo: 'text', col: 'cnpj_coleta', sec: 'Origem' },
+    { k: 'cidadeDestino',  label: 'Cidade Destino',     tipo: 'text',   col: 'cidade_destino', sec: 'Destino' },
+    { k: 'ufDestino',      label: 'UF Destino',         tipo: 'text',   col: 'uf_destino', sec: 'Destino' },
+    { k: 'enderecoEntrega',label: 'Endereço de Entrega',tipo: 'text',   col: 'endereco_entrega', sec: 'Destino' },
+    { k: 'cnpjEntrega',    label: 'CNPJ do local de entrega', tipo: 'text', col: 'cnpj_entrega', sec: 'Destino' },
+    { k: 'valorFrete',     label: 'Valor do Frete (R$)',tipo: 'number', col: 'valor_frete', sec: 'Frete e Datas' },
+    { k: 'dataPrevColeta', label: 'Coleta Prevista',    tipo: 'datetime-local', col: 'data_prev_coleta', sec: 'Frete e Datas' },
+    { k: 'dataPrevEntrega',label: 'Entrega Prevista',   tipo: 'datetime-local', col: 'data_prev_entrega', sec: 'Frete e Datas' },
+    { k: 'prazoEntregaEstimado', label: 'Prazo de Entrega Estimado', tipo: 'date', col: 'prazo_entrega_estimado', sec: 'Frete e Datas' },
+    { k: 'observacaoPedido',label: 'Observações',       tipo: 'text',   col: 'observacao_pedido', sec: 'Outros' }
 ];
 
 // ---------- COMERCIAL: solicitar edição ----------
@@ -6043,26 +6047,43 @@ function abrirEdicaoPedido(pedidoId) {
         return v;
     };
 
-    const campos = CAMPOS_EDITAVEIS.map(c => `
-        <div class="form-group">
-            <label>${c.label}</label>
-            <input type="${c.tipo}" id="edit_${c.k}" value="${String(val(c)).replace(/"/g, '&quot;')}"
-                ${c.tipo === 'number' ? 'step="0.01"' : ''}>
-        </div>`).join('');
+    // Agrupa os campos por seção
+    const secoes = {};
+    CAMPOS_EDITAVEIS.forEach(c => { (secoes[c.sec || 'Outros'] = secoes[c.sec || 'Outros'] || []).push(c); });
+
+    const iconSec = { 'Cliente':'👤', 'Veículo':'🚗', 'Origem':'📍', 'Destino':'🏁', 'Frete e Datas':'💰', 'Outros':'📝' };
+
+    const seccoesHTML = Object.keys(secoes).map(nomeSec => {
+        const campos = secoes[nomeSec].map(c => `
+            <div class="ep-campo ${c.k==='observacaoPedido'||c.k==='enderecoColeta'||c.k==='enderecoEntrega'?'ep-campo-full':''}">
+                <label>${c.label}</label>
+                <input type="${c.tipo}" id="edit_${c.k}" value="${String(val(c)).replace(/"/g, '&quot;')}"
+                    ${c.tipo === 'number' ? 'step="0.01"' : ''}>
+            </div>`).join('');
+        return `<div class="ep-secao">
+            <div class="ep-secao-tit">${iconSec[nomeSec]||'•'} ${nomeSec}</div>
+            <div class="ep-secao-grid">${campos}</div>
+        </div>`;
+    }).join('');
 
     const modal = document.createElement('div');
     modal.id = 'modalEdicaoPedido';
-    modal.className = 'modal show';
+    modal.className = 'modal show ep-modal';
     modal.innerHTML = `
-        <div class="modal-content" style="max-width:640px">
-            <span class="close" onclick="document.getElementById('modalEdicaoPedido').remove()">&times;</span>
-            <h2>✏️ Editar Pedido #${p.id}</h2>
-            <p class="text-muted text-sm" style="margin-bottom:0.8rem">
-                Status atual: <strong>${p.status || '—'}</strong> — a edição da logística <strong>não altera o status</strong>.
-            </p>
-            <div class="edicao-grid">${campos}</div>
+        <div class="modal-content ep-content">
+            <div class="ep-header">
+                <div>
+                    <h2 style="margin:0">✏️ Editar Pedido #${p.id}</h2>
+                    <p class="text-muted" style="font-size:.82rem;margin:.3rem 0 0">
+                        ${p.cliente||'—'} · ${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'} · Status: <strong>${p.status || '—'}</strong>
+                    </p>
+                </div>
+                <span class="ep-close" onclick="document.getElementById('modalEdicaoPedido').remove()">&times;</span>
+            </div>
+            <div class="ep-aviso">💡 Ao mudar a cidade de destino, confira também o <strong>endereço de entrega</strong> abaixo — eles não mudam sozinhos. A edição não altera o status do pedido.</div>
+            <div class="ep-body">${seccoesHTML}</div>
             <div id="mensagemEdicaoPedido" class="message"></div>
-            <div class="form-actions">
+            <div class="ep-actions">
                 <button class="btn btn-primary" onclick="salvarEdicaoPedido(${p.id})">💾 Salvar alterações</button>
                 <button class="btn btn-secondary" onclick="document.getElementById('modalEdicaoPedido').remove()">Cancelar</button>
             </div>
@@ -9653,6 +9674,9 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
         const tipoDoc = cli.cnpj ? 'CNPJ' : cli.cpf ? 'CPF' : '—';
         const rota = `${p.cidadeOrigem||''}/${p.ufOrigem||''} → ${p.cidadeDestino||''}/${p.ufDestino||''}`;
         const valor = Number(p.valorFrete||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+        // CNPJ de origem/destino: usa o do pedido; se faltar, cai para o do cliente pagador
+        const cnpjOrigem = p.cnpjColeta || cli.cnpj || '';
+        const cnpjDestino = p.cnpjEntrega || '';
 
         return `
         <tr class="${i % 2 === 0 ? 'par' : 'impar'}">
@@ -9663,8 +9687,8 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
             </td>
             <td>${p.modelo || '—'}<br><small style="color:#666">${p.placa || '—'}</small>${p.referencia ? `<br><small style="color:#f97316;font-weight:700">🔖 ${p.referencia}</small>` : ''}</td>
             <td style="font-size:0.82rem">${rota}</td>
-            <td style="font-size:0.82rem">${p.enderecoColeta || '—'}${p.cnpjColeta ? `<br><small style="color:#666">CNPJ: ${p.cnpjColeta}</small>` : ''}</td>
-            <td style="font-size:0.82rem">${p.enderecoEntrega || '—'}${p.cnpjEntrega ? `<br><small style="color:#666">CNPJ: ${p.cnpjEntrega}</small>` : ''}</td>
+            <td style="font-size:0.82rem"><strong>${p.cidadeOrigem||''}/${p.ufOrigem||''}</strong><br>${p.enderecoColeta || '—'}${cnpjOrigem ? `<br><small style="color:#666">CNPJ: ${cnpjOrigem}</small>` : ''}</td>
+            <td style="font-size:0.82rem"><strong>${p.cidadeDestino||''}/${p.ufDestino||''}</strong><br>${p.enderecoEntrega || '—'}${cnpjDestino ? `<br><small style="color:#666">CNPJ: ${cnpjDestino}</small>` : ''}</td>
             <td class="right"><strong>R$ ${valor}</strong><br><small style="color:#666">${p.freteTipo === 'carro' ? 'valor por carro' : 'parcela da carga'}</small></td>
         </tr>`;
     }).join('');
@@ -14533,6 +14557,7 @@ function abrirFecharEnviarCarga(rotaId){
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
       ${p.cliente?`<div class="rm-carro-cliente">👤 ${p.cliente}</div>`:''}
+      ${p.enderecoEntrega?`<div class="rm-carro-entrega">🏁 <strong>Entregar em:</strong> ${p.enderecoEntrega}${p.cidadeDestino?` — ${p.cidadeDestino}/${p.ufDestino||''}`:''}</div>`:''}
       <details class="rm-patio-det">
         <summary>🅿️ Selecionar pátio</summary>
         <div class="rm-patio-chips">${chips}</div>
@@ -14666,6 +14691,7 @@ function _gerarPdfRomaneio(rotaId){
       <td>#${p.id}</td><td><strong>${p.placa||'—'}</strong></td><td>${p.modelo||'—'}</td>
       <td>${p.cliente||'—'}</td>
       <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
+      <td>${p.enderecoEntrega||'—'}</td>
       <td>${p._local||'—'}</td>
     </tr>`).join('');
   const corpo = `
@@ -14676,7 +14702,7 @@ function _gerarPdfRomaneio(rotaId){
     </div>
     <h3>Veículos da carga</h3>
     <table>
-      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Onde está o carro</th></tr></thead>
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Entregar em</th><th>Onde está o carro</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     <div class="totalgeral">Total: ${carros.length} veículo(s)</div>`;
@@ -16535,21 +16561,21 @@ function _centralColunaColetas(coletas){
       <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
     </div>
     ${coletas.length === 0 ? '<p class="central-vazio">Nenhuma coleta pendente. 👍</p>' : `
-    <div style="overflow-x:auto"><table class="central-tabela">
-      <thead><tr><th></th><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Tipo de coleta</th><th>Status</th></tr></thead>
-      <tbody>
-        ${coletas.map(p => `<tr>
-          <td><input type="checkbox" class="central-chk-coleta" value="${p.id}"></td>
-          <td><strong>#${p.id}</strong></td>
-          <td>${p.cliente||'—'}</td>
-          <td>${p.placa||'—'}<br><span class="central-sub">${p.modelo||''}</span></td>
-          <td>${(p.cidadeOrigem||'—')}<br><span class="central-sub">${p.ufOrigem||''}</span></td>
-          <td>${(p.cidadeDestino||'—')}<br><span class="central-sub">${p.ufDestino||''}</span></td>
-          <td>${_tipoColetaLabel(p)}</td>
-          <td><span class="central-status central-status-laranja">● Disponível para coleta</span></td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>
+    <div class="central-cards">
+      ${coletas.map(p => `<label class="central-card" for="cchk_${p.id}">
+        <input type="checkbox" id="cchk_${p.id}" class="central-chk-coleta" value="${p.id}">
+        <div class="central-card-body">
+          <div class="central-card-linha1">
+            <span class="central-card-id">#${p.id}</span>
+            <span class="central-card-placa">${p.placa||'—'}</span>
+            <span class="central-card-status central-status-laranja">● Disponível</span>
+          </div>
+          <div class="central-card-cliente">${p.cliente||'—'}${p.modelo?` · <span class="central-sub">${p.modelo}</span>`:''}</div>
+          <div class="central-card-rota">${p.cidadeOrigem||'—'}/${p.ufOrigem||''} <span class="central-seta">→</span> ${p.cidadeDestino||'—'}/${p.ufDestino||''}</div>
+          <div class="central-card-tipo">${_tipoColetaLabel(p)}</div>
+        </div>
+      </label>`).join('')}
+    </div>
     <div class="central-col-rodape">
       <span class="text-muted">${coletas.length} pedido(s)</span>
       <button class="central-btn central-btn-laranja" onclick="_centralDirecionarEquipe()">👥 Direcionar para equipe</button>
@@ -16564,23 +16590,22 @@ function _centralColunaEntregas(entregas){
       <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
     </div>
     ${entregas.length === 0 ? '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>' : `
-    <div style="overflow-x:auto"><table class="central-tabela">
-      <thead><tr><th></th><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Destino da entrega</th><th>Status</th><th>Motorista</th><th></th></tr></thead>
-      <tbody>
-        ${entregas.map(p => `<tr>
-          <td><input type="checkbox" class="central-chk-entrega" value="${p.id}"></td>
-          <td><strong>#${p.id}</strong></td>
-          <td>${p.cliente||'—'}</td>
-          <td>${p.placa||'—'}<br><span class="central-sub">${p.modelo||''}</span></td>
-          <td>${(p.cidadeOrigem||'—')}<br><span class="central-sub">${p.ufOrigem||''}</span></td>
-          <td>${(p.cidadeDestino||'—')}<br><span class="central-sub">${p.ufDestino||''}</span></td>
-          <td>${_tipoEntregaLabel(p)}${p.precisaEquipeEntrega?' <span style="color:#a855f7;font-size:.7rem;font-weight:700">· 👥 equipe</span>':''}</td>
-          <td><span class="central-status central-status-verde">● Disponível para entrega</span></td>
-          <td>${p.motorista1||'—'}</td>
-          <td>${p.tipoEntrega === 'patio' ? `<button class="central-btn-mini" onclick="_centralDisponivelRetirada(${p.id})" title="Veículo chegou ao pátio, disponível para o cliente retirar">🏢 Disponível p/ retirada</button>` : ''}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>
+    <div class="central-cards">
+      ${entregas.map(p => `<label class="central-card" for="echk_${p.id}">
+        <input type="checkbox" id="echk_${p.id}" class="central-chk-entrega" value="${p.id}">
+        <div class="central-card-body">
+          <div class="central-card-linha1">
+            <span class="central-card-id">#${p.id}</span>
+            <span class="central-card-placa">${p.placa||'—'}</span>
+            <span class="central-card-status central-status-verde">● Disponível</span>
+          </div>
+          <div class="central-card-cliente">${p.cliente||'—'}${p.modelo?` · <span class="central-sub">${p.modelo}</span>`:''}</div>
+          <div class="central-card-rota">${p.cidadeOrigem||'—'}/${p.ufOrigem||''} <span class="central-seta">→</span> ${p.cidadeDestino||'—'}/${p.ufDestino||''}</div>
+          <div class="central-card-tipo">${_tipoEntregaLabel(p)}${p.precisaEquipeEntrega?' <span style="color:#a855f7;font-size:.72rem;font-weight:700">· 👥 equipe</span>':''}${p.motorista1?` · <span class="central-sub">👤 ${p.motorista1}</span>`:''}</div>
+          ${p.tipoEntrega === 'patio' ? `<button class="central-btn-mini" onclick="event.preventDefault();_centralDisponivelRetirada(${p.id})" title="Veículo chegou ao pátio, disponível para o cliente retirar">🏢 Disponível p/ retirada</button>` : ''}
+        </div>
+      </label>`).join('')}
+    </div>
     <div class="central-col-rodape">
       <span class="text-muted">${entregas.length} pedido(s)</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
