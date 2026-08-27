@@ -9423,3 +9423,22 @@ html span.log-passo-bolinha {
 .central-btn:hover { filter:brightness(1.1); }
 .central-btn-mini { margin-top:6px; background:rgba(59,130,246,.15); color:#3b82f6; border:1px solid rgba(59,130,246,.4); border-radius:6px; padding:4px 10px; font-size:.74rem; font-weight:600; cursor:pointer; }
 .central-btn-mini:hover { background:rgba(59,130,246,.25); }
+
+/* Item 5: endereços na tela da equipe e nos modais de direcionamento */
+.eq-end-linha .eq-end-cel { padding:4px 10px 8px; font-size:.78rem; color:var(--text-secondary,#9ca3af); background:rgba(255,106,0,.04); border-bottom:1px solid var(--border-soft,rgba(255,255,255,.05)); }
+.central-modal-peds { max-height:180px; overflow-y:auto; margin-bottom:14px; display:flex; flex-direction:column; gap:6px; }
+.central-modal-ped { font-size:.82rem; padding:8px 10px; background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border-soft,rgba(255,255,255,.06)); border-radius:8px; }
+.central-modal-end { font-size:.76rem; color:#ff6a00; }
+
+/* Item 1: campos de endereço editáveis no romaneio */
+.rm-end-campo { margin:6px 0; }
+.rm-end-campo label { display:block; font-size:.72rem; color:var(--text-secondary,#9ca3af); font-weight:600; margin-bottom:3px; }
+
+/* Item 6: bloco de motorista terceiro na viagem em andamento */
+.jv-terceiro { background:rgba(168,85,247,.06); border:1px solid rgba(168,85,247,.25); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+.jv-terceiro-tit { font-size:.85rem; font-weight:700; color:#a855f7; margin-bottom:10px; }
+.jv-terceiro-grid { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
+.jv-terceiro-campo { display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px; }
+.jv-terceiro-campo label { font-size:.72rem; color:var(--text-secondary,#9ca3af); font-weight:600; }
+.jv-terceiro-campo input { padding:8px 10px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; font-size:.88rem; }
+.jv-terceiro-campo input:focus { border-color:#a855f7; outline:none; }
