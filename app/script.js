@@ -14564,8 +14564,9 @@ function abrirFecharEnviarCarga(rotaId){
   div.className = 'modal-overlay';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
   const linhaEdit = (p) => {
-    // pré-preenche com: local já definido > pátio atual > endereço de coleta do lançamento
-    const local = p.localCarro || p.patioAtual || p.enderecoColeta || '';
+    // "onde está o carro" = localização física (pátio ou local definido). NÃO cai mais para
+    // o endereço de coleta — esse já aparece no campo "Coletar em" acima (evita duplicação).
+    const local = p.localCarro || p.patioAtual || '';
     // detecta se o local salvo corresponde a um pátio (pelo valor real OU pelo label)
     const patioReal = PATIOS_FIXOS.find(pt => local === pt || local === _labelPatio(pt).replace('🅿️ ',''));
     const ehPatioFixo = !!patioReal;
@@ -14588,12 +14589,12 @@ function abrirFecharEnviarCarga(rotaId){
         <input type="text" id="rmEntrega_${p.id}" value="${(p.romaneioEnderecoEntrega || p.enderecoEntrega || '').replace(/"/g,'&quot;')}" placeholder="endereço de entrega" class="rm-local-input">
       </div>
       <details class="rm-patio-det">
-        <summary>🅿️ Selecionar pátio</summary>
+        <summary>🅿️ Selecionar pátio (se o carro estiver num pátio)</summary>
         <div class="rm-patio-chips">${chips}</div>
       </details>
-      <input type="text" id="rmLocal_${p.id}" value="${(ehPatioFixo ? _labelPatio(patioReal).replace('🅿️ ','') : local).replace(/"/g,'&quot;')}" placeholder="endereço / onde está o carro (editável)..." class="rm-local-input" oninput="_rmLocalDigitado(${p.id})">
+      <div class="rm-patio-atual" id="rmPatioAtual_${p.id}">${ehPatioFixo ? '🅿️ No pátio: <strong>'+_labelPatio(patioReal).replace('🅿️ ','').replace('PÁTIO ','')+'</strong> · <a href="#" onclick="_rmLimparPatio('+p.id+');return false;" style="color:#f87171;font-size:.78rem">remover</a>' : '<span class="text-muted" style="font-size:.78rem">Nenhum pátio selecionado (carro coletado direto no endereço acima).</span>'}</div>
+      <input type="hidden" id="rmLocal_${p.id}" value="${(ehPatioFixo ? _labelPatio(patioReal).replace('🅿️ ','') : local).replace(/"/g,'&quot;')}">
       <input type="hidden" id="rmPatio_${p.id}" value="${ehPatioFixo?'1':'0'}">
-      <div class="rm-local-hint">📍 Endereço vindo do lançamento — clique num pátio ou edite o endereço se o carro estiver em local diferente.</div>
     </div>`;
   };
   div.innerHTML = `
@@ -14628,6 +14629,20 @@ function _rmSelecionarPatio(pedidoId, patio){
   if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.getAttribute('data-patio') === patio)); }
   const hidden = document.getElementById('rmPatio_'+pedidoId);
   if (hidden) hidden.value = '1';
+  const txt = document.getElementById('rmPatioAtual_'+pedidoId);
+  if (txt) txt.innerHTML = '🅿️ No pátio: <strong>'+patio.replace('PÁTIO ','')+'</strong> · <a href="#" onclick="_rmLimparPatio('+pedidoId+');return false;" style="color:#f87171;font-size:.78rem">remover</a>';
+}
+
+// Limpa a seleção de pátio (carro não está mais num pátio)
+function _rmLimparPatio(pedidoId){
+  const input = document.getElementById('rmLocal_'+pedidoId);
+  if (input) input.value = '';
+  const hidden = document.getElementById('rmPatio_'+pedidoId);
+  if (hidden) hidden.value = '0';
+  const cont = document.getElementById('rmCarro_'+pedidoId);
+  if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.remove('sel')); }
+  const txt = document.getElementById('rmPatioAtual_'+pedidoId);
+  if (txt) txt.innerHTML = '<span class="text-muted" style="font-size:.78rem">Nenhum pátio selecionado (carro coletado direto no endereço acima).</span>';
 }
 
 // Se a pessoa digita um endereço manual, desmarca os chips (não é mais um pátio fixo)
@@ -14723,7 +14738,7 @@ function _gerarPdfRomaneio(rotaId){
       <td>#${p.id}</td><td><strong>${p.placa||'—'}</strong></td><td>${p.modelo||'—'}</td>
       <td>${p.cliente||'—'}</td>
       <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
-      <td>${p._local||'—'}</td>
+      <td>${p._local || p.romaneioEnderecoColeta || p.enderecoColeta || '—'}</td>
       <td>${p.romaneioEnderecoEntrega || p.enderecoEntrega || '—'}</td>
     </tr>`).join('');
   const corpo = `
