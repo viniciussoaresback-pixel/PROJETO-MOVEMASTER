@@ -9442,3 +9442,6 @@ html span.log-passo-bolinha {
 .jv-terceiro-campo label { font-size:.72rem; color:var(--text-secondary,#9ca3af); font-weight:600; }
 .jv-terceiro-campo input { padding:8px 10px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-2,rgba(255,255,255,.03)); color:inherit; font-size:.88rem; }
 .jv-terceiro-campo input:focus { border-color:#a855f7; outline:none; }
+
+/* Romaneio: texto do pátio atual */
+.rm-patio-atual { margin:6px 0 2px; font-size:.82rem; }
