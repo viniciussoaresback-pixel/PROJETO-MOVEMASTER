@@ -14581,19 +14581,21 @@ function abrirFecharEnviarCarga(rotaId){
       </div>
       ${p.cliente?`<div class="rm-carro-cliente">👤 ${p.cliente}</div>`:''}
       <div class="rm-end-campo">
-        <label>📍 Coletar em (editável para este romaneio)</label>
-        <input type="text" id="rmColeta_${p.id}" value="${(p.romaneioEnderecoColeta || p.enderecoColeta || '').replace(/"/g,'&quot;')}" placeholder="endereço de coleta" class="rm-local-input">
+        <label>📍 Coletar em / onde pegar o carro (editável)</label>
+        <div class="rm-coleta-linha">
+          <input type="text" id="rmColeta_${p.id}" value="${(p.romaneioEnderecoColeta || p.enderecoColeta || local || '').replace(/"/g,'&quot;')}" placeholder="endereço de coleta ou pátio" class="rm-local-input" oninput="_rmColetaDigitado(${p.id})">
+          <details class="rm-patio-det rm-patio-inline">
+            <summary title="Selecionar um pátio">🅿️</summary>
+            <div class="rm-patio-chips">${chips}</div>
+          </details>
+        </div>
+        <div class="rm-local-hint">Clique no 🅿️ se o carro estiver num pátio — preenche o campo automaticamente.</div>
       </div>
       <div class="rm-end-campo">
         <label>🏁 Entregar em (editável para este romaneio)</label>
         <input type="text" id="rmEntrega_${p.id}" value="${(p.romaneioEnderecoEntrega || p.enderecoEntrega || '').replace(/"/g,'&quot;')}" placeholder="endereço de entrega" class="rm-local-input">
       </div>
-      <details class="rm-patio-det">
-        <summary>🅿️ Selecionar pátio (se o carro estiver num pátio)</summary>
-        <div class="rm-patio-chips">${chips}</div>
-      </details>
-      <div class="rm-patio-atual" id="rmPatioAtual_${p.id}">${ehPatioFixo ? '🅿️ No pátio: <strong>'+_labelPatio(patioReal).replace('🅿️ ','').replace('PÁTIO ','')+'</strong> · <a href="#" onclick="_rmLimparPatio('+p.id+');return false;" style="color:#f87171;font-size:.78rem">remover</a>' : '<span class="text-muted" style="font-size:.78rem">Nenhum pátio selecionado (carro coletado direto no endereço acima).</span>'}</div>
-      <input type="hidden" id="rmLocal_${p.id}" value="${(ehPatioFixo ? _labelPatio(patioReal).replace('🅿️ ','') : local).replace(/"/g,'&quot;')}">
+      <input type="hidden" id="rmLocal_${p.id}" value="${(ehPatioFixo ? _labelPatio(patioReal).replace('🅿️ ','') : '').replace(/"/g,'&quot;')}">
       <input type="hidden" id="rmPatio_${p.id}" value="${ehPatioFixo?'1':'0'}">
     </div>`;
   };
@@ -14623,26 +14625,45 @@ function _labelPatio(pt){
 
 // Romaneio Opção B: chips de pátio + endereço editável
 function _rmSelecionarPatio(pedidoId, patio){
-  const input = document.getElementById('rmLocal_'+pedidoId);
-  if (input) input.value = patio;
+  // Preenche o campo unificado "Coletar em" com o pátio
+  const campo = document.getElementById('rmColeta_'+pedidoId);
+  if (campo) campo.value = patio;
   const cont = document.getElementById('rmCarro_'+pedidoId);
-  if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.getAttribute('data-patio') === patio)); }
+  if (cont){
+    cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.getAttribute('data-patio') === patio));
+    // fecha o dropdown do pátio
+    const det = cont.querySelector('.rm-patio-inline'); if (det) det.removeAttribute('open');
+  }
   const hidden = document.getElementById('rmPatio_'+pedidoId);
   if (hidden) hidden.value = '1';
-  const txt = document.getElementById('rmPatioAtual_'+pedidoId);
-  if (txt) txt.innerHTML = '🅿️ No pátio: <strong>'+patio.replace('PÁTIO ','')+'</strong> · <a href="#" onclick="_rmLimparPatio('+pedidoId+');return false;" style="color:#f87171;font-size:.78rem">remover</a>';
+  const local = document.getElementById('rmLocal_'+pedidoId);
+  if (local) local.value = patio;
 }
 
-// Limpa a seleção de pátio (carro não está mais num pátio)
+// Quando digita manualmente no "Coletar em", detecta se é um pátio conhecido
+function _rmColetaDigitado(pedidoId){
+  const campo = document.getElementById('rmColeta_'+pedidoId);
+  const cont = document.getElementById('rmCarro_'+pedidoId);
+  if (!campo || !cont) return;
+  const val = campo.value.trim();
+  const ehPatio = PATIOS_FIXOS.some(pt => _labelPatio(pt).replace('🅿️ ','') === val);
+  cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.toggle('sel', b.getAttribute('data-patio') === val));
+  const hidden = document.getElementById('rmPatio_'+pedidoId);
+  if (hidden) hidden.value = ehPatio ? '1' : '0';
+  const local = document.getElementById('rmLocal_'+pedidoId);
+  if (local) local.value = ehPatio ? val : '';
+}
+
+// (compat) limpar pátio — não usado no layout novo, mantido por segurança
 function _rmLimparPatio(pedidoId){
-  const input = document.getElementById('rmLocal_'+pedidoId);
-  if (input) input.value = '';
+  const campo = document.getElementById('rmColeta_'+pedidoId);
+  if (campo) campo.value = '';
   const hidden = document.getElementById('rmPatio_'+pedidoId);
   if (hidden) hidden.value = '0';
+  const local = document.getElementById('rmLocal_'+pedidoId);
+  if (local) local.value = '';
   const cont = document.getElementById('rmCarro_'+pedidoId);
   if (cont){ cont.querySelectorAll('.rm-patio-chip').forEach(b => b.classList.remove('sel')); }
-  const txt = document.getElementById('rmPatioAtual_'+pedidoId);
-  if (txt) txt.innerHTML = '<span class="text-muted" style="font-size:.78rem">Nenhum pátio selecionado (carro coletado direto no endereço acima).</span>';
 }
 
 // Se a pessoa digita um endereço manual, desmarca os chips (não é mais um pátio fixo)
