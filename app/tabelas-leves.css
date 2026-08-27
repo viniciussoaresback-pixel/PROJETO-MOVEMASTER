@@ -1,0 +1,95 @@
+/* MoveMaster — item 3: tabelas mais leves e legíveis. Aditivo, sem tocar no JS. */
+
+/* Estrutura base: sem bordas verticais, só linhas horizontais claras */
+table, .tabela, .tabela-scroll table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+table th, table td {
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid var(--border-soft, rgba(255,255,255,.07)) !important;
+  padding: 12px 14px !important;
+  vertical-align: middle;
+}
+[data-tema="claro"] table th,
+[data-tema="claro"] table td {
+  border-bottom-color: rgba(17,24,39,.08) !important;
+}
+
+/* Cabeçalho discreto e fixo */
+table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2, #1c2027) !important;
+  font-size: .74rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--texto-suave, #9aa3b2) !important;
+  border-bottom: 1px solid var(--border-soft, rgba(255,255,255,.1)) !important;
+  white-space: nowrap;
+}
+[data-tema="claro"] table thead th {
+  background: #f3f5f8 !important;
+  color: #556074 !important;
+}
+
+/* Zebra bem sutil + hover de linha */
+table tbody tr:nth-child(even) { background: rgba(255,255,255,.018); }
+table tbody tr { transition: background .16s cubic-bezier(.4,0,.2,1); }
+table tbody tr:hover { background: rgba(255,122,0,.07); }
+[data-tema="claro"] table tbody tr:nth-child(even) { background: rgba(17,24,39,.018); }
+[data-tema="claro"] table tbody tr:hover { background: rgba(255,122,0,.06); }
+table tbody tr:last-child td { border-bottom: 0 !important; }
+
+/* Números e valores alinhados à direita */
+table td.num, table td.valor, table th.num, table th.valor,
+table td[data-tipo="numero"], table td[data-tipo="valor"] {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Coluna de status como pílula */
+table td .status,
+table td .badge,
+table td .status-badge,
+table td [class*="status-"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Ações no fim da linha, discretas até o hover */
+table td .acoes, table td .btn-acao {
+  opacity: .72;
+  transition: opacity .16s ease;
+}
+table tbody tr:hover td .acoes,
+table tbody tr:hover td .btn-acao { opacity: 1; }
+
+/* Container com rolagem suave e cantos limpos */
+.tabela-scroll, .tabela-wrap {
+  border-radius: 12px;
+  overflow: auto;
+  border: 1px solid var(--border-soft, rgba(255,255,255,.07));
+  background: var(--surface-1, #1c2027);
+}
+[data-tema="claro"] .tabela-scroll,
+[data-tema="claro"] .tabela-wrap {
+  border-color: rgba(17,24,39,.08);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(17,24,39,.05);
+}
