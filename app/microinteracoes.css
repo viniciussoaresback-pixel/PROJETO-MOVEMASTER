@@ -1,0 +1,91 @@
+/* MoveMaster — Etapa: micro-interacoes e transicoes suaves */
+:root {
+  --mi-ease: cubic-bezier(.4, 0, .2, 1);
+  --mi-fast: 150ms;
+  --mi-base: 200ms;
+}
+
+/* Transicoes base */
+button, .btn, .btn-primario, .btn-secundario, a.btn,
+.tab-btn, .subtab-btn, .filtro-btn, .rota-pill,
+input, select, textarea,
+.dash-card, .cg-kpi, .card, .perfil-card,
+tbody tr, .badge, .status-badge {
+  transition:
+    background-color var(--mi-base) var(--mi-ease),
+    border-color var(--mi-base) var(--mi-ease),
+    color var(--mi-base) var(--mi-ease),
+    box-shadow var(--mi-base) var(--mi-ease),
+    transform var(--mi-fast) var(--mi-ease),
+    opacity var(--mi-base) var(--mi-ease);
+}
+
+/* Cards: elevacao suave no hover */
+.dash-card:hover, .cg-kpi:hover, .card:hover, .perfil-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .14);
+}
+
+/* Botoes: leve subida no hover e "press" no clique */
+button:hover, .btn:hover, .btn-primario:hover, .btn-secundario:hover {
+  transform: translateY(-1px);
+}
+button:active, .btn:active, .btn-primario:active, .btn-secundario:active,
+.tab-btn:active, .subtab-btn:active, .filtro-btn:active, .rota-pill:active {
+  transform: scale(.98);
+  transition-duration: 80ms;
+}
+
+/* Abas e pills */
+.tab-btn:hover, .subtab-btn:hover, .filtro-btn:hover, .rota-pill:hover {
+  transform: translateY(-1px);
+}
+
+/* Inputs: foco fluido */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 122, 0, .22);
+}
+
+/* Linhas de tabela */
+tbody tr:hover {
+  background-color: rgba(255, 122, 0, .06);
+}
+
+/* Fade-in ao trocar de aba */
+@keyframes mi-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.tab-content.active, .tab-content[style*="block"],
+.subtab-content.active {
+  animation: mi-fade-in var(--mi-base) var(--mi-ease) both;
+}
+
+/* Modais */
+@keyframes mi-modal-in {
+  from { opacity: 0; transform: scale(.97) translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes mi-overlay-in { from { opacity: 0 } to { opacity: 1 } }
+.modal, .modal-overlay, .overlay { animation: mi-overlay-in var(--mi-fast) var(--mi-ease) both; }
+.modal-conteudo, .modal-content, .modal-box, .modal .conteudo {
+  animation: mi-modal-in var(--mi-base) var(--mi-ease) both;
+}
+
+/* Links e icones */
+a:not(.btn) { transition: color var(--mi-fast) var(--mi-ease), opacity var(--mi-fast) var(--mi-ease); }
+svg { transition: transform var(--mi-fast) var(--mi-ease); }
+button:hover > svg, .btn:hover > svg { transform: scale(1.06); }
+
+/* Acessibilidade */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .dash-card:hover, .cg-kpi:hover, .card:hover, .perfil-card:hover,
+  button:hover, .btn:hover { transform: none; }
+}
