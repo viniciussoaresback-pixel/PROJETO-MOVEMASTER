@@ -336,6 +336,10 @@ async function carregarDadosDoSupabase(opts) {
                 coletaEquipePor: p.coleta_equipe_por || null,
                 formaColeta: p.forma_coleta || null,
                 localCarro: p.local_carro || null,
+                valorMotoristaTerceiro: p.valor_motorista_terceiro != null ? p.valor_motorista_terceiro : null,
+                guiaIcmsValor: p.guia_icms_valor != null ? p.guia_icms_valor : null,
+                romaneioEnderecoColeta: p.romaneio_endereco_coleta || null,
+                romaneioEnderecoEntrega: p.romaneio_endereco_entrega || null,
                 patioColeta: p.patio_coleta || null,
                 equipeColetaId: p.equipe_coleta_id || null,
                 entregaEquipeId: p.entrega_equipe_id || null,
@@ -5870,7 +5874,9 @@ const CAMPOS_EDITAVEIS = [
     { k: 'dataPrevColeta', label: 'Coleta Prevista',    tipo: 'datetime-local', col: 'data_prev_coleta', sec: 'Frete e Datas' },
     { k: 'dataPrevEntrega',label: 'Entrega Prevista',   tipo: 'datetime-local', col: 'data_prev_entrega', sec: 'Frete e Datas' },
     { k: 'prazoEntregaEstimado', label: 'Prazo de Entrega Estimado', tipo: 'date', col: 'prazo_entrega_estimado', sec: 'Frete e Datas' },
-    { k: 'observacaoPedido',label: 'Observações',       tipo: 'text',   col: 'observacao_pedido', sec: 'Outros' }
+    { k: 'observacaoPedido',label: 'Observações',       tipo: 'text',   col: 'observacao_pedido', sec: 'Outros' },
+    { k: 'valorMotoristaTerceiro', label: 'Valor a pagar ao motorista terceiro (R$)', tipo: 'number', col: 'valor_motorista_terceiro', sec: 'Motorista Terceiro' },
+    { k: 'guiaIcmsValor',  label: 'Valor da guia de ICMS (R$) — deixe vazio se não passa no posto', tipo: 'number', col: 'guia_icms_valor', sec: 'Motorista Terceiro' }
 ];
 
 // ---------- COMERCIAL: solicitar edição ----------
@@ -6051,7 +6057,7 @@ function abrirEdicaoPedido(pedidoId) {
     const secoes = {};
     CAMPOS_EDITAVEIS.forEach(c => { (secoes[c.sec || 'Outros'] = secoes[c.sec || 'Outros'] || []).push(c); });
 
-    const iconSec = { 'Cliente':'👤', 'Veículo':'🚗', 'Origem':'📍', 'Destino':'🏁', 'Frete e Datas':'💰', 'Outros':'📝' };
+    const iconSec = { 'Cliente':'👤', 'Veículo':'🚗', 'Origem':'📍', 'Destino':'🏁', 'Frete e Datas':'💰', 'Motorista Terceiro':'🤝', 'Outros':'📝' };
 
     const seccoesHTML = Object.keys(secoes).map(nomeSec => {
         const campos = secoes[nomeSec].map(c => `
@@ -9677,6 +9683,11 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
         // CNPJ de origem/destino: usa o do pedido; se faltar, cai para o do cliente pagador
         const cnpjOrigem = p.cnpjColeta || cli.cnpj || '';
         const cnpjDestino = p.cnpjEntrega || '';
+        // Aviso de CTe já emitido (fiscal digitou o número) — evita emitir de novo
+        const cteJaEmitido = p.numeroCte || p.numero_cte;
+        const avisoCte = cteJaEmitido
+          ? `<div style="margin-top:3px;font-size:0.72rem;color:#16a34a;font-weight:700">✅ CTe ${cteJaEmitido} já emitido</div>`
+          : `<div style="margin-top:3px;font-size:0.72rem;color:#b45309;font-weight:600">⚠️ CTe ainda não emitido</div>`;
 
         return `
         <tr class="${i % 2 === 0 ? 'par' : 'impar'}">
@@ -9685,7 +9696,7 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
                 <small style="color:#666">${tipoDoc}: ${doc}</small>
                 ${cli.inscricao_estadual ? `<br><small style="color:#666">IE: ${cli.inscricao_estadual}</small>` : ''}
             </td>
-            <td>${p.modelo || '—'}<br><small style="color:#666">${p.placa || '—'}</small>${p.referencia ? `<br><small style="color:#f97316;font-weight:700">🔖 ${p.referencia}</small>` : ''}</td>
+            <td>${p.modelo || '—'}<br><small style="color:#666">${p.placa || '—'}</small>${p.referencia ? `<br><small style="color:#f97316;font-weight:700">🔖 ${p.referencia}</small>` : ''}${avisoCte}</td>
             <td style="font-size:0.82rem">${rota}</td>
             <td style="font-size:0.82rem"><strong>${p.cidadeOrigem||''}/${p.ufOrigem||''}</strong><br>${p.enderecoColeta || '—'}${cnpjOrigem ? `<br><small style="color:#666">CNPJ: ${cnpjOrigem}</small>` : ''}</td>
             <td style="font-size:0.82rem"><strong>${p.cidadeDestino||''}/${p.ufDestino||''}</strong><br>${p.enderecoEntrega || '—'}${cnpjDestino ? `<br><small style="color:#666">CNPJ: ${cnpjDestino}</small>` : ''}</td>
@@ -11196,8 +11207,12 @@ function _pedidosLastMile(){
 function renderizarLastMile(){
   const wrap = document.getElementById('lastMileWrap');
   if (!wrap) return;
-  const fila = _pedidosLastMile();
-  if (fila.length === 0){ wrap.innerHTML = ''; _espelharSugPainel(); return; }
+  // Removido da Gestão Logística — a definição de entrega é feita na Central de Operação.
+  wrap.innerHTML = '';
+  if (typeof _espelharSugPainel === 'function') _espelharSugPainel();
+  return;
+}
+function _renderizarLastMileAntigo(){
   const opcoesEquipe = (equipesEntregaGlobais||[]).map(e => `<option value="${e.id}">${e.nome}${e.responsavel?' ('+e.responsavel+')':''}</option>`).join('');
   wrap.innerHTML = `<div class="lastmile-box">
     <div class="lastmile-titulo">🚚 Last mile — definir entrega final (${fila.length})</div>
@@ -12934,6 +12949,13 @@ function renderizarEquipesPainel(){
       const info = tipo === 'feitas'
         ? `<span class="text-muted">${p.entregaEquipeEm ? '📤 entregue por '+(p.entregaEquipePor||'—') : '📥 coletado por '+(p.coletaEquipePor||'—')}</span>`
         : '';
+      // endereço relevante conforme a atividade
+      const endereco = tipo === 'coletar'
+        ? (p.enderecoColeta ? `📍 <strong>Coletar em:</strong> ${p.enderecoColeta}` : '')
+        : tipo === 'entregar'
+        ? (p.enderecoEntrega ? `🏁 <strong>Entregar em:</strong> ${p.enderecoEntrega}` : '')
+        : '';
+      const endLinha = endereco ? `<tr class="eq-end-linha"><td colspan="6" class="eq-end-cel">${endereco}</td></tr>` : '';
       return `<tr class="corr-tr">
         <td class="ct-id">#${p.id}</td>
         <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${selCTEDoPedido(p.id)}</td>
@@ -12941,7 +12963,7 @@ function renderizarEquipesPainel(){
         <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
         <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
         <td class="ct-acoes">${info}${selMembro} ${btn}</td>
-      </tr>`;
+      </tr>${endLinha}`;
     };
 
     const tabela = (itens, tipo, vazio) => itens.length === 0
@@ -14557,7 +14579,14 @@ function abrirFecharEnviarCarga(rotaId){
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
       ${p.cliente?`<div class="rm-carro-cliente">👤 ${p.cliente}</div>`:''}
-      ${p.enderecoEntrega?`<div class="rm-carro-entrega">🏁 <strong>Entregar em:</strong> ${p.enderecoEntrega}${p.cidadeDestino?` — ${p.cidadeDestino}/${p.ufDestino||''}`:''}</div>`:''}
+      <div class="rm-end-campo">
+        <label>📍 Coletar em (editável para este romaneio)</label>
+        <input type="text" id="rmColeta_${p.id}" value="${(p.romaneioEnderecoColeta || p.enderecoColeta || '').replace(/"/g,'&quot;')}" placeholder="endereço de coleta" class="rm-local-input">
+      </div>
+      <div class="rm-end-campo">
+        <label>🏁 Entregar em (editável para este romaneio)</label>
+        <input type="text" id="rmEntrega_${p.id}" value="${(p.romaneioEnderecoEntrega || p.enderecoEntrega || '').replace(/"/g,'&quot;')}" placeholder="endereço de entrega" class="rm-local-input">
+      </div>
       <details class="rm-patio-det">
         <summary>🅿️ Selecionar pátio</summary>
         <div class="rm-patio-chips">${chips}</div>
@@ -14622,8 +14651,11 @@ async function _salvarLocaisRomaneio(rotaId, enviar){
     const updates = d.carros.map(p => {
       const noPatio = document.getElementById('rmPatio_'+p.id)?.value === '1';
       const local = document.getElementById('rmLocal_'+p.id)?.value.trim() || null;
+      const rColeta = document.getElementById('rmColeta_'+p.id)?.value.trim() || null;
+      const rEntrega = document.getElementById('rmEntrega_'+p.id)?.value.trim() || null;
       const pg = (pedidosGlobais||[]).find(x => String(x.id)===String(p.id));
-      const patch = { local_carro: local };
+      const patch = { local_carro: local, romaneio_endereco_coleta: rColeta, romaneio_endereco_entrega: rEntrega };
+      if (pg){ pg.romaneioEnderecoColeta = rColeta; pg.romaneioEnderecoEntrega = rEntrega; }
       if (noPatio){
         patch.patio_atual = local || p.patioAtual || (p.cidadeOrigem?`${p.cidadeOrigem}${p.ufOrigem?'/'+p.ufOrigem:''}`:null);
         if (pg){ pg.localCarro = local; if (!pg.patioAtual) pg.patioAtual = patch.patio_atual; }
@@ -14691,8 +14723,8 @@ function _gerarPdfRomaneio(rotaId){
       <td>#${p.id}</td><td><strong>${p.placa||'—'}</strong></td><td>${p.modelo||'—'}</td>
       <td>${p.cliente||'—'}</td>
       <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
-      <td>${p.enderecoEntrega||'—'}</td>
       <td>${p._local||'—'}</td>
+      <td>${p.romaneioEnderecoEntrega || p.enderecoEntrega || '—'}</td>
     </tr>`).join('');
   const corpo = `
     <div class="resumo">
@@ -14702,7 +14734,7 @@ function _gerarPdfRomaneio(rotaId){
     </div>
     <h3>Veículos da carga</h3>
     <table>
-      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Entregar em</th><th>Onde está o carro</th></tr></thead>
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Onde está o carro</th><th>Entregar em</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     <div class="totalgeral">Total: ${carros.length} veículo(s)</div>`;
@@ -14831,6 +14863,16 @@ function _toggleViagemMot(id){
 // ============================================================
 // FISCAL: enviar manifesto/CTe (PDF) ao motorista da rota
 // ============================================================
+// Re-renderiza a área fiscal preservando quais cards (details) estavam abertos
+function _renderFiscalPreservandoAbertos(){
+  const abertos = [...document.querySelectorAll('.fisc-card-det[open]')].map(d => d.getAttribute('data-rota'));
+  renderizarEnvioDocsFiscal();
+  abertos.forEach(id => {
+    const d = document.querySelector(`.fisc-card-det[data-rota="${id}"]`);
+    if (d) d.setAttribute('open', '');
+  });
+}
+
 function renderizarEnvioDocsFiscal(){
   const cont = document.getElementById('envioDocsFiscalWrap');
   if (!cont) return;
@@ -14848,7 +14890,7 @@ function renderizarEnvioDocsFiscal(){
       ? '<div class="fisc-vazio">Nenhum arquivo enviado ainda.</div>'
       : `<div class="fisc-arquivos">${arr.map(d => `<div class="fisc-arq"><a href="${d.url}" target="_blank" class="fisc-arq-link">📎 ${d.nome_arquivo||'documento'}</a><button class="fisc-arq-del" onclick="_excluirDocRota(${d.id})" title="Excluir">🗑️</button></div>`).join('')}</div>`;
     const totalDocs = mans.length + ctes.length;
-    return `<details class="fisc-card fisc-card-det">
+    return `<details class="fisc-card fisc-card-det" data-rota="${r.id}">
       <summary class="fisc-card-summary">
         <div class="fisc-sum-esq">
           <span class="fisc-cegonha">🚛 ${r.placa_cegonha}</span>
@@ -14986,7 +15028,7 @@ async function _enviarDocRota(rotaId, tipo){
       });
     }
     if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`✅ ${enviados} ${tipo==='cte'?'CTe(s)':'manifesto(s)'} enviado(s) ao motorista!`);
-    renderizarEnvioDocsFiscal();
+    _renderFiscalPreservandoAbertos();
   } catch(e){ alert('Erro ao enviar: '+(e.message||e)); }
 }
 
@@ -14995,7 +15037,7 @@ async function _excluirDocRota(docId){
   try {
     await supabase.from('documentos_rota').delete().eq('id', docId);
     documentosRotaGlobais = documentosRotaGlobais.filter(d=>d.id!==docId);
-    renderizarEnvioDocsFiscal();
+    _renderFiscalPreservandoAbertos();
   } catch(e){ alert('Erro: '+(e.message||e)); }
 }
 
@@ -15330,6 +15372,24 @@ function _selecionarViagem(rotaId){
   renderizarViagensAndamento();
 }
 
+// Salva valor do terceiro + guia ICMS em todos os carros da rota
+async function _viagemSalvarTerceiro(rotaId){
+  const vTerc = document.getElementById('jvValorTerceiro_'+rotaId)?.value.trim();
+  const vGuia = document.getElementById('jvGuiaIcms_'+rotaId)?.value.trim();
+  const valorTerceiro = vTerc === '' || vTerc == null ? null : parseFloat(vTerc);
+  const guiaIcms = vGuia === '' || vGuia == null ? null : parseFloat(vGuia);
+  const carros = _veiculosNaRota(rotaId);
+  try {
+    await Promise.all(carros.map(p => {
+      const pg = (pedidosGlobais||[]).find(x => String(x.id)===String(p.id));
+      if (pg){ pg.valorMotoristaTerceiro = valorTerceiro; pg.guiaIcmsValor = guiaIcms; }
+      return supabase.from('pedidos').update({ valor_motorista_terceiro: valorTerceiro, guia_icms_valor: guiaIcms }).eq('id', p.id);
+    }));
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao('✅ Pagamento do terceiro salvo!');
+    else alert('Pagamento do terceiro salvo!');
+  } catch(e){ alert('Erro ao salvar: '+(e.message||e)); }
+}
+
 function _viagemDetalheHTML(rota, carros){
   const etapaAtual = _viagemEtapaAtual(rota, carros);
   const origem = carros[0] ? `${carros[0].cidadeOrigem||''}/${carros[0].ufOrigem||''}` : '—';
@@ -15362,6 +15422,31 @@ function _viagemDetalheHTML(rota, carros){
       <div><span class="jv-dl">Status</span><span class="jv-dv">${VIAGEM_ETAPAS[etapaAtual].label}</span></div>
     </div>
   </div>`;
+
+  // ===== BLOCO Motorista Terceiro (só aparece quando o motorista da rota é terceiro) =====
+  const motRota = (motoristasGlobais||[]).find(m => normNomeMotorista(m.nome||'') === normNomeMotorista(rota.motorista_1||''));
+  const ehTerceiro = motRota && motRota.vinculo === 'terceiro';
+  let blocoTerceiro = '';
+  if (ehTerceiro){
+    // usa o primeiro carro como referência para o valor (é por viagem)
+    const pRef = carros[0];
+    const valorTerc = pRef && (pRef.valorMotoristaTerceiro != null ? pRef.valorMotoristaTerceiro : '') || '';
+    const guiaIcms = pRef && (pRef.guiaIcmsValor != null ? pRef.guiaIcmsValor : '') || '';
+    blocoTerceiro = `<div class="jv-terceiro">
+      <div class="jv-terceiro-tit">🤝 Motorista terceiro — pagamento</div>
+      <div class="jv-terceiro-grid">
+        <div class="jv-terceiro-campo">
+          <label>Valor a pagar ao terceiro (R$)</label>
+          <input type="number" step="0.01" id="jvValorTerceiro_${rota.id}" value="${valorTerc}" placeholder="0,00">
+        </div>
+        <div class="jv-terceiro-campo">
+          <label>Guia de ICMS (R$) <span class="text-muted">— vazio se não passa no posto</span></label>
+          <input type="number" step="0.01" id="jvGuiaIcms_${rota.id}" value="${guiaIcms}" placeholder="sem guia">
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="_viagemSalvarTerceiro(${rota.id})">💾 Salvar</button>
+      </div>
+    </div>`;
+  }
 
   // ===== BLOCO 2: Veículos na carga + Resumo com barra de ocupação =====
   const cap = _capacidadeRota(rota) || 11;
@@ -15432,7 +15517,7 @@ function _viagemDetalheHTML(rota, carros){
 
   return `${timeline}
     <div class="jv-corpo">
-      <div class="jv-col-esq">${dados}${resumo}${documentos}</div>
+      <div class="jv-col-esq">${dados}${blocoTerceiro}${resumo}${documentos}</div>
       <div class="jv-col-dir">${veiculosCarga}${acoes}</div>
     </div>`;
 }
@@ -16660,6 +16745,9 @@ function _centralModalEquipe(ids){
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
       <h2 style="margin:0 0 4px">👥 Direcionar para equipe</h2>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} coleta(s) selecionada(s). Escolha a equipe que fará a coleta.</p>
+      <div class="central-modal-peds">
+        ${ids.map(id => { const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id)); if(!p) return ''; return `<div class="central-modal-ped"><strong>#${p.id}</strong> · ${p.placa||''} · ${p.cliente||''}${p.enderecoColeta?`<br><span class="central-modal-end">📍 ${p.enderecoColeta}</span>`:''}</div>`; }).join('')}
+      </div>
       <div class="form-group">
         <label>Equipe de coleta</label>
         <select id="centralEquipeSel">
@@ -16710,6 +16798,9 @@ function _centralModalEquipeEntrega(ids){
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
       <h2 style="margin:0 0 4px">👥 Direcionar entrega para equipe</h2>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} entrega(s) selecionada(s). Escolha a equipe que fará a entrega ao cliente.</p>
+      <div class="central-modal-peds">
+        ${ids.map(id => { const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id)); if(!p) return ''; return `<div class="central-modal-ped"><strong>#${p.id}</strong> · ${p.placa||''} · ${p.cliente||''}${p.enderecoEntrega?`<br><span class="central-modal-end">🏁 ${p.enderecoEntrega}</span>`:''}</div>`; }).join('')}
+      </div>
       <div class="form-group">
         <label>Equipe de entrega</label>
         <select id="centralEquipeEntSel">
@@ -17226,7 +17317,28 @@ function renderizarComercialPedidos(){
     <div id="cgRastreioOverlay"></div>`;
 }
 
-function _cgSetFiltro(campo, valor){ _cgPedidoFiltros[campo] = valor; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
+function _cgSetFiltro(campo, valor){
+  _cgPedidoFiltros[campo] = valor;
+  _cgPedidoPagina = 1;
+  // guarda qual filtro está sendo editado e a posição do cursor
+  const ativo = document.activeElement;
+  const ehInputFiltro = ativo && ativo.closest && ativo.closest('.cg-filtro');
+  const pos = ativo && typeof ativo.selectionStart === 'number' ? ativo.selectionStart : null;
+  renderizarComercialPedidos();
+  // restaura o foco no mesmo campo (a tela foi redesenhada)
+  if (ehInputFiltro){
+    // acha o mesmo campo pelo texto do label
+    const labels = document.querySelectorAll('.cg-filtro');
+    for (const lab of labels){
+      const inp = lab.querySelector('input');
+      if (inp && inp.getAttribute('oninput') && inp.getAttribute('oninput').includes(`'${campo}'`)){
+        inp.focus();
+        if (pos !== null){ try { inp.setSelectionRange(pos, pos); } catch(e){} }
+        break;
+      }
+    }
+  }
+}
 function _cgLimparFiltros(){ _cgPedidoFiltros = { pedido:'', cliente:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' }; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
 function _cgPagina(n){ _cgPedidoPagina = n; renderizarComercialPedidos(); }
 function _cgFmtData(d){ if(!d) return '—'; try { return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e){ return d; } }
