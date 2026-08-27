@@ -4720,9 +4720,10 @@ function filtrarClientes(termo) {
         const doc = c.cnpj || c.cpf || '';
         const tipo = c.tipo_cliente ? `<span class="cliente-tipo-badge">${c.tipo_cliente}</span>` : '';
         const cod = c.codigo ? `<span class="cliente-cod">${c.codigo}</span>` : '';
+        const cidadeUf = `${c.cidade||''}${c.uf?('/'+c.uf):''}`;
         return `<div class="cliente-item" onmousedown="selecionarCliente(${c.id}, '${(c.nome||'').replace(/'/g,"\'")}', '${doc}', '${c.tipo_cliente||''}', '${c.codigo||''}')">
             <div class="cliente-item-nome">${c.nome || '—'} ${tipo} ${cod}</div>
-            <div class="cliente-item-doc">${doc || ''}</div>
+            <div class="cliente-item-doc">${cidadeUf?`📍 ${cidadeUf}`:''}${cidadeUf&&doc?' · ':''}${doc || ''}</div>
         </div>`;
     }).join('');
     lista.style.display = 'block';
