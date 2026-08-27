@@ -15,11 +15,11 @@ var perfilLogado = null;   // linha completa da tabela perfis (inclui motorista_
 const PERMISSOES = {
     admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca'],
     comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','orcamento','cobranca'],
-    logistica:  ['painel','logistica','equipes','comercial','cadastros'],
+    logistica:  ['painel','logistica','equipes','comercial','comercialPedidos','cadastros'],
     financeiro: ['faturamento','cobranca'],
     motorista:  ['motorista'],
     equipe:     ['equipes'],
-    fiscal:     ['fiscal','comercialPedidos','comercialViagens'],
+    fiscal:     ['fiscal','comercialPedidos','comercialViagens','painel'],
     diretoria:  ['diretoria'],
     manutencao: ['manutencao']
 };
@@ -460,6 +460,21 @@ function aplicarPermissoes(perfil) {
     // Card de Cadastro de Clientes: visível para todos os perfis que têm a aba Cadastros
     const cardCli = document.getElementById('cardCadastroClientes');
     if (cardCli) cardCli.style.display = '';
+
+    // Fiscal: dentro do Painel, vê apenas a sub-aba "Histórico de Cargas"
+    if (perfil === 'fiscal') {
+        setTimeout(() => {
+            document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => {
+                const oc = b.getAttribute('onclick') || '';
+                if (oc.includes("'historico'")) { b.style.display = ''; }
+                else { b.style.display = 'none'; }
+            });
+            // abre direto no histórico
+            const btnHist = [...document.querySelectorAll('.painel-subtabs .cad-subtab-btn')]
+                .find(b => (b.getAttribute('onclick')||'').includes("'historico'"));
+            if (btnHist && typeof mostrarViewPainel === 'function') mostrarViewPainel('historico', btnHist);
+        }, 700);
+    }
 
     // Ativar primeira aba permitida
     document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
