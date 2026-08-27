@@ -2733,6 +2733,7 @@ async function salvarCadastroCliente(event) {
 
     const tipo    = document.getElementById('tipoCliente').value;
     const nome    = document.getElementById('nomeCliente').value;
+    const nomeFantasia = document.getElementById('nomeFantasiaCliente')?.value.trim() || null;
     const cnpj    = document.getElementById('cnpjCliente').value || null;
     const cpf     = document.getElementById('cpfCliente').value  || null;
     const inscricaoEstadual = document.getElementById('inscricaoEstadual')?.value.trim() || null;
@@ -2776,7 +2777,7 @@ async function salvarCadastroCliente(event) {
             const codigo = 'CLI-' + String(proximoId).padStart(4, '0');
 
             const { error } = await supabase.from('clientes').insert({
-                nome, cnpj, cpf, telefone, email,
+                nome, nome_fantasia: nomeFantasia, cnpj, cpf, telefone, email,
                 inscricao_estadual: inscricaoEstadual,
                 tipo_cliente: tipo,
                 tipo_entrega_padrao: document.getElementById('tipoEntregaPadrao')?.value || 'patio',
@@ -3245,6 +3246,7 @@ const TIPOS_CLIENTE = {
     concessionaria: 'Concessionária',
     locadora:       'Locadora',
     garagista:      'Garagista',
+    transportadora: 'Transportadora',
     particular:     'Particular'
 };
 
@@ -4704,10 +4706,12 @@ function filtrarClientes(termo) {
         const cnpj = (c.cnpj || '').replace(/\D/g,'');
         const cpf  = (c.cpf  || '').replace(/\D/g,'');
         const cod  = (c.codigo || '').toLowerCase();
+        const cidade = (c.cidade || '').toLowerCase();
         const termoDigits = termo.replace(/\D/g,'');
-        return nome.includes(termoLower) || 
+        return nome.includes(termoLower) ||
                (termoDigits && (cnpj.includes(termoDigits) || cpf.includes(termoDigits))) ||
-               cod.includes(termoLower);
+               cod.includes(termoLower) ||
+               cidade.includes(termoLower);
     }).slice(0, 8);
 
     if (filtrados.length === 0) {
@@ -8085,7 +8089,7 @@ function renderizarRotas() {
                 ${typeof etaRotaHTML === 'function' ? etaRotaHTML(r) : ''}
                 ${typeof fechamentoRotaHTML === 'function' ? fechamentoRotaHTML(r) : ''}
                 ${r.valor_previsto ? ` · <span class="rota-valor">💰 ${Number(r.valor_previsto).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span>` : ''}
-                ${r.criado_por ? ` · <span class="rota-criador" title="Quem planejou esta rota">👤 criada por ${r.criado_por}</span>` : ''}
+                ${r.criado_por ? ` · <span class="rota-criador" title="Perfil que planejou esta rota">👤 criada por ${r.criado_por}</span>` : ''}
             </div>
 
             <div class="cegonha-rota-linha" style="margin:0.5rem 0">${paradasHTML}</div>
@@ -8489,7 +8493,7 @@ async function desvincularPedidoRota(pedidoId) {
     }
 }
 
-async function mudarStatusRota(rotaId, novoStatus) {
+async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
     const labels = { em_andamento: 'iniciar a viagem desta rota', concluida: 'concluir esta rota', cancelada: 'cancelar esta rota (os carros voltam à etapa anterior — a viagem não aconteceu)' };
     if (novoStatus === 'em_andamento'){
         const carros = (pedidosGlobais||[]).filter(p =>
@@ -8517,7 +8521,7 @@ async function mudarStatusRota(rotaId, novoStatus) {
         } catch(e){ alert('Erro: ' + (e.message||e)); }
         return;
     }
-    if (!confirm(`Confirma ${labels[novoStatus] || 'alterar esta rota'}?`)) return;
+    if (!jaConfirmado && !confirm(`Confirma ${labels[novoStatus] || 'alterar esta rota'}?`)) return;
     try {
         const { error } = await supabase.from('rotas_planejadas')
             .update({ status: novoStatus }).eq('id', rotaId);
@@ -15590,7 +15594,7 @@ async function _viagemFinalizar(rota, carros){
   if (emViagem.length > 0){
     if (!confirm(`Ainda há ${emViagem.length} carro(s) não entregue(s) nesta viagem. Finalizar mesmo assim?`)) return;
   }
-  if (typeof mudarStatusRota === 'function'){ await mudarStatusRota(rota.id, 'concluida'); }
+  if (typeof mudarStatusRota === 'function'){ await mudarStatusRota(rota.id, 'concluida', true); }
   _viagemSelecionada = null;
   renderizarViagensAndamento();
 }
@@ -16290,7 +16294,8 @@ async function _planConfirmarViagem(corId){
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
     // cria a rota
-    const ins = { nome: cor.nome, corredor_id: cor.id, status: 'planejada' };
+    const _perfilCriador = (typeof NOMES_PERFIL!=='undefined' && typeof perfilAtual!=='undefined') ? (NOMES_PERFIL[perfilAtual]||perfilAtual) : 'Logística';
+    const ins = { nome: cor.nome, corredor_id: cor.id, status: 'planejada', criado_por: _perfilCriador };
     if (cegonha) ins.placa_cegonha = cegonha;
     if (motorista) ins.motorista_1 = motorista;
     const { data: rota, error } = await supabase.from('rotas_planejadas').insert(ins).select().single();
@@ -17069,7 +17074,7 @@ function _cgAbrirCorredor(corredorId){
 }
 
 // ===== TELA 2 — PEDIDOS (comercial, só leitura) =====
-let _cgPedidoFiltros = { pedido:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' };
+let _cgPedidoFiltros = { pedido:'', cliente:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' };
 let _cgPedidoPagina = 1;
 const _CG_POR_PAGINA = 12;
 
@@ -17093,6 +17098,7 @@ function _cgPedidosFiltrados(){
   return (pedidosGlobais||[]).filter(p => {
     if (['Cancelado'].includes(p.status||'')) return false;
     if (f.pedido && !String(p.id).includes(f.pedido)) return false;
+    if (f.cliente && !(p.cliente||'').toLowerCase().includes(f.cliente.toLowerCase())) return false;
     if (f.placa && !(p.placa||'').toLowerCase().includes(f.placa.toLowerCase())) return false;
     if (f.origem && !_cidadeIgual(p.cidadeOrigem, f.origem)) return false;
     if (f.destino && !_cidadeIgual(p.cidadeDestino, f.destino)) return false;
@@ -17141,6 +17147,7 @@ function renderizarComercialPedidos(){
 
     <div class="cg-filtros">
       <div class="cg-filtro"><label>Pedido</label><input type="text" value="${_cgPedidoFiltros.pedido}" oninput="_cgSetFiltro('pedido',this.value)" placeholder="Nº do pedido"></div>
+      <div class="cg-filtro"><label>Cliente</label><input type="text" value="${_cgPedidoFiltros.cliente}" oninput="_cgSetFiltro('cliente',this.value)" placeholder="Nome do cliente"></div>
       <div class="cg-filtro"><label>Placa</label><input type="text" value="${_cgPedidoFiltros.placa}" oninput="_cgSetFiltro('placa',this.value)" placeholder="Placa do veículo"></div>
       <div class="cg-filtro"><label>Origem</label><select onchange="_cgSetFiltro('origem',this.value)"><option value="">Todas</option>${cidades.map(c=>`<option ${_cgPedidoFiltros.origem===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="cg-filtro"><label>Destino</label><select onchange="_cgSetFiltro('destino',this.value)"><option value="">Todos</option>${cidades.map(c=>`<option ${_cgPedidoFiltros.destino===c?'selected':''}>${c}</option>`).join('')}</select></div>
@@ -17195,7 +17202,7 @@ function renderizarComercialPedidos(){
 }
 
 function _cgSetFiltro(campo, valor){ _cgPedidoFiltros[campo] = valor; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
-function _cgLimparFiltros(){ _cgPedidoFiltros = { pedido:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' }; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
+function _cgLimparFiltros(){ _cgPedidoFiltros = { pedido:'', cliente:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' }; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
 function _cgPagina(n){ _cgPedidoPagina = n; renderizarComercialPedidos(); }
 function _cgFmtData(d){ if(!d) return '—'; try { return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e){ return d; } }
 
