@@ -385,6 +385,17 @@
                 <div id="reservasAtivasWrap" class="reservas-wrap"></div>
                 <div id="confirmacaoComercialWrap" class="confirmacao-wrap"></div>
 
+                <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                    <div>
+                        <h3 style="margin:0">📥 Importar cargas do Evo App</h3>
+                        <p class="text-muted" style="font-size:.82rem;margin:.3rem 0 0">Suba a planilha Excel exportada do Evo — o sistema monta os pedidos com a cara do MoveMaster.</p>
+                    </div>
+                    <div>
+                        <input type="file" id="evoFileInput" accept=".xlsx,.xls" style="display:none" onchange="_evoArquivoSelecionado(event)">
+                        <button type="button" class="btn btn-primary" onclick="document.getElementById('evoFileInput').click()">📥 Importar do Evo</button>
+                    </div>
+                </div>
+
                 <div class="card">
                     <h2>Novo Pedido de Transporte</h2>
                     <form id="formComercial" class="form">
@@ -1681,6 +1692,18 @@
 
                         <div class="form-row">
                             <div class="form-group">
+                                <label for="formaPagamentoCliente">Forma de Pagamento</label>
+                                <select id="formaPagamentoCliente">
+                                    <option value="">Não definida</option>
+                                    <option value="boleto">Boleto</option>
+                                    <option value="pix">PIX</option>
+                                    <option value="transferencia">Transferência</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
                                 <label for="tipoEntregaPadrao">Tipo de entrega padrão</label>
                                 <select id="tipoEntregaPadrao">
                                     <option value="patio">Pátio</option>
@@ -2291,6 +2314,9 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <script src="supabase-config.js"></script>
+
+    <!-- SheetJS: leitura de planilhas Excel (importação do Evo) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <script src="script.js"></script>
 
