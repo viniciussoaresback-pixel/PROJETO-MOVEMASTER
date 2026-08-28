@@ -314,6 +314,7 @@ async function carregarDadosDoSupabase(opts) {
                 patioAtual: p.patio_atual || null,
                 corredorManualId: p.corredor_manual_id || null,
                 cobrancaStatus: p.cobranca_status || 'a_cobrar',
+                pagoEm: p.pago_em || null,
                 cobrancaForma: p.cobranca_forma || null,
                 cobradoEm: p.cobrado_em || null,
                 pagoEm: p.pago_em || null,
@@ -626,6 +627,186 @@ function _confirmarAprovacaoLanc(aprovado){
   // dispara o submit de novo, agora com a escolha feita
   const form = document.getElementById('formComercial');
   if (form) form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', {cancelable:true}));
+}
+
+// ============================================================
+// IMPORTAÇÃO DE CARGAS DO EVO APP (Excel)
+// ============================================================
+let _evoPreview = null; // dados processados aguardando confirmação
+
+function _evoArquivoSelecionado(event){
+  const file = event.target.files[0];
+  if (!file) return;
+  if (typeof XLSX === 'undefined'){ alert('Biblioteca de leitura de Excel não carregou. Recarregue a página (Ctrl+Shift+R) e tente de novo.'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const linhas = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+      _evoProcessar(linhas);
+    } catch(err){ alert('Não consegui ler a planilha: '+(err.message||err)); }
+    event.target.value = ''; // permite reimportar o mesmo arquivo
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Índice das colunas do Evo (baseado no cabeçalho da linha 2)
+function _evoMapCols(header){
+  const idx = {};
+  header.forEach((nome, i) => { if (nome) idx[String(nome).trim()] = i; });
+  return idx;
+}
+
+function _evoProcessar(linhas){
+  // linha 0 = grupos, linha 1 = cabeçalho real, dados a partir da linha 2
+  if (!linhas || linhas.length < 3){ alert('Planilha vazia ou fora do formato esperado.'); return; }
+  const H = _evoMapCols(linhas[1]);
+  const col = (nome) => H[nome];
+  const get = (row, nome) => { const c = col(nome); return c!=null ? row[c] : null; };
+
+  // agrupa por ID (pregão) — cada ID = 1 pedido com N carros
+  const grupos = {};
+  for (let r = 2; r < linhas.length; r++){
+    const row = linhas[r];
+    if (!row) continue;
+    const placa = get(row, 'PLACA/CÓD.') || get(row, 'LOCALIZADOR');
+    if (!placa) continue;
+    const idPedido = get(row, 'ID') || placa;
+    if (!grupos[idPedido]) grupos[idPedido] = [];
+    grupos[idPedido].push({
+      placa: String(placa).trim(),
+      localizador: get(row,'LOCALIZADOR'),
+      modelo: get(row,'MODELO') || '',
+      valorVeiculo: get(row,'VALOR DO VEÍCULO (R$)'),
+      frete: parseFloat(get(row,'TRANSPORTE (R$)')) || null,
+      embarcador: get(row,'EMBARCADOR (NOME)') || '',
+      embarcadorDoc: get(row,'EMBARCADOR (CPF/CNPJ)') || '',
+      colLocal: get(row,'LOCAL'), colRua: get(row,'RUA'), colNum: get(row,'NÚMERO'),
+      colBairro: get(row,'BAIRRO'), colCidade: get(row,'CIDADE'), colUf: get(row,'UF'),
+      colCep: get(row,'CEP'), colCnpj: get(row,'CPF/CNPJ'), colContato: get(row,'CONTATO'), colTel: get(row,'TELEFONE'),
+      entLocal: get(row,'LOCAL (1)'), entRua: get(row,'RUA (1)'), entNum: get(row,'NÚMERO (1)'),
+      entBairro: get(row,'BAIRRO (1)'), entCidade: get(row,'CIDADE (1)'), entUf: get(row,'UF (1)'),
+      entCep: get(row,'CEP (1)'), entCnpj: get(row,'CPF/CNPJ (1)'),
+      dtLancamento: get(row,'DT. LANÇAMENTO')
+    });
+  }
+
+  const pedidos = Object.keys(grupos).map(id => {
+    const carros = grupos[id];
+    const ref = carros[0];
+    const dupCarros = carros.filter(c => (pedidosGlobais||[]).some(p =>
+      _norm(p.placa||'') === _norm(c.placa) && _norm(p.cidadeDestino||'') === _norm(c.entCidade||'')));
+    return { id, carros, ref, duplicado: dupCarros.length };
+  });
+
+  _evoPreview = pedidos;
+  _evoAbrirPreview(pedidos);
+}
+
+function _evoAbrirPreview(pedidos){
+  const totalCarros = pedidos.reduce((s,p)=>s+p.carros.length,0);
+  const comDup = pedidos.filter(p => p.duplicado > 0).length;
+  const old = document.getElementById('evoPreviewOverlay'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'evoPreviewOverlay';
+  div.className = 'evo-overlay';
+  div.innerHTML = `
+    <div class="evo-bg" onclick="document.getElementById('evoPreviewOverlay').remove()"></div>
+    <div class="evo-painel">
+      <div class="evo-head">
+        <div>
+          <h2 style="margin:0">📥 Importar do Evo — prévia</h2>
+          <p class="text-muted" style="font-size:.85rem;margin:.3rem 0 0">${pedidos.length} pedido(s) · ${totalCarros} carro(s)${comDup?` · <span style="color:#f59e0b">⚠️ ${comDup} possível(is) duplicado(s)</span>`:''}</p>
+        </div>
+        <button class="evo-x" onclick="document.getElementById('evoPreviewOverlay').remove()">✕</button>
+      </div>
+      <div class="evo-lista">
+        ${pedidos.map((p,i) => {
+          const c = p.ref;
+          const semCliente = !c.embarcador;
+          const semDestino = !c.entCidade;
+          const problema = semCliente || semDestino;
+          return `<div class="evo-ped ${p.duplicado?'evo-dup':''}">
+            <label class="evo-ped-head">
+              <input type="checkbox" class="evo-chk" data-idx="${i}" ${problema?'':'checked'}>
+              <span class="evo-ped-id">${p.id}</span>
+              <span class="evo-ped-badge">🔗 ${p.carros.length} carro(s)</span>
+              ${p.duplicado?`<span class="evo-dup-badge">⚠️ ${p.duplicado} já existe(m)</span>`:''}
+              ${problema?`<span class="evo-prob-badge">⚠️ ${semCliente?'sem cliente':''}${semCliente&&semDestino?' / ':''}${semDestino?'sem destino':''}</span>`:''}
+            </label>
+            <div class="evo-ped-info">
+              <div>👤 <strong>${c.embarcador||'—'}</strong> ${c.embarcadorDoc?`· ${c.embarcadorDoc}`:''}</div>
+              <div>📍 ${c.colCidade||'—'}/${c.colUf||''} → 🏁 ${c.entCidade||'—'}/${c.entUf||''}</div>
+              <div class="text-muted" style="font-size:.78rem">🚗 ${p.carros.map(x=>x.placa).join(', ')}</div>
+              <div class="text-muted" style="font-size:.78rem">${c.modelo||'sem modelo'} · frete: ${c.frete?('R$ '+c.frete.toLocaleString('pt-BR')):'a preencher'}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="evo-actions">
+        <button class="btn btn-primary" onclick="_evoConfirmarImportacao()">✅ Importar selecionados</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('evoPreviewOverlay').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _evoConfirmarImportacao(){
+  const marcados = [...document.querySelectorAll('.evo-chk:checked')].map(c => parseInt(c.getAttribute('data-idx')));
+  if (marcados.length === 0){ alert('Selecione ao menos um pedido para importar.'); return; }
+  const pedidos = marcados.map(i => _evoPreview[i]);
+  const btn = document.querySelector('#evoPreviewOverlay .btn-primary');
+  if (btn){ btn.disabled = true; btn.textContent = '⏳ Importando...'; }
+
+  let criados = 0, clientesCriados = 0;
+  try {
+    for (const ped of pedidos){
+      const c = ped.ref;
+      let clienteId = null, clienteNome = c.embarcador || '';
+      if (c.embarcador){
+        let cli = (clientesGlobais||[]).find(x =>
+          (c.embarcadorDoc && _norm(x.cnpj||'')===_norm(c.embarcadorDoc)) || _norm(x.nome||'')===_norm(c.embarcador));
+        if (!cli){
+          const novoCli = {
+            nome: c.embarcador, cnpj: c.embarcadorDoc || null, tipo_cliente: 'empresa',
+            cidade: c.colCidade || null, uf: c.colUf || null,
+            endereco: c.colRua || null, numero: c.colNum ? String(c.colNum) : null,
+            bairro: c.colBairro || null, cep: c.colCep || null,
+            telefone: c.colTel || null
+          };
+          const { data } = await supabase.from('clientes').insert(novoCli).select();
+          if (data && data[0]){ cli = data[0]; clientesGlobais.push(cli); clientesCriados++; }
+        }
+        if (cli){ clienteId = cli.id; clienteNome = cli.nome; }
+      }
+      const grupoId = ped.carros.length > 1 ? ('evo-'+ped.id+'-'+Date.now()) : null;
+      for (const carro of ped.carros){
+        const novoPedido = {
+          cliente: clienteNome, cliente_id: clienteId,
+          modelo: carro.modelo || '', placa: carro.placa, referencia: ped.id,
+          cidade_origem: c.colCidade || null, uf_origem: c.colUf || null,
+          cidade_destino: c.entCidade || null, uf_destino: c.entUf || null,
+          endereco_coleta: [c.colRua, c.colNum, c.colBairro].filter(Boolean).join(', ') || null,
+          endereco_entrega: [c.entRua, c.entNum, c.entBairro].filter(Boolean).join(', ') || null,
+          cnpj_coleta: c.colCnpj || null, cnpj_entrega: c.entCnpj || null,
+          valor_frete: carro.frete || 0,
+          status: 'Aguardando coleta', status_planilha: 'Aguardando coleta',
+          aprovado: true, grupo_id: grupoId,
+          criado_por_nome: 'Importado do Evo'
+        };
+        const { error } = await supabase.from('pedidos').insert(novoPedido);
+        if (!error) criados++;
+      }
+    }
+    await recarregarPedidos();
+    document.getElementById('evoPreviewOverlay')?.remove();
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`✅ ${criados} carro(s) importado(s)!`);
+    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemComercial', `✅ Importação concluída: ${criados} carro(s)${clientesCriados?`, ${clientesCriados} cliente(s) novo(s)`:''}. Revise os pedidos se necessário.`, 'success');
+  } catch(e){
+    alert('Erro na importação: '+(e.message||e));
+    if (btn){ btn.disabled = false; btn.textContent = '✅ Importar selecionados'; }
+  }
 }
 
 async function salvarPedidoComercial(event) {
@@ -2738,6 +2919,7 @@ async function salvarCadastroCliente(event) {
     const tipo    = document.getElementById('tipoCliente').value;
     const nome    = document.getElementById('nomeCliente').value;
     const nomeFantasia = document.getElementById('nomeFantasiaCliente')?.value.trim() || null;
+    const formaPagamento = document.getElementById('formaPagamentoCliente')?.value || null;
     const cnpj    = document.getElementById('cnpjCliente').value || null;
     const cpf     = document.getElementById('cpfCliente').value  || null;
     const inscricaoEstadual = document.getElementById('inscricaoEstadual')?.value.trim() || null;
@@ -2781,7 +2963,7 @@ async function salvarCadastroCliente(event) {
             const codigo = 'CLI-' + String(proximoId).padStart(4, '0');
 
             const { error } = await supabase.from('clientes').insert({
-                nome, nome_fantasia: nomeFantasia, cnpj, cpf, telefone, email,
+                nome, nome_fantasia: nomeFantasia, forma_pagamento: formaPagamento, cnpj, cpf, telefone, email,
                 inscricao_estadual: inscricaoEstadual,
                 tipo_cliente: tipo,
                 tipo_entrega_padrao: document.getElementById('tipoEntregaPadrao')?.value || 'patio',
@@ -3769,6 +3951,7 @@ const STATUS_PLANILHA = {
   'Coletado':          { cor:'#84cc16', interno:'Em Coleta' },
   'Em transporte':     { cor:'#34d399', interno:'Em Transporte' },
   'Transbordo':        { cor:'#fb923c', interno:'Transbordo' },
+  'Ocorrência':        { cor:'#ef4444', interno:'Ocorrência' },
   'Entregue':          { cor:'#4ade80', interno:'Entregue' }
 };
 const STATUS_PLANILHA_LISTA = Object.keys(STATUS_PLANILHA);
@@ -8594,6 +8777,18 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
 
         // Ao concluir, limpa os documentos (manifesto/CTe) da rota — controle do que está em aberto
         if (novoStatus === 'concluida'){
+            // Item 2: carros transbordados saem da viagem AGORA (ao finalizar), mas continuam
+            // nos corredores para a próxima perna (já têm status Transbordo + corredor definido).
+            const transbordados = (pedidosGlobais||[]).filter(p =>
+                String(p.rotaId || p.rota_id) === String(rotaId) && p.status === 'Transbordo');
+            for (const p of transbordados){
+                try {
+                    await supabase.from('pedidos').update({
+                        rota_id: null, placa_cegonha: null, motorista_1: null, motorista_2: null
+                    }).eq('id', p.id);
+                    p.rotaId = null; p.rota_id = null; p.placaCegonha = null; p.motorista1 = null;
+                } catch(_){}
+            }
             const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(rotaId));
             for (const d of docs){
                 try {
@@ -12606,9 +12801,12 @@ function renderizarCobranca(){
 
   wrap.innerHTML = `<div class="cob-resumo">${resumo}${alertaAtraso}</div>
     <table class="corr-tabela">
-      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Valor</th><th>Situação</th><th>Ações</th></tr></thead>
+      <thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem → Destino</th><th>Valor</th><th>Forma pgto</th><th>Situação</th><th>Ações</th></tr></thead>
       <tbody>${lista.map(p => {
         const st = p.cobrancaStatus || 'a_cobrar';
+        const cliObj = (clientesGlobais||[]).find(c => c.id === p.clienteId || _norm(c.nome)===_norm(p.cliente||''));
+        const formaPg = cliObj && cliObj.forma_pagamento ? _formaPagamentoLabel(cliObj.forma_pagamento) : '<span class="text-muted">—</span>';
+        const pagoData = (st==='pago'||st==='confirmado') && p.pagoEm ? `<br><span style="font-size:.72rem;color:#22c55e">💰 pago em ${new Date(p.pagoEm).toLocaleDateString('pt-BR')}</span>` : '';
         let acoes = '';
         // Comercial conduz até "pago"; Financeiro confirma
         if (ehComercial && st === 'a_cobrar') acoes += `<button class="btn btn-sm btn-primary" onclick="marcarCobranca(${p.id},'cobrado')">Marcar cobrado</button>`;
@@ -12628,11 +12826,17 @@ function renderizarCobranca(){
           <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
           <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
           <td class="ct-frete">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-          <td class="ct-status">${_cobPill(st)}</td>
+          <td>${formaPg}</td>
+          <td class="ct-status">${_cobPill(st)}${pagoData}</td>
           <td class="ct-acoes">${acoes || '<span class="text-muted">—</span>'}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
+}
+
+function _formaPagamentoLabel(fp){
+  const map = { boleto:'🧾 Boleto', pix:'⚡ PIX', transferencia:'🏦 Transferência' };
+  return map[fp] || fp || '—';
 }
 
 async function marcarCobranca(pedidoId, novo){
@@ -12653,11 +12857,21 @@ async function marcarCobranca(pedidoId, novo){
   }
   const usuario = document.getElementById('usuarioLogado')?.textContent || '';
   const agora = new Date().toISOString();
+  // Item 3: ao marcar como pago, permite escolher a data do pagamento (padrão: hoje)
+  let dataPagamento = agora;
+  if (alvo === 'pago'){
+    const hoje = new Date().toISOString().slice(0,10);
+    const escolha = prompt('Data do pagamento (AAAA-MM-DD):', hoje);
+    if (escolha === null) return; // cancelou
+    const dt = escolha.trim();
+    if (dt && /^\d{4}-\d{2}-\d{2}$/.test(dt)){ dataPagamento = new Date(dt+'T12:00:00').toISOString(); }
+    else if (dt){ alert('Data inválida. Use o formato AAAA-MM-DD.'); return; }
+  }
   const upd = { cobranca_status: alvo };
   if (alvo === 'nao_cobro'){ upd.cobrado_por = usuario; } // registra quem passou pro financeiro
   if (alvo === 'cortesia'){ upd.cobrado_por = usuario; }
   if (alvo === 'cobrado'){ upd.cobrado_em = agora; upd.cobrado_por = usuario; }
-  if (alvo === 'pago'){ upd.pago_em = agora; upd.pago_por = usuario; }
+  if (alvo === 'pago'){ upd.pago_em = dataPagamento; upd.pago_por = usuario; }
   if (alvo === 'confirmado'){ upd.pagto_confirmado_em = agora; upd.pagto_confirmado_por = usuario;
     upd.receita_confirmada = true; upd.receita_confirmada_em = agora; upd.receita_confirmada_por = usuario;
   }
@@ -15282,10 +15496,8 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
       patio_desde: new Date().toISOString(),
       aguardando_transbordo: !corredorId,  // se não direcionou a corredor, fica aguardando transbordo
       qtd_transbordos: (p.qtdTransbordos || 0) + 1,
-      // sai do caminhão/rota atual — renasce no pátio para a próxima perna
-      placa_cegonha: null, motorista_1: null, motorista_2: null,
-      percent_motorista_1: null, percent_motorista_2: null,
-      rota_id: null,
+      // Item 2: NÃO sai da viagem agora — fica na viagem antiga até ela finalizar.
+      // Mas já pode ser planejado nos corredores (a próxima perna).
       corredor_manual_id: corredorId ? parseInt(corredorId) : null
     };
     await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
@@ -15293,7 +15505,7 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
     if (_rotaOrigem){ await _marcarSaidaTransbordo(_rotaOrigem, pedidoId, `transbordo em ${patio}`); }
     Object.assign(p, {
       status:'Transbordo', statusPlanilha:'Transbordo', cidadeTransbordo:patio,
-      patioAtual:patio, placaCegonha:null, motorista1:null, rotaId:null,
+      patioAtual:patio,
       aguardandoTransbordo: !corredorId, qtdTransbordos: (p.qtdTransbordos||0)+1,
       corredorManualId: corredorId ? parseInt(corredorId) : null
     });
@@ -15572,7 +15784,7 @@ async function _viagemAcao(rotaId, acao){
   if (acao === 'viagem')      return _viagemIniciar(rota, carros);
   if (acao === 'entrega')     return _viagemRegistrarEntrega(rota, carros);
   if (acao === 'transbordo')  return _viagemRegistrarTransbordo(rota, carros);
-  if (acao === 'ocorrencia')  { if (carros[0]) abrirRegistrarOcorrencia(carros[0].id); return; }
+  if (acao === 'ocorrencia')  return _viagemRegistrarOcorrencia(rota, carros);
   if (acao === 'finalizar')   return _viagemFinalizar(rota, carros);
   if (acao === 'cancelar')    return _viagemCancelar(rota, carros);
 }
@@ -15725,6 +15937,55 @@ async function _viagemEntregaParaEquipe(rotaId, ids){
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} veículo(s) direcionado(s) para a equipe de entrega. Veja na Central de Operação.`, 'success');
 }
 
+// Item 1: registrar ocorrência escolhendo o carro; trava o pedido no status "Ocorrência"
+async function _viagemRegistrarOcorrencia(rota, carros){
+  const elegiveis = carros.filter(c => !['Entregue','Cancelado'].includes(c.status));
+  if (elegiveis.length === 0){ alert('Nenhum carro elegível para registrar ocorrência.'); return; }
+  const escolher = (ids) => {
+    const pedidoId = ids[0];
+    const desc = prompt('Descreva a ocorrência com este carro:\n(ex: pane mecânica, avaria, atraso, sinistro...)');
+    if (desc === null || !desc.trim()) return;
+    _confirmarOcorrencia(pedidoId, desc.trim(), rota);
+  };
+  if (elegiveis.length === 1){ escolher([elegiveis[0].id]); return; }
+  _viagemModalCarros('⚠️ Registrar Ocorrência', 'Selecione o carro que teve a ocorrência.', elegiveis, '#ef4444', '➡️ Continuar', (ids) => {
+    document.getElementById('modalViagemAcao')?.remove();
+    escolher(ids);
+  });
+}
+
+async function _confirmarOcorrencia(pedidoId, descricao, rota){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const statusAntes = p.status;
+  try {
+    // trava o pedido no status Ocorrência
+    await supabase.from('pedidos').update({ status: 'Ocorrência', status_planilha: 'Ocorrência' }).eq('id', parseInt(pedidoId));
+    p.status = 'Ocorrência'; p.statusPlanilha = 'Ocorrência';
+    // registra a ocorrência (tabela ocorrencias) e no histórico
+    await supabase.from('ocorrencias').insert({
+      tipo: 'ocorrencia', pedido_id: parseInt(pedidoId), descricao,
+      usuario_nome: usuario, status: 'aberta',
+      dados_extras: JSON.stringify({ placa: p.placa, cliente: p.cliente, rota_id: rota?.id, cegonha: rota?.placa_cegonha })
+    });
+    await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: statusAntes, status_novo: 'Ocorrência',
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: `⚠️ Ocorrência: ${descricao}`
+    });
+    // notifica comercial e logística
+    if (typeof notificar === 'function'){
+      notificar({ perfil:'logistica', tipo:'ocorrencia', pedidoId: parseInt(pedidoId),
+        titulo:'⚠️ Ocorrência registrada', mensagem:`#${pedidoId} (${p.placa||''}): ${descricao}` });
+      notificar({ perfil:'comercial', tipo:'ocorrencia', pedidoId: parseInt(pedidoId),
+        titulo:'⚠️ Ocorrência num pedido', mensagem:`#${pedidoId} (${p.cliente||''}): ${descricao}` });
+    }
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao('⚠️ Ocorrência registrada — carro travado.');
+    if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento();
+  } catch(e){ alert('Erro ao registrar ocorrência: '+(e.message||e)); }
+}
+
 async function _viagemRegistrarTransbordo(rota, carros){
   const elegiveis = carros.filter(c => !['Entregue','Cancelado','Transbordo'].includes(c.status));
   if (elegiveis.length === 0){ alert('Nenhum carro elegível para transbordo.'); return; }
@@ -15810,9 +16071,14 @@ function _planParadasDoCorredor(c){
 function _planPedidosDoCorredor(c){
   const seq = (c._paradas||[]).length >= 2 ? c._paradas.map(p=>p.cidade) : [c.origem, c.destino];
   const paradasStr = seq.filter(Boolean);
-  const vivos = (pedidosGlobais||[]).filter(p =>
-    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha
-    && p.aprovado !== false && !p.aguardandoTransbordo);
+  const vivos = (pedidosGlobais||[]).filter(p => {
+    if (['Entregue','Cancelado'].includes(p.status||'')) return false;
+    if (p.aprovado === false || p.aguardandoTransbordo) return false;
+    // Item 2: transbordado aparece no corredor mesmo ainda estando na viagem antiga (com rota_id)
+    if (p.status === 'Transbordo') return true;
+    // demais: só se não estiverem em nenhuma viagem
+    return !p.rotaId && !p.rota_id && !p.placaCegonha;
+  });
   return vivos.filter(p => {
     // Corredor manual MANDA e é EXCLUSIVO: se o pedido foi jogado num corredor, só aparece nele
     if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
@@ -17018,11 +17284,12 @@ function _planFolgasHTML(){
 // Agrupa a situação dos pedidos ativos
 function _cgSituacao(){
   const ativos = (pedidosGlobais||[]).filter(p => !['Cancelado'].includes(p.status||''));
-  const cont = { aguardandoColeta:0, prontos:0, emViagem:0, chegaram:0, aguardandoRetirada:0, total:0 };
+  const cont = { aguardandoColeta:0, prontos:0, emViagem:0, chegaram:0, aguardandoRetirada:0, ocorrencias:0, total:0 };
   ativos.forEach(p => {
     const st = statusPlanilhaDoPedido(p);
     if (p.status === 'Entregue') return; // entregue não conta como "em operação"
     cont.total++;
+    if (p.status === 'Ocorrência'){ cont.ocorrencias++; return; }
     if (p.aguardandoRetirada){ cont.aguardandoRetirada++; return; }
     if (['Aguardando coleta','Não liberado'].includes(st)) cont.aguardandoColeta++;
     else if (['Enviado coleta','Coletado'].includes(st)) cont.prontos++;
@@ -17081,6 +17348,7 @@ function renderizarVisaoGlobal(){
       <div class="cg-kpi cg-kpi-click" onclick="_cgAbrirListaKpi('aguardandoColeta')"><span class="cg-kpi-num" style="color:#f59e0b">${s.aguardandoColeta}</span><span class="cg-kpi-lbl">Aguardando coleta</span></div>
       <div class="cg-kpi cg-kpi-click" onclick="_cgAbrirListaKpi('emViagem')"><span class="cg-kpi-num" style="color:#2563eb">${s.emViagem}</span><span class="cg-kpi-lbl">Em viagem</span></div>
       <div class="cg-kpi cg-kpi-click" onclick="_cgAbrirListaKpi('aguardandoRetirada')"><span class="cg-kpi-num" style="color:#a855f7">${aguardandoRetirada}</span><span class="cg-kpi-lbl">Aguardando retirada</span></div>
+      <div class="cg-kpi cg-kpi-click" onclick="_cgAbrirListaKpi('ocorrencias')"><span class="cg-kpi-num" style="color:#ef4444">${s.ocorrencias||0}</span><span class="cg-kpi-lbl">⚠️ Ocorrências</span></div>
     </div>
     <div id="cgKpiOverlay"></div>
 
@@ -17139,11 +17407,12 @@ function _cgKpiPedidos(tipo){
     if (tipo === 'aguardandoColeta') return p.status !== 'Entregue' && !p.aguardandoRetirada && ['Aguardando coleta','Não liberado'].includes(st);
     if (tipo === 'emViagem') return p.status !== 'Entregue' && !p.aguardandoRetirada && (st === 'Em transporte' || st === 'Transbordo');
     if (tipo === 'aguardandoRetirada') return p.aguardandoRetirada;
+    if (tipo === 'ocorrencias') return p.status === 'Ocorrência';
     if (tipo === 'chegaram') return p.status === 'Entregue';
     return false;
   });
 }
-const _CG_KPI_TITULOS = { total:'Pedidos em operação', aguardandoColeta:'Aguardando coleta', emViagem:'Em viagem', aguardandoRetirada:'Aguardando retirada', chegaram:'Chegaram ao destino' };
+const _CG_KPI_TITULOS = { total:'Pedidos em operação', aguardandoColeta:'Aguardando coleta', emViagem:'Em viagem', aguardandoRetirada:'Aguardando retirada', ocorrencias:'⚠️ Pedidos com ocorrência', chegaram:'Chegaram ao destino' };
 
 function _cgAbrirListaKpi(tipo){
   const overlay = document.getElementById('cgKpiOverlay');
