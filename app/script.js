@@ -782,7 +782,7 @@ async function _evoConfirmarImportacao(){
         }
         if (cli){ clienteId = cli.id; clienteNome = cli.nome; }
       }
-      const grupoId = ped.carros.length > 1 ? ('evo-'+ped.id+'-'+Date.now()) : null;
+      const grupoId = ped.carros.length > 1 ? (typeof gerarGrupoId === 'function' ? gerarGrupoId() : (crypto.randomUUID ? crypto.randomUUID() : null)) : null;
       for (const carro of ped.carros){
         const novoPedido = {
           cliente: clienteNome, cliente_id: clienteId,
