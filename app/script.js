@@ -752,6 +752,25 @@ function _evoAbrirPreview(pedidos){
   document.body.appendChild(div);
 }
 
+// Converte a data do Evo (texto dd/mm/aaaa, ou serial do Excel) para ISO
+function _evoParseData(v){
+  if (!v) return null;
+  // número serial do Excel (dias desde 1899-12-30)
+  if (typeof v === 'number'){
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return isNaN(d) ? null : d.toISOString();
+  }
+  const s = String(v).trim();
+  // formato dd/mm/aaaa (com ou sem hora)
+  let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m){ const d = new Date(`${m[3]}-${m[2]}-${m[1]}T12:00:00`); return isNaN(d)?null:d.toISOString(); }
+  // formato aaaa-mm-dd
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m){ const d = new Date(s); return isNaN(d)?null:d.toISOString(); }
+  const d = new Date(s);
+  return isNaN(d) ? null : d.toISOString();
+}
+
 async function _evoConfirmarImportacao(){
   console.log('%c[Evo Import v257] iniciando — grupo_id via UUID','color:#ff6a00;font-weight:bold');
   const marcados = [...document.querySelectorAll('.evo-chk:checked')].map(c => parseInt(c.getAttribute('data-idx')));
@@ -798,6 +817,7 @@ async function _evoConfirmarImportacao(){
           cep_coleta: c.colCep ? String(c.colCep) : null,
           cep_entrega: c.entCep ? String(c.entCep) : null,
           valor_frete: Number(carro.frete) || 0,
+          data_solicitacao: _evoParseData(c.dtLancamento) || new Date().toISOString(),
           status: 'Pendente',
           aprovado: true,
           aprovado_em: new Date().toISOString(),
