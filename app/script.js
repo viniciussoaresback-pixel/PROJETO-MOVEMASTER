@@ -681,7 +681,7 @@ function _evoProcessar(linhas){
       valorVeiculo: get(row,'VALOR DO VEÍCULO (R$)'),
       frete: parseFloat(get(row,'TRANSPORTE (R$)')) || null,
       embarcador: get(row,'EMBARCADOR (NOME)') || '',
-      embarcadorDoc: get(row,'EMBARCADOR (CPF/CNPJ)') || '',
+      embarcadorDoc: get(row,'TOMADOR (CPF/CNPJ)') || get(row,'EMBARCADOR (CPF/CNPJ)') || '',
       colLocal: get(row,'LOCAL'), colRua: get(row,'RUA'), colNum: get(row,'NÚMERO'),
       colBairro: get(row,'BAIRRO'), colCidade: get(row,'CIDADE'), colUf: get(row,'UF'),
       colCep: get(row,'CEP'), colCnpj: get(row,'CPF/CNPJ'), colContato: get(row,'CONTATO'), colTel: get(row,'TELEFONE'),
