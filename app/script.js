@@ -16504,24 +16504,30 @@ async function _aprovarPedido(pedidoId, corredorId){
 
 // Lista de pedidos aguardando transbordo — com linha do tempo e comando de próxima ação
 function _planTransbordoListaHTML(){
-  const pedidos = _planPedidosAguardandoTransbordo();
-  if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando transbordo.</p>';
-  return pedidos.map(p => {
-    const patio = p.patioAtual || p.cidadeTransbordo || '—';
-    return `<div class="plan-transb-card">
-      <div class="plan-transb-top">
-        <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
-        <span class="plan-transb-selo">🟣 Transbordo${p.qtdTransbordos>1?` (${p.qtdTransbordos}ª vez)`:''}</span>
-      </div>
-      <div class="plan-transb-cliente">${p.cliente||''}</div>
-      ${_linhaDoTempoPedidoHTML(p)}
-      <div class="plan-transb-proxima">
-        <div class="plan-transb-proxima-lbl">PRÓXIMA AÇÃO</div>
-        <div class="plan-transb-proxima-txt">🚛 Direcionar novo transporte a partir de ${patio.split('/')[0]} → ${p.cidadeDestino||''}</div>
-        <button class="plan-transb-btn" onclick="_abrirModalTransbordoStatus(${p.id}, 'Transbordo')">🔀 DIRECIONAR TRANSBORDO</button>
-      </div>
-    </div>`;
-  }).join('');
+  try {
+    const pedidos = _planPedidosAguardandoTransbordo();
+    if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando transbordo.</p>';
+    return pedidos.map(p => {
+      const patio = p.patioAtual || p.cidadeTransbordo || '—';
+      let timeline = '';
+      try { timeline = _linhaDoTempoPedidoHTML(p); } catch(e){ timeline = ''; }
+      return `<div class="plan-transb-card">
+        <div class="plan-transb-top">
+          <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
+          <span class="plan-transb-selo">🟣 Transbordo${p.qtdTransbordos>1?` (${p.qtdTransbordos}ª vez)`:''}</span>
+        </div>
+        <div class="plan-transb-cliente">${p.cliente||''}</div>
+        ${timeline}
+        <div class="plan-transb-proxima">
+          <div class="plan-transb-proxima-lbl">PRÓXIMA AÇÃO</div>
+          <div class="plan-transb-proxima-txt">🚛 Direcionar novo transporte a partir de ${String(patio).split('/')[0]} → ${p.cidadeDestino||''}</div>
+          <button class="plan-transb-btn" onclick="_abrirModalTransbordoStatus(${p.id}, 'Transbordo')">🔀 DIRECIONAR TRANSBORDO</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e){
+    return '<p class="text-muted" style="padding:1rem">Erro ao carregar a lista de transbordo. Recarregue a página (Ctrl+Shift+R).</p>';
+  }
 }
 
 // Linha do tempo simples do pedido (só para quem passou/vai passar por transbordo)
