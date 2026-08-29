@@ -1,0 +1,134 @@
+/* MoveMaster — Refinamento 9: KPIs executivos, cabeçalhos de seção, estados vazios e skeletons. */
+
+/* ---------- 1. Hierarquia dos indicadores ---------- */
+.cg-kpi{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding:20px 22px !important;
+  overflow:hidden;
+}
+.cg-kpi::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:3px;
+  background:linear-gradient(180deg,#ff8a1f,#e96b00);
+  opacity:.85;
+}
+.cg-kpi-num{
+  font-size:clamp(26px,3.2vw,34px) !important;
+  font-weight:700 !important;
+  line-height:1.05 !important;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1;
+}
+.cg-kpi-lbl{
+  font-size:11px !important;
+  font-weight:600 !important;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  opacity:.62;
+}
+.cg-kpi-var{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  align-self:flex-start;
+  margin-top:2px;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  background:rgba(34,197,94,.12);
+  color:#16a34a;
+}
+.cg-kpi-var[data-dir="baixa"]{background:rgba(239,68,68,.12);color:#dc2626;}
+.cg-kpi-var[data-dir="neutro"]{background:rgba(120,120,120,.14);color:#8a8f98;}
+.cg-kpi-var small{font-weight:500;opacity:.8;}
+
+/* ---------- 2. Cabeçalho de seção com contexto ---------- */
+.mm-sec-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  margin:4px 0 20px;
+  padding-bottom:14px;
+  border-bottom:1px solid rgba(128,128,128,.18);
+}
+.mm-sec-head h2,.mm-sec-head .mm-sec-title{
+  margin:0;
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:-.01em;
+}
+.mm-sec-sub{
+  margin:4px 0 0;
+  font-size:13px;
+  opacity:.6;
+}
+.mm-sec-count{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin-left:10px;
+  padding:2px 10px;
+  border-radius:999px;
+  background:rgba(255,138,31,.14);
+  color:#e96b00;
+  font-size:12px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  vertical-align:middle;
+}
+.mm-sec-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
+/* ---------- 3. Estados vazios ---------- */
+.mm-empty{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:44px 24px;
+  border:1px dashed rgba(128,128,128,.28);
+  border-radius:14px;
+  text-align:center;
+}
+.mm-empty svg{width:40px;height:40px;stroke:currentColor;opacity:.32;}
+.mm-empty-t{font-size:15px;font-weight:600;}
+.mm-empty-d{font-size:13px;opacity:.6;max-width:340px;line-height:1.5;}
+.mm-empty-btn{
+  margin-top:6px;
+  padding:9px 18px;
+  border:0;
+  border-radius:8px;
+  background:linear-gradient(180deg,#ff8a1f,#e96b00);
+  color:#fff;
+  font-weight:600;
+  font-size:13px;
+  cursor:pointer;
+}
+.mm-empty-btn:hover{filter:brightness(1.06);}
+
+/* ---------- 4. Skeletons ---------- */
+.mm-skel{
+  border-radius:8px;
+  background:linear-gradient(90deg,rgba(128,128,128,.10) 25%,rgba(128,128,128,.20) 37%,rgba(128,128,128,.10) 63%);
+  background-size:400% 100%;
+  animation:mm-skel 1.4s ease infinite;
+}
+.mm-skel-line{height:12px;margin:8px 0;}
+.mm-skel-line.w60{width:60%;}
+.mm-skel-line.w40{width:40%;}
+.mm-skel-card{height:96px;}
+@keyframes mm-skel{0%{background-position:100% 50%}100%{background-position:0 50%}}
+
+@media (prefers-reduced-motion: reduce){
+  .mm-skel{animation:none;}
+}
