@@ -1004,8 +1004,8 @@ async function salvarPedidoComercial(event) {
             renderizarPedidosComercial();
         if (typeof renderizarRotasComercial === 'function') renderizarRotasComercial();
         } catch (error) {
-            console.error('Erro ao salvar pedido:', error);
-            exibirMensagem('mensagemComercial', 'Erro ao salvar: ' + error.message, 'error');
+            console.error('Erro ao salvar pedido:', error, '| details:', error.details, '| hint:', error.hint, '| code:', error.code);
+            exibirMensagem('mensagemComercial', 'Erro ao salvar: ' + (error.message||'') + (error.details?(' — '+error.details):''), 'error');
         }
     } else {
         pedidosGlobais.push(pedido);
