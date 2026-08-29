@@ -753,6 +753,7 @@ function _evoAbrirPreview(pedidos){
 }
 
 async function _evoConfirmarImportacao(){
+  console.log('%c[Evo Import v257] iniciando — grupo_id via UUID','color:#ff6a00;font-weight:bold');
   const marcados = [...document.querySelectorAll('.evo-chk:checked')].map(c => parseInt(c.getAttribute('data-idx')));
   if (marcados.length === 0){ alert('Selecione ao menos um pedido para importar.'); return; }
   const pedidos = marcados.map(i => _evoPreview[i]);
@@ -794,19 +795,21 @@ async function _evoConfirmarImportacao(){
           endereco_entrega: [c.entRua, c.entNum, c.entBairro].filter(Boolean).join(', ') || null,
           cnpj_coleta: c.colCnpj ? String(c.colCnpj) : null,
           cnpj_entrega: c.entCnpj ? String(c.entCnpj) : null,
+          cep_coleta: c.colCep ? String(c.colCep) : null,
+          cep_entrega: c.entCep ? String(c.entCep) : null,
           valor_frete: Number(carro.frete) || 0,
-          status: 'Aguardando coleta',
+          status: 'Pendente',
           aprovado: true,
+          aprovado_em: new Date().toISOString(),
           grupo_id: grupoId,
-          criado_por_nome: 'Importado do Evo',
-          origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null)
+          origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
+          criado_por_nome: 'Importado do Evo'
         };
-        // status_planilha é opcional — só inclui se a coluna existir (evita 400 em bases sem ela)
-        try { novoPedido.status_planilha = 'Aguardando coleta'; } catch(_){}
         const { error } = await supabase.from('pedidos').insert(novoPedido);
         if (!error) criados++;
         else {
-          console.error('Evo import erro no pedido', carro.placa, error);
+          console.error('Evo import erro no pedido', carro.placa, '| MENSAGEM:', error.message, '| DETALHES:', error.details, '| DICA:', error.hint, '| CODE:', error.code);
+          console.error('Evo pedido que falhou:', JSON.stringify(novoPedido));
           if (!window._evoErroMostrado){
             window._evoErroMostrado = true;
             alert('Erro ao importar (primeiro pedido que falhou):\n\n'
