@@ -760,6 +760,7 @@ async function _evoConfirmarImportacao(){
   if (btn){ btn.disabled = true; btn.textContent = '⏳ Importando...'; }
 
   let criados = 0, clientesCriados = 0;
+  window._evoErroMostrado = false;
   try {
     for (const ped of pedidos){
       const c = ped.ref;
@@ -775,7 +776,8 @@ async function _evoConfirmarImportacao(){
             bairro: c.colBairro || null, cep: c.colCep || null,
             telefone: c.colTel || null
           };
-          const { data } = await supabase.from('clientes').insert(novoCli).select();
+          const { data, error: errCli } = await supabase.from('clientes').insert(novoCli).select();
+          if (errCli){ console.error('Evo import erro no cliente', c.embarcador, errCli); }
           if (data && data[0]){ cli = data[0]; clientesGlobais.push(cli); clientesCriados++; }
         }
         if (cli){ clienteId = cli.id; clienteNome = cli.nome; }
@@ -784,19 +786,36 @@ async function _evoConfirmarImportacao(){
       for (const carro of ped.carros){
         const novoPedido = {
           cliente: clienteNome, cliente_id: clienteId,
-          modelo: carro.modelo || '', placa: carro.placa, referencia: ped.id,
+          modelo: carro.modelo || '', placa: carro.placa,
+          referencia: String(ped.id||''),
           cidade_origem: c.colCidade || null, uf_origem: c.colUf || null,
           cidade_destino: c.entCidade || null, uf_destino: c.entUf || null,
           endereco_coleta: [c.colRua, c.colNum, c.colBairro].filter(Boolean).join(', ') || null,
           endereco_entrega: [c.entRua, c.entNum, c.entBairro].filter(Boolean).join(', ') || null,
-          cnpj_coleta: c.colCnpj || null, cnpj_entrega: c.entCnpj || null,
-          valor_frete: carro.frete || 0,
-          status: 'Aguardando coleta', status_planilha: 'Aguardando coleta',
-          aprovado: true, grupo_id: grupoId,
-          criado_por_nome: 'Importado do Evo'
+          cnpj_coleta: c.colCnpj ? String(c.colCnpj) : null,
+          cnpj_entrega: c.entCnpj ? String(c.entCnpj) : null,
+          valor_frete: Number(carro.frete) || 0,
+          status: 'Aguardando coleta',
+          aprovado: true,
+          grupo_id: grupoId,
+          criado_por_nome: 'Importado do Evo',
+          origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null)
         };
+        // status_planilha é opcional — só inclui se a coluna existir (evita 400 em bases sem ela)
+        try { novoPedido.status_planilha = 'Aguardando coleta'; } catch(_){}
         const { error } = await supabase.from('pedidos').insert(novoPedido);
         if (!error) criados++;
+        else {
+          console.error('Evo import erro no pedido', carro.placa, error);
+          if (!window._evoErroMostrado){
+            window._evoErroMostrado = true;
+            alert('Erro ao importar (primeiro pedido que falhou):\n\n'
+              + 'Placa: '+carro.placa+'\n'
+              + 'Mensagem: '+(error.message||'—')+'\n'
+              + (error.details?('Detalhes: '+error.details+'\n'):'')
+              + (error.hint?('Dica: '+error.hint):''));
+          }
+        }
       }
     }
     await recarregarPedidos();
