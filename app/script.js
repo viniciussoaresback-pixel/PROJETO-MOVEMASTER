@@ -16398,6 +16398,7 @@ function _planAgruparErenderizar(pedidos){
           <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
         </div>
         <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''} ${_selosPedidoHTML(p)}</div>
+        ${p.referencia?`<div class="plan-pedido-ref">🏷️ Pregão: <strong>${p.referencia}</strong></div>`:''}
         <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
         ${_planPedidoDatasHTML(p)}
         <div class="plan-pedido-acoes">
@@ -16415,6 +16416,7 @@ function _planAgruparErenderizar(pedidos){
         <span class="plan-pedido-valor">${totalFrete?('R$ '+totalFrete.toLocaleString('pt-BR')):''}</span>
       </div>
       <div class="plan-pedido-sub">${p.cliente||''} ${_selosPedidoHTML(p)}</div>
+      ${p.referencia?`<div class="plan-pedido-ref">🏷️ Pregão: <strong>${p.referencia}</strong></div>`:''}
       <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
       ${_planPedidoDatasHTML(p)}
       <details class="plan-grupo-det" onclick="event.stopPropagation()">
