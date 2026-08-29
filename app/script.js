@@ -16175,7 +16175,8 @@ function renderizarPlanejamentoRotas(){
     cont.innerHTML = `<p class="text-muted" style="padding:1.5rem;text-align:center">🗺️ Nenhum corredor cadastrado.<br><span style="font-size:.85rem">Cadastre corredores para planejar as rotas.</span></p>`;
     return;
   }
-  if (_planCorredorSel !== '__semrota__' && (!_planCorredorSel || !corredores.find(c => String(c.id)===String(_planCorredorSel)))){
+  const _modosEspeciais = ['__semrota__','__transbordo__','__aprovacao__'];
+  if (!_modosEspeciais.includes(String(_planCorredorSel)) && (!_planCorredorSel || !corredores.find(c => String(c.id)===String(_planCorredorSel)))){
     _planCorredorSel = corredores[0].id;
   }
   const modoSemRota = String(_planCorredorSel) === '__semrota__';
@@ -16457,7 +16458,7 @@ function _planFmtDataCurta(d){
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
 function _planSelSemRota(){ _planCorredorSel = '__semrota__'; renderizarPlanejamentoRotas(); }
-function _planSelTransbordo(){ console.log('[transbordo] clique recebido, renderizando...'); _planCorredorSel = '__transbordo__'; try { renderizarPlanejamentoRotas(); } catch(e){ console.error('[transbordo] ERRO no render:', e); alert('Erro ao abrir transbordo: '+(e.message||e)); } }
+function _planSelTransbordo(){ _planCorredorSel = '__transbordo__'; renderizarPlanejamentoRotas(); }
 function _planSelAprovacao(){ _planCorredorSel = '__aprovacao__'; renderizarPlanejamentoRotas(); }
 
 // Lista de pedidos aguardando aprovação — com botão aprovar
