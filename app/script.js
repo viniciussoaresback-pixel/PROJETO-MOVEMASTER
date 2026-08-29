@@ -16457,7 +16457,7 @@ function _planFmtDataCurta(d){
 
 function _planSelCorredor(id){ _planCorredorSel = id; renderizarPlanejamentoRotas(); }
 function _planSelSemRota(){ _planCorredorSel = '__semrota__'; renderizarPlanejamentoRotas(); }
-function _planSelTransbordo(){ _planCorredorSel = '__transbordo__'; renderizarPlanejamentoRotas(); }
+function _planSelTransbordo(){ console.log('[transbordo] clique recebido, renderizando...'); _planCorredorSel = '__transbordo__'; try { renderizarPlanejamentoRotas(); } catch(e){ console.error('[transbordo] ERRO no render:', e); alert('Erro ao abrir transbordo: '+(e.message||e)); } }
 function _planSelAprovacao(){ _planCorredorSel = '__aprovacao__'; renderizarPlanejamentoRotas(); }
 
 // Lista de pedidos aguardando aprovação — com botão aprovar
