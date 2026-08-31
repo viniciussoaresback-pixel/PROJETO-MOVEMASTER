@@ -1,0 +1,186 @@
+/* MoveMaster — Modo claro vivo: cores de marca e acentos por seção.
+   Escopo: somente [data-tema="claro"]. Não afeta o modo escuro. */
+
+[data-tema="claro"] {
+  --mm-laranja: #ff6a00;
+  --mm-laranja-2: #ff9333;
+  --mm-azul: #2563eb;
+  --mm-verde: #10a15a;
+  --mm-roxo: #7c3aed;
+  --mm-ciano: #0891b2;
+  --mm-ambar: #f59e0b;
+  --mm-rosa: #db2777;
+  --mm-fundo: #f2f4f8;
+}
+
+/* ---- Fundo com leve profundidade colorida ---- */
+[data-tema="claro"] body {
+  background:
+    radial-gradient(1100px 520px at 8% -8%, rgba(255, 106, 0, 0.10), transparent 60%),
+    radial-gradient(900px 480px at 100% 0%, rgba(37, 99, 235, 0.10), transparent 60%),
+    var(--mm-fundo) !important;
+}
+
+/* ---- Cabeçalho da aplicação com faixa de marca ---- */
+[data-tema="claro"] header,
+[data-tema="claro"] .app-header,
+[data-tema="claro"] .topbar {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 1px 0 rgba(255, 106, 0, 0.35), 0 6px 18px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* ---- Abas principais: pílulas coloridas ---- */
+[data-tema="claro"] .tab-btn,
+[data-tema="claro"] .nav-btn,
+[data-tema="claro"] .aba-btn,
+[data-tema="claro"] .subtab-btn {
+  color: #334155 !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.10) !important;
+}
+[data-tema="claro"] .tab-btn:hover,
+[data-tema="claro"] .nav-btn:hover,
+[data-tema="claro"] .aba-btn:hover,
+[data-tema="claro"] .subtab-btn:hover {
+  color: #b34600 !important;
+  background: #fff4ec !important;
+  border-color: rgba(255, 106, 0, 0.45) !important;
+}
+[data-tema="claro"] .tab-btn.active,
+[data-tema="claro"] .nav-btn.active,
+[data-tema="claro"] .aba-btn.active,
+[data-tema="claro"] .subtab-btn.active,
+[data-tema="claro"] .tab-btn.ativo,
+[data-tema="claro"] .nav-btn.ativo,
+[data-tema="claro"] .aba-btn.ativo {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, var(--mm-laranja), var(--mm-laranja-2)) !important;
+  border-color: transparent !important;
+  box-shadow: 0 6px 16px rgba(255, 106, 0, 0.28) !important;
+}
+
+/* ---- Títulos de seção com acento ---- */
+[data-tema="claro"] .mm-sec-head h2,
+[data-tema="claro"] .mm-sec-title,
+[data-tema="claro"] section > h2,
+[data-tema="claro"] .tab-content > h2 {
+  color: #0f172a !important;
+}
+[data-tema="claro"] .mm-sec-head {
+  border-left: 4px solid var(--mm-laranja) !important;
+  padding-left: 14px !important;
+}
+
+/* ---- KPIs: cada card com sua cor, mantendo interior limpo ---- */
+[data-tema="claro"] .cg-kpi {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-top: 3px solid var(--mm-laranja) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07) !important;
+}
+[data-tema="claro"] .cg-kpi:nth-child(5n + 2) { border-top-color: var(--mm-azul) !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 3) { border-top-color: var(--mm-verde) !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 4) { border-top-color: var(--mm-roxo) !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 5) { border-top-color: var(--mm-ciano) !important; }
+
+[data-tema="claro"] .cg-kpi-num { color: #0f172a !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 1) .cg-kpi-num { color: #c2410c !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 2) .cg-kpi-num { color: #1d4ed8 !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 3) .cg-kpi-num { color: #0f7a46 !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 4) .cg-kpi-num { color: #6d28d9 !important; }
+[data-tema="claro"] .cg-kpi:nth-child(5n + 5) .cg-kpi-num { color: #0e7490 !important; }
+[data-tema="claro"] .cg-kpi-lbl { color: #64748b !important; }
+
+/* ---- Cards de dashboard: topo colorido alternado ---- */
+[data-tema="claro"] .dash-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07) !important;
+}
+[data-tema="claro"] .dash-card:nth-child(4n + 1) { border-top: 3px solid var(--mm-laranja) !important; }
+[data-tema="claro"] .dash-card:nth-child(4n + 2) { border-top: 3px solid var(--mm-azul) !important; }
+[data-tema="claro"] .dash-card:nth-child(4n + 3) { border-top: 3px solid var(--mm-verde) !important; }
+[data-tema="claro"] .dash-card:nth-child(4n + 4) { border-top: 3px solid var(--mm-roxo) !important; }
+
+/* ---- Tabelas: cabeçalho com faixa de marca e hover colorido ---- */
+[data-tema="claro"] table thead th {
+  background: linear-gradient(180deg, #f8fafc, #eef2f7) !important;
+  color: #334155 !important;
+  border-bottom: 2px solid rgba(255, 106, 0, 0.45) !important;
+}
+[data-tema="claro"] table tbody tr:hover td {
+  background: #fff6ef !important;
+}
+
+/* ---- Status em pílulas vivas ---- */
+[data-tema="claro"] .status,
+[data-tema="claro"] .badge,
+[data-tema="claro"] .selo,
+[data-tema="claro"] .tag {
+  font-weight: 600 !important;
+}
+[data-tema="claro"] .status-ok,
+[data-tema="claro"] .badge-ok,
+[data-tema="claro"] .status.entregue,
+[data-tema="claro"] .status.concluido {
+  background: #e7f8ef !important;
+  color: #0f7a46 !important;
+  border: 1px solid rgba(16, 161, 90, 0.30) !important;
+}
+[data-tema="claro"] .status-aviso,
+[data-tema="claro"] .badge-aviso,
+[data-tema="claro"] .status.pendente,
+[data-tema="claro"] .status.andamento {
+  background: #fff6e2 !important;
+  color: #a15c00 !important;
+  border: 1px solid rgba(245, 158, 11, 0.32) !important;
+}
+[data-tema="claro"] .status-erro,
+[data-tema="claro"] .badge-erro,
+[data-tema="claro"] .status.cancelado,
+[data-tema="claro"] .status.atrasado {
+  background: #fdeaea !important;
+  color: #b91c1c !important;
+  border: 1px solid rgba(220, 38, 38, 0.30) !important;
+}
+
+/* ---- Botões ---- */
+[data-tema="claro"] .btn-primario,
+[data-tema="claro"] .btn-primary,
+[data-tema="claro"] button[type="submit"] {
+  background: linear-gradient(135deg, var(--mm-laranja), var(--mm-laranja-2)) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 6px 16px rgba(255, 106, 0, 0.28) !important;
+}
+[data-tema="claro"] .btn-secundario,
+[data-tema="claro"] .btn-secondary {
+  background: #ffffff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(37, 99, 235, 0.35) !important;
+}
+[data-tema="claro"] .btn-secundario:hover,
+[data-tema="claro"] .btn-secondary:hover {
+  background: #eef4ff !important;
+}
+
+/* ---- Formulários: foco laranja nítido ---- */
+[data-tema="claro"] input:focus,
+[data-tema="claro"] select:focus,
+[data-tema="claro"] textarea:focus {
+  border-color: var(--mm-laranja) !important;
+  box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.18) !important;
+  outline: none !important;
+}
+
+/* ---- Links e seleção ---- */
+[data-tema="claro"] a { color: #1d4ed8 !important; }
+[data-tema="claro"] a:hover { color: #c2410c !important; }
+[data-tema="claro"] ::selection { background: rgba(255, 106, 0, 0.25) !important; color: #0f172a !important; }
+
+/* ---- Estado vazio com cor suave ---- */
+[data-tema="claro"] .mm-empty {
+  background: linear-gradient(180deg, #ffffff, #f7f9fc) !important;
+  border: 1px dashed rgba(37, 99, 235, 0.30) !important;
+  color: #475569 !important;
+}
