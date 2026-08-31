@@ -6320,6 +6320,7 @@ function abrirEdicaoPedido(pedidoId) {
                 <span class="ep-close" onclick="document.getElementById('modalEdicaoPedido').remove()">&times;</span>
             </div>
             <div class="ep-aviso">💡 Ao mudar a cidade de destino, confira também o <strong>endereço de entrega</strong> abaixo — eles não mudam sozinhos. A edição não altera o status do pedido.</div>
+            ${p.observacaoPedido ? `<div style="margin:0 24px 8px;padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:8px;font-size:.84rem;color:#f59e0b"><strong>📝 Observação atual:</strong> ${p.observacaoPedido}</div>` : ''}
             <div class="ep-body">${seccoesHTML}</div>
             <div id="mensagemEdicaoPedido" class="message"></div>
             <div class="ep-actions">
@@ -18490,6 +18491,14 @@ async function _cgAbrirRastreio(pedidoId){
     hist = data || [];
   } catch(e){ hist = []; }
 
+  // Na timeline do rastreio mostramos só os eventos de OPERAÇÃO (mudanças de status).
+  // Os eventos de edição/auditoria (✏️ editado, solicitações etc.) ficam no botão 📜 Histórico.
+  const histOperacao = hist.filter(h => {
+    const obs = h.observacao || '';
+    const ehEdicao = obs.startsWith('✏️') || (h.status_anterior && h.status_novo && h.status_anterior === h.status_novo);
+    return !ehEdicao;
+  });
+
   overlay.innerHTML = `
     <div class="cg-rastreio-bg" onclick="_cgFecharRastreio()"></div>
     <div class="cg-rastreio-painel">
@@ -18511,7 +18520,7 @@ async function _cgAbrirRastreio(pedidoId){
         <div><span class="cg-rd-lbl">Destino</span><span class="cg-rd-val">${p.cidadeDestino||'—'}/${p.ufDestino||''}</span></div>
       </div>
 
-      ${p.observacaoPedido ? `<div class="cg-rastreio-obs">📝 <strong>Observação:</strong> ${p.observacaoPedido}</div>` : ''}
+      ${p.observacaoPedido ? `<div style="margin:12px 0;padding:12px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:10px;font-size:.88rem;color:#f59e0b"><strong>📝 Observação:</strong> <span style="color:inherit">${p.observacaoPedido}</span></div>` : ''}
       ${p.aprovado === false ? `<div style="margin:12px 0;padding:12px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35)">
         <div style="font-size:.85rem;margin-bottom:8px">⏳ Este pedido está <strong>aguardando aprovação</strong>. Aprove para liberá-lo ao planejamento.</div>
         <button class="btn btn-primary btn-sm" style="background:#22c55e" onclick="_aprovarPedidoComercial(${p.id})">✅ Aprovar pedido</button>
@@ -18521,9 +18530,9 @@ async function _cgAbrirRastreio(pedidoId){
 
       <div class="cg-rastreio-tit">📍 Histórico da viagem</div>
       <div class="cg-timeline">
-        ${hist.length === 0 ? '<p class="text-muted" style="font-size:.85rem">Ainda sem eventos registrados para este pedido.</p>' :
-          hist.map((h,i) => {
-            const ultimo = i === hist.length-1;
+        ${histOperacao.length === 0 ? '<p class="text-muted" style="font-size:.85rem">Ainda sem eventos de operação registrados para este pedido.</p>' :
+          histOperacao.map((h,i) => {
+            const ultimo = i === histOperacao.length-1;
             return `<div class="cg-tl-item ${ultimo?'atual':''}">
               <div class="cg-tl-marker"></div>
               <div class="cg-tl-conteudo">
