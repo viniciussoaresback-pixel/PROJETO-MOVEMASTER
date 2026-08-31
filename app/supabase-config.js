@@ -452,6 +452,8 @@ function aplicarPermissoes(perfil) {
     });
 
     // Reordena os botões visíveis conforme a ordem definida em PERMISSOES
+    // (blindado: qualquer erro de DOM aqui NÃO pode travar o login de nenhum perfil)
+    try {
     abas.forEach(tab => {
         const btn = document.querySelector(`.nav-btn[data-tab="${tab}"]`);
         if (btn && btn.parentNode) btn.parentNode.appendChild(btn);
@@ -463,19 +465,24 @@ function aplicarPermissoes(perfil) {
     // Só para o FINANCEIRO: agrupa o menu em seções (Financeiro / Configurações).
     // Outros perfis mantêm o menu exatamente como está.
     if (perfil === 'financeiro') {
-        const nav = document.querySelector('.nav-tabs');
         const inserirTitulo = (texto, antesTab) => {
-            const btn = document.querySelector(`.nav-btn[data-tab="${antesTab}"]`);
-            if (!btn || !nav) return;
-            const h = document.createElement('div');
-            h.className = 'nav-secao-titulo';
-            h.textContent = texto;
-            nav.insertBefore(h, btn);
+            try {
+                const btn = document.querySelector(`.nav-btn[data-tab="${antesTab}"]`);
+                if (!btn || !btn.parentNode) return;
+                // evita duplicar se já existe um título imediatamente antes
+                if (btn.previousElementSibling && btn.previousElementSibling.classList.contains('nav-secao-titulo')) return;
+                const h = document.createElement('div');
+                h.className = 'nav-secao-titulo';
+                h.textContent = texto;
+                // insere usando o PAI REAL do botão (não assume .nav-tabs)
+                btn.parentNode.insertBefore(h, btn);
+            } catch(e){ /* não bloqueia o login se falhar */ }
         };
         // FINANCEIRO agrupa: Conferência, Cobrança, Faturamento
         inserirTitulo('FINANCEIRO', 'conferencia');
         inserirTitulo('CONFIGURAÇÕES', 'tabelaFrete');
     }
+    } catch(e){ console.warn('Falha ao reorganizar menu (login segue normal):', e); }
 
     // Card de Cadastro de Clientes: visível para todos os perfis que têm a aba Cadastros
     const cardCli = document.getElementById('cardCadastroClientes');
