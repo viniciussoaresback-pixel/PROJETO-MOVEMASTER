@@ -1,3 +1,30 @@
+/* =========================================================================
+   Anti-"refresh" ao digitar
+   Vários campos de busca/filtro redesenhavam a tela inteira a cada tecla.
+   _mmDeb agenda o redesenho só depois que o usuário para de digitar e
+   devolve o foco, o cursor e a rolagem para onde estavam.
+   ========================================================================= */
+window._mmDebTimers = window._mmDebTimers || {};
+function _mmPreservarFoco(fn){
+  const ativo = document.activeElement;
+  const id  = ativo && ativo.id ? ativo.id : null;
+  const pos = (ativo && typeof ativo.selectionStart === 'number') ? ativo.selectionStart : null;
+  const sc  = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
+  try { fn(); } catch(e){ console.error(e); }
+  if (id){
+    const el = document.getElementById(id);
+    if (el && el !== document.activeElement){
+      try { el.focus({ preventScroll: true }); } catch(e){ try { el.focus(); } catch(e2){} }
+      if (pos !== null){ try { el.setSelectionRange(pos, pos); } catch(e){} }
+    }
+  }
+  if (document.scrollingElement) document.scrollingElement.scrollTop = sc;
+}
+function _mmDeb(chave, fn, ms){
+  clearTimeout(window._mmDebTimers[chave]);
+  window._mmDebTimers[chave] = setTimeout(function(){ _mmPreservarFoco(fn); }, ms || 250);
+}
+
 // ============================================
 // CONFIGURAÇÃO GLOBAL E VARIÁVEIS
 // ============================================
@@ -8473,7 +8500,7 @@ function _abrirModalRota(rota) {
             <div class="form-row">
                 <div class="form-group">
                     <label>Cegonha *</label>
-                    <input type="text" id="rotaCegonhaBusca" placeholder="🔎 Buscar por placa, modelo ou transportador..." oninput="filtrarCegonhasRota()">
+                    <input type="text" id="rotaCegonhaBusca" placeholder="🔎 Buscar por placa, modelo ou transportador..." oninput="_mmDeb('filtrarCegonhasRota', filtrarCegonhasRota)">
                     <select id="rotaCegonha" size="5" style="margin-top:0.5rem" onchange="_rotaCegonhaSel = this.value; _rotaEditPreencheMotorista()"></select>
                     <div id="rotaCegonhaSelecionada" style="font-size:.82rem;color:#4ade80;margin-top:6px">${rota?.placa_cegonha ? '✅ Cegonha selecionada: <strong>'+rota.placa_cegonha+'</strong>' : ''}</div>
                 </div>
@@ -12119,7 +12146,7 @@ function mostrarViewPainel(view, btn){
   if (view === 'viagens') renderizarViagensAndamento();
   if (view === 'planejamento') renderizarPlanejamentoRotas();
   if (view === 'central') renderizarCentralOperacao();
-  if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="renderizarVagasPorRota()"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
+  if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="_mmDeb('renderizarVagasPorRota', renderizarVagasPorRota)"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
 }
@@ -12131,7 +12158,7 @@ function renderizarCarteiraDemanda(){
     cont.innerHTML = `
       <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">📋 <strong>Acompanhamento por origem</strong> — todos os carros de cada cidade de origem. Use ➡️ para jogar num corredor. O carro <strong>não sai daqui</strong>: mostra o caminhão alocado e o status até ser entregue.</p>
       <div class="carteira-topo">
-        <input type="text" id="carteiraBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, cidade, placa..." oninput="_renderCarteiraGrupos()">
+        <input type="text" id="carteiraBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, cidade, placa..." oninput="_mmDeb('_renderCarteiraGrupos', _renderCarteiraGrupos)">
         <span id="carteiraTotal" class="text-muted"></span>
       </div>
       <div id="carteiraGrupos"></div>`;
@@ -12324,7 +12351,7 @@ function renderizarPainelCorredores(){
   cont.innerHTML = `
     ${podeVerSugestoes ? '<div id="sugestoesRotaWrap" class="sugestoes-wrap"></div>' : ''}
     <div class="carteira-topo">
-      <input type="text" id="corredorBusca" class="ocup-busca" placeholder="🔍 Filtrar por cidade, cliente, placa..." oninput="renderizarPainelCorredores()" value="${(document.getElementById('corredorBusca')?.value||'').replace(/"/g,'&quot;')}">
+      <input type="text" id="corredorBusca" class="ocup-busca" placeholder="🔍 Filtrar por cidade, cliente, placa..." oninput="_mmDeb('renderizarPainelCorredores', renderizarPainelCorredores)" value="${(document.getElementById('corredorBusca')?.value||'').replace(/"/g,'&quot;')}">
       <span class="text-muted">${corredores.length} corredor(es)</span>
     </div>
     <div class="corredores-grid">
@@ -12754,7 +12781,7 @@ function renderizarAvancarPedidos(){
   cont.innerHTML = `
     <p class="text-muted" style="margin:.2rem 0 .8rem;font-size:.85rem">📋 Todos os pedidos agrupados por status. Use o seletor de status em cada linha para alterar livremente.</p>
     <div class="carteira-topo">
-      <input type="text" id="avancarBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, placa, cidade..." oninput="renderizarAvancarPedidos()" value="${busca.replace(/"/g,'&quot;')}">
+      <input type="text" id="avancarBusca" class="ocup-busca" placeholder="🔍 Filtrar por cliente, placa, cidade..." oninput="_mmDeb('renderizarAvancarPedidos', renderizarAvancarPedidos)" value="${busca.replace(/"/g,'&quot;')}">
       <span class="text-muted">${lista.length} pedido(s) para avançar</span>
     </div>
     ${chaves.length === 0 ? '<p class="text-muted" style="padding:1rem 0">Nada para avançar agora. 👌</p>' : chaves.map(s => {
@@ -12954,7 +12981,7 @@ function abrirInserirCarroRota(rotaId){
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalInserirCarro').remove()">✕</button>
       </div>
       <p class="text-muted" style="font-size:.84rem;margin:.2rem 0 .8rem">Adicione qualquer carro disponível (sem cegonha e sem rota), mesmo que não case com o caminho. Útil para frete de última hora.</p>
-      <input type="text" id="inserirCarroBusca" class="ocup-busca" placeholder="🔍 Buscar cliente, placa, cidade..." oninput="_renderInserirCarroLista(${rotaId})" style="width:100%;margin-bottom:10px">
+      <input type="text" id="inserirCarroBusca" class="ocup-busca" placeholder="🔍 Buscar cliente, placa, cidade..." oninput="_mmDeb('inserirCarro', function(){ _renderInserirCarroLista(${rotaId}); })" style="width:100%;margin-bottom:10px">
       <div id="inserirCarroLista"></div>
     </div>`;
   document.body.appendChild(div);
@@ -13695,8 +13722,8 @@ function renderizarCentralConferencia(){
     <div class="conf-filtros">
       <div class="conf-filtro"><label>Período inicial</label><input type="date" id="confDe" value="${_confFiltros.de||''}" onchange="_confSetFiltro('de', this.value)"></div>
       <div class="conf-filtro"><label>Período final</label><input type="date" id="confAte" value="${_confFiltros.ate||''}" onchange="_confSetFiltro('ate', this.value)"></div>
-      <div class="conf-filtro"><label>Motorista</label><input type="text" id="confMot" value="${_confFiltros.motorista||''}" placeholder="todos" oninput="_confSetFiltro('motorista', this.value)"></div>
-      <div class="conf-filtro"><label>Cliente</label><input type="text" id="confCli" value="${_confFiltros.cliente||''}" placeholder="todos" oninput="_confSetFiltro('cliente', this.value)"></div>
+      <div class="conf-filtro"><label>Motorista</label><input type="text" id="confMot" value="${_confFiltros.motorista||''}" placeholder="todos" oninput="var _v=this.value; _mmDeb('confFiltro_motorista', function(){ _confSetFiltro('motorista', _v); })"></div>
+      <div class="conf-filtro"><label>Cliente</label><input type="text" id="confCli" value="${_confFiltros.cliente||''}" placeholder="todos" oninput="var _v=this.value; _mmDeb('confFiltro_cliente', function(){ _confSetFiltro('cliente', _v); })"></div>
       <div class="conf-filtro"><label>Status</label>
         <select id="confStatus" onchange="_confSetFiltro('status', this.value)">
           <option value="">Todos</option>
@@ -14022,10 +14049,8 @@ function _confAbaConteudo(v){
       const esperadoSalvo = (p.freteEsperado != null ? p.freteEsperado : null);
       // Fase 2b: busca automática na tabela de frete cadastrada
       const daTabela = (typeof valorTabelaFretePedido==='function') ? valorTabelaFretePedido(p) : null;
-      const esperado = _confValoresEsperados[p.id] != null ? _confValoresEsperados[p.id]
-                     : (esperadoSalvo != null ? esperadoSalvo
-                     : (daTabela ? daTabela.valor : null));
-      const fonteAuto = (esperadoSalvo == null && _confValoresEsperados[p.id] == null && daTabela);
+      const esperado = _confEsperadoDoPedido(p);
+      const fonteAuto = (esperadoSalvo == null && !_confEsperadoEditado(p.id) && daTabela);
       if (esperado != null && esperado !== ''){ temEsperado = true; totalEsperado += Number(esperado); }
       const dif = (esperado != null && esperado !== '') ? (lancado - Number(esperado)) : null;
       const difCor = dif === null ? '' : (Math.abs(dif) < 0.01 ? '#22c55e' : '#f59e0b');
@@ -14034,7 +14059,7 @@ function _confAbaConteudo(v){
         <td><strong>${p.placa||'—'}</strong><br><span class="text-muted" style="font-size:.75rem">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span></td>
         <td class="right">${fmt(lancado)}</td>
         <td><input type="number" step="0.01" class="conf-esperado-input" value="${esperado!=null?esperado:''}" placeholder="valor tabela" oninput="_confSetEsperado(${p.id}, this.value)">${fonteAuto?'<br><span style="font-size:.68rem;color:#3b82f6">🔵 da tabela</span>':''}</td>
-        <td class="right" style="color:${difCor};font-weight:700">${difTxt}</td>
+        <td class="right" id="confDif_${p.id}" style="color:${difCor};font-weight:700">${difTxt}</td>
       </tr>`;
     }).join('');
     const difTotal = temEsperado ? (totalLancado - totalEsperado) : null;
@@ -14043,7 +14068,7 @@ function _confAbaConteudo(v){
       <table class="conf-det-tabela">
         <thead><tr><th>Carro</th><th>Frete lançado</th><th>Valor esperado (tabela)</th><th>Diferença</th></tr></thead>
         <tbody>${linhas}</tbody>
-        <tfoot><tr><td><strong>Total</strong></td><td class="right"><strong>${fmt(totalLancado)}</strong></td><td class="right"><strong>${temEsperado?fmt(totalEsperado):'—'}</strong></td><td class="right"><strong>${difTotal!==null?fmt(difTotal):'—'}</strong></td></tr></tfoot>
+        <tfoot><tr><td><strong>Total</strong></td><td class="right"><strong>${fmt(totalLancado)}</strong></td><td class="right"><strong id="confTotEsperado">${temEsperado?fmt(totalEsperado):'—'}</strong></td><td class="right"><strong id="confTotDif">${difTotal!==null?fmt(difTotal):'—'}</strong></td></tr></tfoot>
       </table>
       <div class="conf-frete-acoes">
         <label style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">Justificativa do ajuste (opcional)</label>
@@ -14100,12 +14125,50 @@ function _confAbaConteudo(v){
   return '';
 }
 
+// Guarda o que o usuário digitou. hasOwnProperty permite distinguir
+// "campo apagado de propósito" (null) de "nunca foi tocado" (undefined).
+function _confEsperadoEditado(pedidoId){
+  return Object.prototype.hasOwnProperty.call(_confValoresEsperados || {}, pedidoId);
+}
+
+function _confEsperadoDoPedido(p){
+  if (_confEsperadoEditado(p.id)) return _confValoresEsperados[p.id];
+  if (p.freteEsperado != null) return p.freteEsperado;
+  const daTabela = (typeof valorTabelaFretePedido==='function') ? valorTabelaFretePedido(p) : null;
+  return daTabela ? daTabela.valor : null;
+}
+
+// Digitar NÃO redesenha mais o painel: só recalcula a coluna "Diferença"
+// e os totais do rodapé. Assim o campo não perde o foco nem o cursor.
 function _confSetEsperado(pedidoId, valor){
-  _confValoresEsperados[pedidoId] = valor === '' ? null : parseFloat(valor);
-  const pos = (document.activeElement && typeof document.activeElement.selectionStart==='number') ? document.activeElement.selectionStart : null;
-  _confRenderPainel();
-  const inputs = document.querySelectorAll('.conf-esperado-input');
-  for (const inp of inputs){ if (inp.getAttribute('oninput')?.includes(`_confSetEsperado(${pedidoId},`)){ inp.focus(); if(pos!==null){try{inp.setSelectionRange(pos,pos);}catch(e){}} break; } }
+  const num = (valor === '' || valor == null) ? null : parseFloat(valor);
+  _confValoresEsperados[pedidoId] = (num != null && isNaN(num)) ? null : num;
+  _confAtualizarDiferencasFrete();
+}
+
+function _confAtualizarDiferencasFrete(){
+  const r = (rotasGlobais||[]).find(x => String(x.id)===String(_confViagemSel));
+  if (!r) return;
+  const v = _histDadosViagem(r);
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  let totalLancado = 0, totalEsperado = 0, temEsperado = false;
+  v.pedidos.forEach(p => {
+    const lancado = Number(p.valorFrete||0);
+    totalLancado += lancado;
+    const esp = _confEsperadoDoPedido(p);
+    const valido = (esp != null && esp !== '' && !isNaN(Number(esp)));
+    if (valido){ temEsperado = true; totalEsperado += Number(esp); }
+    const cel = document.getElementById('confDif_' + p.id);
+    if (cel){
+      const dif = valido ? (lancado - Number(esp)) : null;
+      cel.style.color = dif === null ? '' : (Math.abs(dif) < 0.01 ? '#22c55e' : '#f59e0b');
+      cel.textContent = dif === null ? '—' : (Math.abs(dif) < 0.01 ? 'R$ 0,00 🟢' : fmt(dif)+' 🟠');
+    }
+  });
+  const tE = document.getElementById('confTotEsperado');
+  if (tE) tE.textContent = temEsperado ? fmt(totalEsperado) : '—';
+  const tD = document.getElementById('confTotDif');
+  if (tD) tD.textContent = temEsperado ? fmt(totalLancado - totalEsperado) : '—';
 }
 
 async function _confSalvarFrete(viagemId){
@@ -14423,6 +14486,8 @@ function _histRenderDetalhe(){
         <div class="histv-det-hash">VIAGEM</div>
         <div class="histv-det-num">#${v.id}</div>
         <span class="histv-badge ${st.cls}">${st.label}</span>
+        ${r.criada_por_usuario ? `<div style="margin-top:6px;font-size:.72rem;color:#9ca3af">🧑‍💼 Criada por <strong style="color:inherit">${r.criada_por_usuario}</strong>${r.criado_por?` (${r.criado_por})`:''}</div>` : (r.criado_por ? `<div style="margin-top:6px;font-size:.72rem;color:#9ca3af">🧑‍💼 Criada por ${r.criado_por}</div>` : '')}
+        ${r.conferida_em ? `<div style="margin-top:6px;font-size:.72rem;color:#22c55e;font-weight:700">✅ Conferida${r.conferida_por?` por ${r.conferida_por}`:''}<br><span style="font-weight:400;color:#9ca3af">${new Date(r.conferida_em).toLocaleString('pt-BR')}</span></div>` : ''}
       </div>
       <div class="histv-det-info">
         <div class="histv-di"><span class="histv-di-lbl">👤 MOTORISTA</span><span class="histv-di-val">${v.motorista}</span></div>
@@ -14686,10 +14751,10 @@ let _histLimite = 8;
 function _histCargasCasca(){
   return `
     <div class="histv-filtros">
-      <input type="text" id="histBusca" class="histv-busca" placeholder="🔎 Buscar viagem, motorista, placa..." oninput="renderizarHistoricoCargas()">
-      <input type="text" id="histMotorista" class="histv-fil" placeholder="👤 Motorista" oninput="renderizarHistoricoCargas()">
-      <input type="text" id="histCegonha" class="histv-fil" placeholder="🚛 Cegonha" oninput="renderizarHistoricoCargas()">
-      <input type="text" id="histDestino" class="histv-fil" placeholder="📍 Destino" oninput="renderizarHistoricoCargas()">
+      <input type="text" id="histBusca" class="histv-busca" placeholder="🔎 Buscar viagem, motorista, placa..." oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
+      <input type="text" id="histMotorista" class="histv-fil" placeholder="👤 Motorista" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
+      <input type="text" id="histCegonha" class="histv-fil" placeholder="🚛 Cegonha" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
+      <input type="text" id="histDestino" class="histv-fil" placeholder="📍 Destino" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <label class="hist-data">De <input type="date" id="histDataDe" onchange="renderizarHistoricoCargas()"></label>
       <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
       <button class="histv-btn-relatorio" onclick="_histAbrirRelatorio()">📊 Relatório do período</button>
@@ -17376,7 +17441,7 @@ function _planAbrirBuscaCorredor(pedidoId){
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;max-height:80vh;display:flex;flex-direction:column;border-radius:14px;padding:20px">
       <h2 style="margin:0 0 4px">🔀 Mover pedido #${p.id}</h2>
       <p class="text-muted" style="font-size:.84rem;margin:.2rem 0 .8rem">${p.placa||''} · ${(p.patioAtual||p.cidadeOrigem||'')} → ${p.cidadeDestino||''}<br>Escolha o corredor de destino:</p>
-      <input type="text" id="buscaCorredorInput" placeholder="🔎 Pesquisar corredor..." oninput="_planFiltrarBuscaCorredor(this.value)" style="padding:9px 12px;border-radius:9px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;margin-bottom:10px" autofocus>
+      <input type="text" id="buscaCorredorInput" placeholder="🔎 Pesquisar corredor..." oninput="var _v=this.value; _mmDeb('buscaCorredor', function(){ _planFiltrarBuscaCorredor(_v); })" style="padding:9px 12px;border-radius:9px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;margin-bottom:10px" autofocus>
       <div id="buscaCorredorLista" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px">
         ${_planBuscaCorredorItens(pedidoId, '')}
       </div>
@@ -17528,7 +17593,7 @@ async function _planConfirmarViagem(corId){
   try {
     // cria a rota
     const _perfilCriador = (typeof NOMES_PERFIL!=='undefined' && typeof perfilAtual!=='undefined') ? (NOMES_PERFIL[perfilAtual]||perfilAtual) : 'Logística';
-    const ins = { nome: cor.nome, corredor_id: cor.id, status: 'planejada', criado_por: _perfilCriador };
+    const ins = { nome: cor.nome, corredor_id: cor.id, status: 'planejada', criado_por: _perfilCriador, criada_por_usuario: usuario };
     if (cegonha) ins.placa_cegonha = cegonha;
     if (motorista) ins.motorista_1 = motorista;
     const { data: rota, error } = await supabase.from('rotas_planejadas').insert(ins).select().single();
@@ -18387,9 +18452,9 @@ function renderizarComercialPedidos(){
     </div>
 
     <div class="cg-filtros">
-      <div class="cg-filtro"><label>Pedido</label><input type="text" value="${_cgPedidoFiltros.pedido}" oninput="_cgSetFiltro('pedido',this.value)" placeholder="Nº do pedido"></div>
-      <div class="cg-filtro"><label>Cliente</label><input type="text" value="${_cgPedidoFiltros.cliente}" oninput="_cgSetFiltro('cliente',this.value)" placeholder="Nome do cliente"></div>
-      <div class="cg-filtro"><label>Placa</label><input type="text" value="${_cgPedidoFiltros.placa}" oninput="_cgSetFiltro('placa',this.value)" placeholder="Placa do veículo"></div>
+      <div class="cg-filtro"><label>Pedido</label><input type="text" value="${_cgPedidoFiltros.pedido}" oninput="var _v=this.value; _mmDeb('cgFiltro_pedido', function(){ _cgSetFiltro('pedido', _v); })" placeholder="Nº do pedido"></div>
+      <div class="cg-filtro"><label>Cliente</label><input type="text" value="${_cgPedidoFiltros.cliente}" oninput="var _v=this.value; _mmDeb('cgFiltro_cliente', function(){ _cgSetFiltro('cliente', _v); })" placeholder="Nome do cliente"></div>
+      <div class="cg-filtro"><label>Placa</label><input type="text" value="${_cgPedidoFiltros.placa}" oninput="var _v=this.value; _mmDeb('cgFiltro_placa', function(){ _cgSetFiltro('placa', _v); })" placeholder="Placa do veículo"></div>
       <div class="cg-filtro"><label>Origem</label><select onchange="_cgSetFiltro('origem',this.value)"><option value="">Todas</option>${cidades.map(c=>`<option ${_cgPedidoFiltros.origem===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="cg-filtro"><label>Destino</label><select onchange="_cgSetFiltro('destino',this.value)"><option value="">Todos</option>${cidades.map(c=>`<option ${_cgPedidoFiltros.destino===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="cg-filtro"><label>Status</label><select onchange="_cgSetFiltro('status',this.value)">
