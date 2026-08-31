@@ -13682,6 +13682,8 @@ function renderizarCentralConferencia(){
   if (window._fechamentosPeriodo === undefined){ window._fechamentosPeriodo = {}; _confCarregarFechamentos().then(()=>renderizarCentralConferencia()); }
   // carrega a tabela de frete uma vez (para conferência automática)
   if (!window._tabFreteCarregada){ window._tabFreteCarregada = true; if (typeof _carregarTabelaFrete==='function') _carregarTabelaFrete().then(()=>renderizarCentralConferencia()); }
+  // carrega valores de pernas salvos uma vez
+  if (window._pernasCarregadas === undefined){ window._pernasCarregadas = false; _confCarregarPernas().then(()=>renderizarCentralConferencia()); }
   // período padrão: mês atual, se ainda não definido
   if (!_confFiltros.de && !_confFiltros.ate){
     const hoje = new Date();
@@ -14022,6 +14024,120 @@ function _confRenderPainel(){
   document.body.appendChild(div);
 }
 
+// ============================================================
+// CONFERÊNCIA POR PERNA (trecho a trecho do pedido transbordado)
+// ============================================================
+// Monta a lista de pernas que um pedido percorreu, usando o vínculo histórico
+// (viagem_pedidos) + a rota de cada perna. Cada perna tem trecho, motorista,
+// cegonha, status (concluída/andamento) e valor (tabela ou manual/definido).
+function _confPernasDoPedido(p){
+  if (!p) return { pernas: [], finalizado: false };
+  const vinculos = (viagemPedidosGlobais||[])
+    .filter(vp => String(vp.pedido_id) === String(p.id))
+    .sort((a,b) => new Date(a.entrou_em||a.created_at||0) - new Date(b.entrou_em||b.created_at||0));
+
+  // Se não há vínculo histórico (pedido nunca transbordou / tabela vazia), trata como perna única.
+  if (vinculos.length === 0){
+    const rotaAtual = (rotasGlobais||[]).find(r => String(r.id) === String(p.rotaId || p.rota_id));
+    const unica = {
+      trechoOrigem: p.cidadeOrigem || '—',
+      trechoDestino: p.cidadeDestino || '—',
+      motorista: (rotaAtual && rotaAtual.motorista_1) || p.motorista1 || '—',
+      cegonha: (rotaAtual && rotaAtual.placa_cegonha) || p.placaCegonha || '—',
+      concluida: p.status === 'Entregue',
+      rotaId: rotaAtual ? rotaAtual.id : null
+    };
+    const finalizado = p.status === 'Entregue';
+    return { pernas: [unica], finalizado };
+  }
+
+  // Monta cada perna a partir das viagens que o pedido passou
+  const pernas = vinculos.map((vp, i) => {
+    const rota = (rotasGlobais||[]).find(r => String(r.id) === String(vp.rota_id));
+    // origem da perna: para a 1ª usa a origem do pedido; para as seguintes, o pátio de transbordo anterior
+    const origemPerna = (i === 0)
+      ? (p.cidadeOrigem || '—')
+      : (vinculos[i-1].cidade_transbordo || p.cidadeTransbordo || rota && rota.nome || '—');
+    // destino da perna: se saiu por transbordo, o destino é o ponto de transbordo; senão, o destino final
+    const destinoPerna = vp.saiu_em
+      ? (vp.cidade_transbordo || p.cidadeTransbordo || '(transbordo)')
+      : (p.cidadeDestino || '—');
+    return {
+      trechoOrigem: origemPerna,
+      trechoDestino: destinoPerna,
+      motorista: (rota && rota.motorista_1) || '—',
+      cegonha: (rota && rota.placa_cegonha) || '—',
+      concluida: !!vp.saiu_em || (rota && rota.status === 'concluida') || p.status === 'Entregue',
+      transbordo: !!vp.saiu_em,
+      rotaId: vp.rota_id
+    };
+  });
+
+  // Trajeto finalizado? Só quando a última perna chegou ao destino final E o pedido está Entregue.
+  const ultima = pernas[pernas.length - 1];
+  const chegouDestinoFinal = ultima && _cidadeIgual(ultima.trechoDestino, p.cidadeDestino);
+  const finalizado = (p.status === 'Entregue') && chegouDestinoFinal;
+
+  return { pernas, finalizado };
+}
+
+// Valor de uma perna: tabela do trecho > manual do trecho > valor definido na conferência > null
+function _confValorPerna(perna, p){
+  const cat = p.categoriaVeiculo || p.categoria_veiculo || '';
+  const chaveManual = `${p.id}|${perna.trechoOrigem}|${perna.trechoDestino}`;
+  if (window._confValoresPerna && window._confValoresPerna[chaveManual] != null){
+    return { valor: Number(window._confValoresPerna[chaveManual])||0, origem: 'definido' };
+  }
+  const tab = (typeof valorTabelaTrecho==='function') ? valorTabelaTrecho(perna.trechoOrigem, perna.trechoDestino, cat) : null;
+  if (tab != null) return { valor: tab, origem: 'tabela' };
+  const man = (typeof valorManualTrecho==='function') ? valorManualTrecho(perna.trechoOrigem, perna.trechoDestino, cat) : null;
+  if (man != null) return { valor: man, origem: 'manual' };
+  return { valor: null, origem: 'pendente' };
+}
+
+// Guarda o valor definido para uma perna (sem re-renderizar, pra não perder foco)
+function _confSetValorPerna(chave, valor){
+  window._confValoresPerna = window._confValoresPerna || {};
+  window._confValoresPerna[chave] = valor === '' ? null : parseFloat(valor);
+}
+
+// Carrega os valores de pernas já salvos no banco
+async function _confCarregarPernas(){
+  window._pernasCarregadas = true;
+  window._confValoresPerna = window._confValoresPerna || {};
+  try {
+    const { data } = await supabase.from('remuneracao_pernas').select('*');
+    (data||[]).forEach(r => {
+      const chave = `${r.pedido_id}|${r.trecho_origem}|${r.trecho_destino}`;
+      window._confValoresPerna[chave] = Number(r.valor);
+    });
+  } catch(e){ /* tabela pode não existir ainda */ }
+}
+
+// Salva os valores das pernas definidos manualmente
+async function _confSalvarPernas(viagemId){
+  const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
+  if ((window._fechamentosPeriodo||{})[chavePeriodo]){ alert('🔒 Este período está fechado. Reabra o fechamento para editar.'); return; }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const valores = window._confValoresPerna || {};
+  try {
+    for (const chave of Object.keys(valores)){
+      const val = valores[chave];
+      if (val == null) continue;
+      const [pedidoId, origem, destino] = chave.split('|');
+      await supabase.from('remuneracao_pernas').upsert({
+        pedido_id: parseInt(pedidoId),
+        trecho_origem: origem,
+        trecho_destino: destino,
+        valor: val,
+        definido_por: usuario,
+        definido_em: new Date().toISOString()
+      }, { onConflict: 'pedido_id,trecho_origem,trecho_destino' });
+    }
+    if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('✅ Valores das pernas salvos!');
+  } catch(e){ alert('Erro ao salvar pernas: '+(e.message||e)); }
+}
+
 function _confAbaConteudo(v){
   const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
 
@@ -14095,32 +14211,60 @@ function _confAbaConteudo(v){
   }
 
   if (_confAbaDetalhe === 'remuneracao'){
-    // Usa a função existente valorMotoristaPedido (tabela de preços / manual / ajuste)
-    let totalRemun = 0, temPendente = false;
-    const origemLabel = { pedido:'Ajuste do pedido', tabela:'Tabela de preços', manual:'Valor manual do trecho', pendente:'⚠️ Pendente' };
-    const linhas = v.pedidos.map(p => {
-      const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null, origem:'pendente'};
-      if (vm.valor == null) temPendente = true; else totalRemun += Number(vm.valor);
-      const corOrigem = vm.origem==='pendente' ? '#ef4444' : (vm.origem==='tabela' ? '#22c55e' : '#f59e0b');
-      return `<tr>
-        <td><strong>${p.placa||'—'}</strong><br><span class="text-muted" style="font-size:.75rem">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span></td>
-        <td>${p.categoriaVeiculo||p.categoria_veiculo||'—'}</td>
-        <td><span style="color:${corOrigem};font-size:.78rem;font-weight:600">${origemLabel[vm.origem]||vm.origem}</span></td>
-        <td class="right"><strong>${vm.valor!=null?fmt(vm.valor):'—'}</strong></td>
-      </tr>`;
+    // Conferência POR PERNA: cada pedido mostra as pernas que percorreu, com o valor
+    // de cada trecho (tabela ou definido manualmente) e o status (finalizado ou não).
+    let totalGeral = 0, temPendente = false, temNaoFinalizado = false;
+    const origemLabel = { tabela:'🟢 Tabela do trecho', manual:'🟠 Manual do trecho', definido:'🔵 Definido por você', pendente:'🔴 Sem valor' };
+
+    const blocos = v.pedidos.map(p => {
+      const { pernas, finalizado } = _confPernasDoPedido(p);
+      if (!finalizado) temNaoFinalizado = true;
+      let totalPedido = 0, pedidoPendente = false;
+      const linhasPernas = pernas.map((perna,i) => {
+        const vp = _confValorPerna(perna, p);
+        if (vp.valor == null){ pedidoPendente = true; temPendente = true; } else { totalPedido += Number(vp.valor); }
+        const chaveManual = `${p.id}|${perna.trechoOrigem}|${perna.trechoDestino}`;
+        const podeDefinir = vp.origem === 'pendente' || vp.origem === 'definido';
+        return `<tr>
+          <td style="font-size:.78rem;color:#9ca3af">Perna ${i+1}</td>
+          <td><strong>${perna.trechoOrigem}</strong> → <strong>${perna.trechoDestino}</strong>
+            ${perna.transbordo?'<span style="color:#fb923c;font-size:.7rem"> 🔀 transbordo</span>':''}
+            ${!perna.concluida?'<span style="color:#f59e0b;font-size:.7rem"> ⏳ em andamento</span>':''}
+          </td>
+          <td style="font-size:.8rem">👤 ${perna.motorista}<br><span class="text-muted" style="font-size:.72rem">🚛 ${perna.cegonha}</span></td>
+          <td>${podeDefinir
+            ? `<input type="number" step="0.01" class="conf-perna-input" value="${vp.origem==='definido'?vp.valor:''}" placeholder="definir R$" oninput="_confSetValorPerna('${chaveManual.replace(/'/g,"\\'")}', this.value)" style="width:110px;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.04);color:inherit;font-size:.82rem">`
+            : `<span style="font-size:.74rem;color:#22c55e">${origemLabel[vp.origem]}</span>`}
+          </td>
+          <td class="right"><strong>${vp.valor!=null?fmt(vp.valor):'—'}</strong></td>
+        </tr>`;
+      }).join('');
+      totalGeral += totalPedido;
+
+      return `<div style="margin-bottom:16px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden">
+        <div style="padding:10px 12px;background:rgba(255,255,255,.03);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div><strong>#${p.id}</strong> · ${p.placa||'—'} <span class="text-muted" style="font-size:.78rem">${p.modelo||''}</span>
+            <span class="text-muted" style="font-size:.75rem"> · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span></div>
+          <div>${finalizado
+            ? '<span style="color:#22c55e;font-size:.75rem;font-weight:700">✅ Trajeto completo</span>'
+            : '<span style="color:#f59e0b;font-size:.75rem;font-weight:700">⚠️ Trajeto NÃO finalizado</span>'}</div>
+        </div>
+        <table class="conf-det-tabela" style="margin:0">
+          <thead><tr><th></th><th>Trecho da perna</th><th>Motorista / Cegonha</th><th>Valor</th><th>Total</th></tr></thead>
+          <tbody>${linhasPernas}</tbody>
+          <tfoot><tr><td colspan="4"><strong>Total do pedido #${p.id}${pedidoPendente?' <span style="color:#ef4444;font-size:.72rem">(perna sem valor)</span>':''}</strong></td><td class="right"><strong>${fmt(totalPedido)}</strong></td></tr></tfoot>
+        </table>
+      </div>`;
     }).join('');
+
     return `
-      <div class="conf-frete-aviso">💡 A remuneração usa a <strong>tabela de preços</strong> (ou o valor manual/ajuste do pedido) que já existe no sistema. Trechos sem valor cadastrado aparecem como pendentes — cadastre na Tabela de Preços.</div>
-      <table class="conf-det-tabela">
-        <thead><tr><th>Carro</th><th>Categoria</th><th>Origem do valor</th><th>Remuneração</th></tr></thead>
-        <tbody>${linhas}</tbody>
-        <tfoot><tr><td colspan="3"><strong>Total da remuneração${temPendente?' <span style="color:#ef4444;font-size:.75rem">(há pendências)</span>':''}</strong></td><td class="right"><strong>${fmt(totalRemun)}</strong></td></tr></tfoot>
-      </table>
+      <div class="conf-frete-aviso">💡 Cada pedido mostra as <strong>pernas</strong> que percorreu. O valor vem da <strong>tabela do trecho</strong> quando existe; onde não há preço tabelado, <strong>defina o valor</strong> daquela perna. ${temNaoFinalizado?'<br><strong style="color:#f59e0b">⚠️ Há pedido(s) com trajeto não finalizado — confira só quando o trajeto estiver completo.</strong>':''}</div>
+      ${blocos}
       <div style="margin-top:14px;padding:12px 14px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;font-size:.85rem">
         <div style="display:flex;justify-content:space-between"><span>Faturamento da viagem</span><strong>${fmt(v.total)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>Remuneração do motorista</span><strong>${fmt(totalRemun)}</strong></div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.1)"><span><strong>Resultado da viagem</strong></span><strong style="color:#22c55e">${fmt(v.total - totalRemun)}</strong></div>
-      </div>`;
+        <div style="display:flex;justify-content:space-between"><span>Remuneração total (todas as pernas)${temPendente?' <span style="color:#ef4444;font-size:.72rem">(há pendências)</span>':''}</span><strong>${fmt(totalGeral)}</strong></div>
+      </div>
+      <div style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="_confSalvarPernas(${v.id})">💾 Salvar valores das pernas</button></div>`;
   }
   return '';
 }
