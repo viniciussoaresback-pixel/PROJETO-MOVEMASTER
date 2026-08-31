@@ -16,7 +16,7 @@ const PERMISSOES = {
     admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca'],
     comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','orcamento','cobranca'],
     logistica:  ['painel','logistica','equipes','comercial','comercialPedidos','cadastros'],
-    financeiro: ['faturamento','cobranca'],
+    financeiro: ['conferencia','faturamento','cobranca','tabelaFrete'],
     motorista:  ['motorista'],
     equipe:     ['equipes'],
     fiscal:     ['fiscal','comercialPedidos','comercialViagens','painel'],
@@ -456,6 +456,26 @@ function aplicarPermissoes(perfil) {
         const btn = document.querySelector(`.nav-btn[data-tab="${tab}"]`);
         if (btn && btn.parentNode) btn.parentNode.appendChild(btn);
     });
+
+    // Remove cabeçalhos de seção antigos (de uma troca de perfil anterior)
+    document.querySelectorAll('.nav-secao-titulo').forEach(el => el.remove());
+
+    // Só para o FINANCEIRO: agrupa o menu em seções (Financeiro / Configurações).
+    // Outros perfis mantêm o menu exatamente como está.
+    if (perfil === 'financeiro') {
+        const nav = document.querySelector('.nav-tabs');
+        const inserirTitulo = (texto, antesTab) => {
+            const btn = document.querySelector(`.nav-btn[data-tab="${antesTab}"]`);
+            if (!btn || !nav) return;
+            const h = document.createElement('div');
+            h.className = 'nav-secao-titulo';
+            h.textContent = texto;
+            nav.insertBefore(h, btn);
+        };
+        // FINANCEIRO agrupa: Conferência, Cobrança, Faturamento
+        inserirTitulo('FINANCEIRO', 'conferencia');
+        inserirTitulo('CONFIGURAÇÕES', 'tabelaFrete');
+    }
 
     // Card de Cadastro de Clientes: visível para todos os perfis que têm a aba Cadastros
     const cardCli = document.getElementById('cardCadastroClientes');
