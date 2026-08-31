@@ -129,6 +129,8 @@ function trocarAba(event) {
     if (tabAlvo === 'cadastros') { renderizarListaClientes(); renderizarListaMotoristas(); renderizarListaVeiculos(); }
     if (tabAlvo === 'equipes' && typeof renderizarEquipesPainel === 'function') renderizarEquipesPainel();
     if (tabAlvo === 'cobranca' && typeof renderizarCobranca === 'function') renderizarCobranca();
+    if (tabAlvo === 'conferencia' && typeof renderizarCentralConferencia === 'function') renderizarCentralConferencia();
+    if (tabAlvo === 'tabelaFrete' && typeof renderizarTabelaFrete === 'function') renderizarTabelaFrete();
     if (tabAlvo === 'meusPedidos') {
         renderizarPedidosComercial();
         if (typeof renderizarRotasComercial === 'function') renderizarRotasComercial();
@@ -315,9 +317,11 @@ async function carregarDadosDoSupabase(opts) {
                 corredorManualId: p.corredor_manual_id || null,
                 cobrancaStatus: p.cobranca_status || 'a_cobrar',
                 pagoEm: p.pago_em || null,
+                freteEsperado: p.frete_esperado != null ? p.frete_esperado : null,
                 cobrancaForma: p.cobranca_forma || null,
                 cobradoEm: p.cobrado_em || null,
                 pagoEm: p.pago_em || null,
+                freteEsperado: p.frete_esperado != null ? p.frete_esperado : null,
                 pagtoConfirmadoEm: p.pagto_confirmado_em || null,
                 patioDesde: p.patio_desde || null,
                 grupoId: p.grupo_id || null,
@@ -4932,12 +4936,14 @@ function filtrarClientes(termo) {
     const termoLower = termo.toLowerCase();
     const filtrados = clientesGlobais.filter(c => {
         const nome = (c.nome || '').toLowerCase();
+        const fantasia = (c.nome_fantasia || '').toLowerCase();
         const cnpj = (c.cnpj || '').replace(/\D/g,'');
         const cpf  = (c.cpf  || '').replace(/\D/g,'');
         const cod  = (c.codigo || '').toLowerCase();
         const cidade = (c.cidade || '').toLowerCase();
         const termoDigits = termo.replace(/\D/g,'');
         return nome.includes(termoLower) ||
+               fantasia.includes(termoLower) ||
                (termoDigits && (cnpj.includes(termoDigits) || cpf.includes(termoDigits))) ||
                cod.includes(termoLower) ||
                cidade.includes(termoLower);
@@ -4954,9 +4960,10 @@ function filtrarClientes(termo) {
         const tipo = c.tipo_cliente ? `<span class="cliente-tipo-badge">${c.tipo_cliente}</span>` : '';
         const cod = c.codigo ? `<span class="cliente-cod">${c.codigo}</span>` : '';
         const cidadeUf = `${c.cidade||''}${c.uf?('/'+c.uf):''}`;
+        const fantasia = (c.nome_fantasia && _norm(c.nome_fantasia) !== _norm(c.nome||'')) ? `<span class="cliente-fantasia">🏷️ ${c.nome_fantasia}</span>` : '';
         return `<div class="cliente-item" onmousedown="selecionarCliente(${c.id}, '${(c.nome||'').replace(/'/g,"\'")}', '${doc}', '${c.tipo_cliente||''}', '${c.codigo||''}')">
             <div class="cliente-item-nome">${c.nome || '—'} ${tipo} ${cod}</div>
-            <div class="cliente-item-doc">${cidadeUf?`📍 ${cidadeUf}`:''}${cidadeUf&&doc?' · ':''}${doc || ''}</div>
+            <div class="cliente-item-doc">${fantasia}${fantasia&&(cidadeUf||doc)?' · ':''}${cidadeUf?`📍 ${cidadeUf}`:''}${cidadeUf&&doc?' · ':''}${doc || ''}</div>
         </div>`;
     }).join('');
     lista.style.display = 'block';
@@ -6099,6 +6106,7 @@ const CAMPOS_EDITAVEIS = [
     { k: 'dataPrevColeta', label: 'Coleta Prevista',    tipo: 'datetime-local', col: 'data_prev_coleta', sec: 'Frete e Datas' },
     { k: 'dataPrevEntrega',label: 'Entrega Prevista',   tipo: 'datetime-local', col: 'data_prev_entrega', sec: 'Frete e Datas' },
     { k: 'prazoEntregaEstimado', label: 'Prazo de Entrega Estimado', tipo: 'date', col: 'prazo_entrega_estimado', sec: 'Frete e Datas' },
+    { k: 'transbordoPrevisto', label: 'Transbordo previsto em (cidade) — deixa vazio se não vai transbordar', tipo: 'text', col: 'transbordo_previsto', sec: 'Outros' },
     { k: 'observacaoPedido',label: 'Observações',       tipo: 'text',   col: 'observacao_pedido', sec: 'Outros' },
     { k: 'valorMotoristaTerceiro', label: 'Valor a pagar ao motorista terceiro (R$)', tipo: 'number', col: 'valor_motorista_terceiro', sec: 'Motorista Terceiro' },
     { k: 'guiaIcmsValor',  label: 'Valor da guia de ICMS (R$) — deixe vazio se não passa no posto', tipo: 'number', col: 'guia_icms_valor', sec: 'Motorista Terceiro' }
@@ -13395,6 +13403,722 @@ async function _aplicarAvancarRota(rotaId){
 // HISTÓRICO DE CARGAS CONCLUÍDAS — por motorista e por dia
 // Só visualização. Aparece no Painel (logística) e no Faturamento (financeiro).
 // ============================================================
+// ============================================================
+// TABELA DE FRETE (Fase 2b) — valores de referência por cliente/rota/vigência
+// Usada pela Central de Conferência para comparar frete lançado × valor esperado.
+// ============================================================
+let tabelaFreteGlobais = [];
+let _tabFreteEdit = null; // linha em edição (ou null)
+
+async function _carregarTabelaFrete(){
+  try {
+    const { data } = await supabase.from('tabela_frete').select('*').order('cliente', { ascending:true });
+    tabelaFreteGlobais = data || [];
+  } catch(e){ tabelaFreteGlobais = []; }
+}
+
+// Busca o valor de referência vigente para um pedido (cliente + origem + destino [+ categoria])
+// Retorna { valor, vigencia } ou null se não houver cadastro aplicável.
+function valorTabelaFretePedido(p){
+  if (!p) return null;
+  const cli = _norm(p.cliente || '');
+  const orig = _norm(p.cidadeOrigem || '');
+  const dest = _norm(p.cidadeDestino || '');
+  const cat = _norm(p.categoriaVeiculo || p.categoria_veiculo || '');
+  const dataRef = p.createdAt || p.created_at || p.dataSolicitacao || new Date().toISOString();
+  const dRef = new Date(dataRef);
+
+  const candidatos = (tabelaFreteGlobais||[]).filter(t => {
+    if (_norm(t.cliente||'') !== cli) return false;
+    if (_norm(t.origem||'') !== orig) return false;
+    if (_norm(t.destino||'') !== dest) return false;
+    // categoria: se a linha tem categoria definida, precisa bater; se vazia, serve pra qualquer uma
+    if (t.categoria && _norm(t.categoria) !== cat) return false;
+    // vigência: a partir de vigencia_de (se preenchida)
+    if (t.vigencia_de && new Date(t.vigencia_de) > dRef) return false;
+    return true;
+  });
+  if (candidatos.length === 0) return null;
+  // pega o mais específico (com categoria) e mais recente na vigência
+  candidatos.sort((a,b) => {
+    const espA = a.categoria ? 1 : 0, espB = b.categoria ? 1 : 0;
+    if (espA !== espB) return espB - espA;
+    return new Date(b.vigencia_de||0) - new Date(a.vigencia_de||0);
+  });
+  const t = candidatos[0];
+  return { valor: Number(t.valor)||0, vigencia: t.vigencia_de };
+}
+
+function renderizarTabelaFrete(){
+  const cont = document.getElementById('tabelaFreteConteudo');
+  if (!cont) return;
+  if (tabelaFreteGlobais.length === 0 && !window._tabFreteCarregada){
+    window._tabFreteCarregada = true;
+    _carregarTabelaFrete().then(()=>renderizarTabelaFrete());
+  }
+  const linhas = (tabelaFreteGlobais||[]).slice().sort((a,b)=>(a.cliente||'').localeCompare(b.cliente||''));
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+
+  cont.innerHTML = `
+    <div class="conf-header">
+      <div>
+        <h1 class="conf-titulo">💵 Tabela de Frete</h1>
+        <p class="conf-sub">Valores de referência por cliente e rota — usados na conferência automática</p>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="_tabFreteNovo()">➕ Nova linha</button>
+    </div>
+
+    <div id="tabFreteForm"></div>
+
+    <div class="conf-tabela-wrap">
+      <div class="conf-tabela-titulo">VALORES CADASTRADOS (${linhas.length})</div>
+      ${linhas.length === 0 ? '<p class="text-muted" style="padding:1.5rem;text-align:center">Nenhum valor cadastrado ainda. Clique em "Nova linha" para começar.<br><span style="font-size:.82rem">Enquanto não houver cadastro, a conferência continua sendo feita manualmente.</span></p>' : `
+      <table class="conf-tabela">
+        <thead><tr>
+          <th>Cliente</th><th>Origem</th><th>Destino</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th>Vigência</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${linhas.map(t => `<tr>
+            <td><strong>${t.cliente||'—'}</strong></td>
+            <td>${t.origem||'—'}</td>
+            <td>${t.destino||'—'}</td>
+            <td>${t.categoria||'<span class="text-muted">todas</span>'}</td>
+            <td>${t.tipo_operacao||'<span class="text-muted">—</span>'}</td>
+            <td class="right"><strong>${fmt(t.valor)}</strong></td>
+            <td>${t.vigencia_de?new Date(t.vigencia_de+'T12:00').toLocaleDateString('pt-BR'):'<span class="text-muted">sempre</span>'}</td>
+            <td style="white-space:nowrap">
+              <button class="conf-ver-btn" onclick="_tabFreteEditar(${t.id})" title="Editar">✏️</button>
+              <button class="conf-ver-btn" onclick="_tabFreteExcluir(${t.id})" title="Excluir">🗑️</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>
+
+    <div class="conf-nota">
+      💡 A conferência busca o valor por <strong>cliente + origem + destino</strong> (e categoria, se preenchida), respeitando a vigência.
+      Onde não houver valor cadastrado, a Central de Conferência mantém o preenchimento manual.
+    </div>`;
+}
+
+function _tabFreteNovo(){ _tabFreteEdit = { id:null }; _tabFreteRenderForm(); }
+function _tabFreteEditar(id){ _tabFreteEdit = (tabelaFreteGlobais||[]).find(t=>t.id===id) || {id:null}; _tabFreteRenderForm(); }
+
+function _tabFreteRenderForm(){
+  const wrap = document.getElementById('tabFreteForm');
+  if (!wrap) return;
+  if (!_tabFreteEdit){ wrap.innerHTML = ''; return; }
+  const t = _tabFreteEdit;
+  // datalist de clientes para facilitar
+  const clientes = [...new Set((clientesGlobais||[]).map(c=>c.nome).filter(Boolean))].sort();
+  wrap.innerHTML = `
+    <div class="tabfrete-form">
+      <div class="tabfrete-form-tit">${t.id?'✏️ Editar valor':'➕ Novo valor de referência'}</div>
+      <div class="tabfrete-grid">
+        <div class="conf-filtro"><label>Cliente *</label><input list="tabFreteClientes" id="tfCliente" value="${(t.cliente||'').replace(/"/g,'&quot;')}" placeholder="nome do cliente"></div>
+        <datalist id="tabFreteClientes">${clientes.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+        <div class="conf-filtro"><label>Origem (cidade) *</label><input id="tfOrigem" value="${(t.origem||'').replace(/"/g,'&quot;')}" placeholder="cidade origem"></div>
+        <div class="conf-filtro"><label>Destino (cidade) *</label><input id="tfDestino" value="${(t.destino||'').replace(/"/g,'&quot;')}" placeholder="cidade destino"></div>
+        <div class="conf-filtro"><label>Categoria (opcional)</label><input id="tfCategoria" value="${(t.categoria||'').replace(/"/g,'&quot;')}" placeholder="hatch/sedan/suv... (vazio=todas)"></div>
+        <div class="conf-filtro"><label>Tipo de operação (opcional)</label><input id="tfTipo" value="${(t.tipo_operacao||'').replace(/"/g,'&quot;')}" placeholder="normal/especial..."></div>
+        <div class="conf-filtro"><label>Valor de referência (R$) *</label><input type="number" step="0.01" id="tfValor" value="${t.valor!=null?t.valor:''}" placeholder="0,00"></div>
+        <div class="conf-filtro"><label>Vigência a partir de</label><input type="date" id="tfVigencia" value="${t.vigencia_de||''}"></div>
+      </div>
+      <div class="tabfrete-form-acoes">
+        <button class="btn btn-primary btn-sm" onclick="_tabFreteSalvar()">💾 Salvar</button>
+        <button class="btn btn-secondary btn-sm" onclick="_tabFreteCancelar()">Cancelar</button>
+      </div>
+    </div>`;
+}
+
+function _tabFreteCancelar(){ _tabFreteEdit = null; _tabFreteRenderForm(); }
+
+async function _tabFreteSalvar(){
+  const cliente = document.getElementById('tfCliente')?.value.trim();
+  const origem = document.getElementById('tfOrigem')?.value.trim();
+  const destino = document.getElementById('tfDestino')?.value.trim();
+  const valor = parseFloat(document.getElementById('tfValor')?.value);
+  if (!cliente || !origem || !destino || isNaN(valor)){ alert('Preencha cliente, origem, destino e valor.'); return; }
+  const registro = {
+    cliente, origem, destino,
+    categoria: document.getElementById('tfCategoria')?.value.trim() || null,
+    tipo_operacao: document.getElementById('tfTipo')?.value.trim() || null,
+    valor,
+    vigencia_de: document.getElementById('tfVigencia')?.value || null
+  };
+  try {
+    if (_tabFreteEdit && _tabFreteEdit.id){
+      await supabase.from('tabela_frete').update(registro).eq('id', _tabFreteEdit.id);
+      const i = tabelaFreteGlobais.findIndex(t=>t.id===_tabFreteEdit.id);
+      if (i>=0) tabelaFreteGlobais[i] = { ...tabelaFreteGlobais[i], ...registro };
+    } else {
+      const { data } = await supabase.from('tabela_frete').insert(registro).select();
+      if (data && data[0]) tabelaFreteGlobais.push(data[0]);
+    }
+    _tabFreteEdit = null;
+    if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('✅ Valor salvo na tabela de frete!');
+    renderizarTabelaFrete();
+  } catch(e){ alert('Erro ao salvar: '+(e.message||e)); }
+}
+
+async function _tabFreteExcluir(id){
+  if (!confirm('Excluir este valor da tabela de frete?')) return;
+  try {
+    await supabase.from('tabela_frete').delete().eq('id', id);
+    tabelaFreteGlobais = tabelaFreteGlobais.filter(t=>t.id!==id);
+    renderizarTabelaFrete();
+  } catch(e){ alert('Erro ao excluir: '+(e.message||e)); }
+}
+
+// ============================================================
+// CENTRAL DE CONFERÊNCIA (perfil financeiro) — Fase 1: estrutura base
+// Reusa a base de viagens do Histórico de Cargas, adicionando a camada de conferência.
+// ============================================================
+let _confFiltros = { de:null, ate:null, motorista:'', cliente:'', status:'' };
+let _confViagemSel = null;
+
+// Viagens candidatas à conferência: concluídas (viagens realizadas)
+function _confViagens(){
+  const rotas = (rotasGlobais||[]).filter(r => r.status === 'concluida' || r.status === 'em_andamento');
+  return rotas.map(r => _histDadosViagem(r)).filter(v => v.pedidos.length > 0);
+}
+
+// Aplica filtros de período/motorista/cliente
+function _confViagensFiltradas(){
+  let lista = _confViagens();
+  const f = _confFiltros;
+  if (f.de){ const d = new Date(f.de+'T00:00:00'); lista = lista.filter(v => v.data && new Date(v.data) >= d); }
+  if (f.ate){ const d = new Date(f.ate+'T23:59:59'); lista = lista.filter(v => v.data && new Date(v.data) <= d); }
+  if (f.motorista) lista = lista.filter(v => _norm(v.motorista).includes(_norm(f.motorista)));
+  if (f.cliente) lista = lista.filter(v => v.pedidos.some(p => _norm(p.cliente||'').includes(_norm(f.cliente))));
+  if (f.status) lista = lista.filter(v => _confStatusViagem(v).chave === f.status);
+  // ordena por data desc
+  return lista.sort((a,b) => new Date(b.data||0) - new Date(a.data||0));
+}
+
+// Status de conferência de uma viagem (Fase 1: baseado em CTe e no que já existe;
+// a conferência de frete×tabela vem na Fase 2)
+function _confStatusViagem(v){
+  const totalCarros = v.pedidos.length;
+  const cteFaltando = totalCarros - v.comCte;
+  // marca de conferência salva na rota (quando existir)
+  const conferida = v.rota && v.rota.conferida_em;
+  if (conferida) return { chave:'conferida', label:'Conferida', cor:'#22c55e' };
+  if (cteFaltando > 0) return { chave:'cte_pendente', label:'CT-e pendente', cor:'#ef4444' };
+  return { chave:'pendente', label:'Pendente', cor:'#f59e0b' };
+}
+
+function renderizarCentralConferencia(){
+  const cont = document.getElementById('conferenciaConteudo');
+  if (!cont) return;
+  // carrega fechamentos uma vez
+  if (window._fechamentosPeriodo === undefined){ window._fechamentosPeriodo = {}; _confCarregarFechamentos().then(()=>renderizarCentralConferencia()); }
+  // carrega a tabela de frete uma vez (para conferência automática)
+  if (!window._tabFreteCarregada){ window._tabFreteCarregada = true; if (typeof _carregarTabelaFrete==='function') _carregarTabelaFrete().then(()=>renderizarCentralConferencia()); }
+  // período padrão: mês atual, se ainda não definido
+  if (!_confFiltros.de && !_confFiltros.ate){
+    const hoje = new Date();
+    _confFiltros.de = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0,10);
+    _confFiltros.ate = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).toISOString().slice(0,10);
+  }
+  const viagens = _confViagensFiltradas();
+
+  // KPIs do período
+  const totViagens = viagens.length;
+  const totVeiculos = viagens.reduce((s,v)=>s+v.pedidos.length,0);
+  const fatBruto = viagens.reduce((s,v)=>s+v.total,0);
+  const conferidas = viagens.filter(v => _confStatusViagem(v).chave === 'conferida').length;
+  const pendencias = viagens.filter(v => _confStatusViagem(v).chave !== 'conferida').length;
+
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+
+  cont.innerHTML = `
+    <div class="conf-header">
+      <div>
+        <h1 class="conf-titulo">Central de Conferência</h1>
+        <p class="conf-sub">Validação de viagens, fretes, CT-es e cálculo de remuneração</p>
+      </div>
+      <div class="conf-header-acoes">
+        <button class="btn btn-secondary btn-sm" onclick="_confExportarCSV()">📊 Exportar Excel/CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="_confExportarPDF()">📄 Exportar PDF</button>
+      </div>
+    </div>
+
+    <div class="conf-kpis">
+      <div class="conf-kpi"><div class="conf-kpi-lbl">VIAGENS</div><div class="conf-kpi-num">${totViagens}</div><div class="conf-kpi-hint">Total no período</div></div>
+      <div class="conf-kpi"><div class="conf-kpi-lbl">VEÍCULOS</div><div class="conf-kpi-num">${totVeiculos}</div><div class="conf-kpi-hint">Transportados</div></div>
+      <div class="conf-kpi"><div class="conf-kpi-lbl">FATURAMENTO (BRUTO)</div><div class="conf-kpi-num conf-verde">${fmt(fatBruto)}</div><div class="conf-kpi-hint">No período</div></div>
+      <div class="conf-kpi"><div class="conf-kpi-lbl">CONFERIDOS</div><div class="conf-kpi-num">${conferidas}</div><div class="conf-kpi-hint">${totViagens?Math.round(conferidas/totViagens*100):0}% do total</div></div>
+      <div class="conf-kpi"><div class="conf-kpi-lbl">PENDÊNCIAS</div><div class="conf-kpi-num conf-laranja">${pendencias}</div><div class="conf-kpi-hint">A revisar</div></div>
+    </div>
+
+    <div class="conf-filtros">
+      <div class="conf-filtro"><label>Período inicial</label><input type="date" id="confDe" value="${_confFiltros.de||''}" onchange="_confSetFiltro('de', this.value)"></div>
+      <div class="conf-filtro"><label>Período final</label><input type="date" id="confAte" value="${_confFiltros.ate||''}" onchange="_confSetFiltro('ate', this.value)"></div>
+      <div class="conf-filtro"><label>Motorista</label><input type="text" id="confMot" value="${_confFiltros.motorista||''}" placeholder="todos" oninput="_confSetFiltro('motorista', this.value)"></div>
+      <div class="conf-filtro"><label>Cliente</label><input type="text" id="confCli" value="${_confFiltros.cliente||''}" placeholder="todos" oninput="_confSetFiltro('cliente', this.value)"></div>
+      <div class="conf-filtro"><label>Status</label>
+        <select id="confStatus" onchange="_confSetFiltro('status', this.value)">
+          <option value="">Todos</option>
+          <option value="pendente" ${_confFiltros.status==='pendente'?'selected':''}>Pendente</option>
+          <option value="cte_pendente" ${_confFiltros.status==='cte_pendente'?'selected':''}>CT-e pendente</option>
+          <option value="conferida" ${_confFiltros.status==='conferida'?'selected':''}>Conferida</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="_confLimparFiltros()">🧹 Limpar filtros</button>
+    </div>
+
+    <div class="conf-tabela-wrap">
+      <div class="conf-tabela-titulo">VIAGENS DO PERÍODO</div>
+      ${viagens.length === 0 ? '<p class="text-muted" style="padding:1.5rem;text-align:center">Nenhuma viagem realizada no período selecionado.</p>' : `
+      <table class="conf-tabela">
+        <thead><tr>
+          <th>Viagem</th><th>Data</th><th>Motorista</th><th>Cegonha</th><th>Rota</th><th>Cliente</th>
+          <th>Veíc.</th><th>Frete lançado</th><th>CT-e</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${viagens.map(v => {
+            const st = _confStatusViagem(v);
+            const cli = v.pedidos[0]?.cliente || '—';
+            const rota = `${v.pedidos[0]?.cidadeOrigem||'—'} → ${v.pedidos[v.pedidos.length-1]?.cidadeDestino||'—'}`;
+            return `<tr>
+              <td><strong>#${v.id}</strong></td>
+              <td>${v.data?new Date(v.data).toLocaleDateString('pt-BR'):'—'}</td>
+              <td>${v.motorista}</td>
+              <td>${v.cegonha}</td>
+              <td style="font-size:.82rem">${rota}</td>
+              <td>${cli}</td>
+              <td class="center">${v.pedidos.length}</td>
+              <td class="right">${fmt(v.total)}</td>
+              <td class="center">${v.comCte}/${v.pedidos.length}</td>
+              <td><span class="conf-status-pill" style="background:${st.cor}22;color:${st.cor}">${st.label}</span></td>
+              <td><button class="conf-ver-btn" onclick="_confAbrirDetalhe(${v.id})">👁️</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`}
+    </div>
+
+    ${_confPainelFechamento(viagens)}`;
+}
+
+// Painel de fechamento do período (Fase 4)
+function _confPainelFechamento(viagens){
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const totViagens = viagens.length;
+  const conferidas = viagens.filter(v => _confStatusViagem(v).chave === 'conferida').length;
+  const naoConferidas = totViagens - conferidas;
+  const ctePendentes = viagens.filter(v => _confStatusViagem(v).chave === 'cte_pendente').length;
+  const fatBruto = viagens.reduce((s,v)=>s+v.total,0);
+  const remunTotal = viagens.reduce((s,v)=>{
+    return s + v.pedidos.reduce((ss,p)=>{ const vm=(typeof valorMotoristaPedido==='function')?valorMotoristaPedido(p):{valor:0}; return ss+(vm.valor||0); },0);
+  },0);
+
+  // status de fechamento do período (chave = de|ate)
+  const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
+  const fechado = (window._fechamentosPeriodo||{})[chavePeriodo];
+
+  const pendencias = [];
+  if (naoConferidas > 0) pendencias.push(`${naoConferidas} viagem(ns) não conferida(s)`);
+  if (ctePendentes > 0) pendencias.push(`${ctePendentes} viagem(ns) com CT-e pendente`);
+  const podeFechar = pendencias.length === 0 && totViagens > 0;
+
+  return `
+    <div class="conf-fechamento">
+      <div class="conf-fech-tit">🔒 Fechamento do período</div>
+      <div class="conf-fech-resumo">
+        <div><span>Faturamento bruto</span><strong>${fmt(fatBruto)}</strong></div>
+        <div><span>Remuneração motoristas</span><strong>${fmt(remunTotal)}</strong></div>
+        <div><span>Resultado operacional</span><strong style="color:#22c55e">${fmt(fatBruto - remunTotal)}</strong></div>
+        <div><span>Viagens conferidas</span><strong>${conferidas}/${totViagens}</strong></div>
+      </div>
+      ${fechado ? `
+        <div class="conf-fech-status conf-fech-fechado">
+          🔒 <strong>FECHAMENTO CONCLUÍDO</strong> — fechado por ${fechado.por} em ${new Date(fechado.em).toLocaleString('pt-BR')}.
+          <div style="margin-top:4px;font-size:.8rem">As viagens deste período estão travadas para conferência.</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="_confReabrirFechamento()">🔓 Reabrir fechamento</button>
+      ` : podeFechar ? `
+        <div class="conf-fech-status conf-fech-ok">🟢 Tudo conferido — pronto para fechar o período.</div>
+        <button class="btn btn-primary" onclick="_confLiberarFechamento()">🔒 Liberar para fechamento</button>
+      ` : `
+        <div class="conf-fech-status conf-fech-bloq">
+          ⚠️ <strong>FECHAMENTO BLOQUEADO</strong> — resolva as pendências antes:
+          <ul style="margin:6px 0 0;padding-left:20px">${pendencias.map(p=>`<li>${p}</li>`).join('')}</ul>
+        </div>
+      `}
+    </div>`;
+}
+
+async function _confLiberarFechamento(){
+  const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  if (!confirm(`Fechar o período de ${_confFiltros.de} a ${_confFiltros.ate}?\n\nAs viagens deste período ficarão travadas para conferência (só reabrindo o fechamento).`)) return;
+  try {
+    const registro = { periodo_de:_confFiltros.de, periodo_ate:_confFiltros.ate, fechado_por:usuario, fechado_em:new Date().toISOString(), status:'fechado' };
+    await supabase.from('fechamentos').insert(registro);
+    window._fechamentosPeriodo = window._fechamentosPeriodo || {};
+    window._fechamentosPeriodo[chavePeriodo] = { por:usuario, em:registro.fechado_em };
+    if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('🔒 Período fechado com sucesso!');
+    renderizarCentralConferencia();
+  } catch(e){ alert('Erro ao fechar período: '+(e.message||e)); }
+}
+
+async function _confReabrirFechamento(){
+  const motivo = prompt('Motivo da reabertura do fechamento:\n(será registrado com seu nome, data e hora)');
+  if (motivo === null || !motivo.trim()) return;
+  const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  try {
+    await supabase.from('fechamentos').insert({
+      periodo_de:_confFiltros.de, periodo_ate:_confFiltros.ate,
+      fechado_por:usuario, fechado_em:new Date().toISOString(),
+      status:'reaberto', motivo_reabertura:motivo.trim()
+    });
+    delete (window._fechamentosPeriodo||{})[chavePeriodo];
+    if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('🔓 Fechamento reaberto (registrado).');
+    renderizarCentralConferencia();
+  } catch(e){ alert('Erro ao reabrir: '+(e.message||e)); }
+}
+
+// Carrega os fechamentos existentes (chamado no boot / ao abrir a central)
+async function _confCarregarFechamentos(){
+  try {
+    const { data } = await supabase.from('fechamentos').select('*').order('fechado_em', { ascending:true });
+    window._fechamentosPeriodo = {};
+    (data||[]).forEach(f => {
+      const chave = `${f.periodo_de}|${f.periodo_ate}`;
+      if (f.status === 'fechado') window._fechamentosPeriodo[chave] = { por:f.fechado_por, em:f.fechado_em };
+      else if (f.status === 'reaberto') delete window._fechamentosPeriodo[chave];
+    });
+  } catch(e){ /* tabela pode não existir ainda */ }
+}
+
+// ===== Fase 5: Relatório consolidado (CSV/Excel e PDF) =====
+function _confLinhasRelatorio(){
+  const viagens = _confViagensFiltradas();
+  return viagens.map(v => {
+    const st = _confStatusViagem(v);
+    const cli = v.pedidos[0]?.cliente || '—';
+    const rota = `${v.pedidos[0]?.cidadeOrigem||'—'} → ${v.pedidos[v.pedidos.length-1]?.cidadeDestino||'—'}`;
+    const esperado = v.pedidos.reduce((s,p)=> s + (p.freteEsperado!=null?Number(p.freteEsperado):0), 0);
+    const temEsperado = v.pedidos.some(p => p.freteEsperado != null);
+    const diferenca = temEsperado ? (v.total - esperado) : null;
+    return { v, st, cli, rota, esperado, temEsperado, diferenca };
+  });
+}
+
+function _confExportarCSV(){
+  const linhas = _confLinhasRelatorio();
+  const head = ['Viagem','Data','Motorista','Cegonha','Rota','Cliente','Veiculos','Frete_lancado','Valor_tabela','Diferenca','CTe_conferidos','CTe_total','Status'];
+  const rows = [head];
+  linhas.forEach(({v,st,cli,rota,esperado,temEsperado,diferenca}) => {
+    rows.push([
+      '#'+v.id,
+      v.data?new Date(v.data).toLocaleDateString('pt-BR'):'-',
+      v.motorista, v.cegonha, rota, cli, v.pedidos.length,
+      v.total.toFixed(2).replace('.',','),
+      temEsperado?esperado.toFixed(2).replace('.',','):'-',
+      diferenca!=null?diferenca.toFixed(2).replace('.',','):'-',
+      v.comCte, v.pedidos.length, st.label
+    ]);
+  });
+  const csv = rows.map(l => l.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `conferencia_${_confFiltros.de||''}_a_${_confFiltros.ate||''}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function _confExportarPDF(){
+  const linhas = _confLinhasRelatorio();
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const periodo = `${_confFiltros.de?new Date(_confFiltros.de+'T12:00').toLocaleDateString('pt-BR'):'início'} a ${_confFiltros.ate?new Date(_confFiltros.ate+'T12:00').toLocaleDateString('pt-BR'):'hoje'}`;
+  const totFat = linhas.reduce((s,l)=>s+l.v.total,0);
+  const totVeic = linhas.reduce((s,l)=>s+l.v.pedidos.length,0);
+  const conferidas = linhas.filter(l=>l.st.chave==='conferida').length;
+
+  const corpo = `
+    <div class="filtros"><strong>Período:</strong> ${periodo} &nbsp;·&nbsp; <strong>${linhas.length}</strong> viagens · <strong>${totVeic}</strong> veículos · <strong>${conferidas}</strong> conferidas</div>
+    <table>
+      <thead><tr>
+        <th>Viagem</th><th>Data</th><th>Motorista</th><th>Cegonha</th><th>Rota</th><th>Cliente</th>
+        <th>Veíc.</th><th>Frete</th><th>Tabela</th><th>Dif.</th><th>CT-e</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        ${linhas.map(({v,st,cli,rota,esperado,temEsperado,diferenca})=>`<tr>
+          <td><strong>#${v.id}</strong></td>
+          <td>${v.data?new Date(v.data).toLocaleDateString('pt-BR'):'—'}</td>
+          <td>${v.motorista}</td>
+          <td>${v.cegonha}</td>
+          <td>${rota}</td>
+          <td>${cli}</td>
+          <td style="text-align:center">${v.pedidos.length}</td>
+          <td>${fmt(v.total)}</td>
+          <td>${temEsperado?fmt(esperado):'—'}</td>
+          <td>${diferenca!=null?fmt(diferenca):'—'}</td>
+          <td style="text-align:center">${v.comCte}/${v.pedidos.length}</td>
+          <td>${st.label}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="totalgeral">Faturamento bruto do período: ${fmt(totFat)}</div>`;
+
+  if (typeof _abrirPDF === 'function') _abrirPDF('Central de Conferência — Relatório do período', corpo);
+  else alert('Template de PDF indisponível.');
+}
+
+
+
+function _confSetFiltro(campo, valor){
+  _confFiltros[campo] = valor;
+  const ativo = document.activeElement;
+  const id = ativo?.id;
+  const pos = ativo && typeof ativo.selectionStart==='number' ? ativo.selectionStart : null;
+  renderizarCentralConferencia();
+  if (id){ const el = document.getElementById(id); if (el){ el.focus(); if(pos!==null){ try{el.setSelectionRange(pos,pos);}catch(e){} } } }
+}
+
+function _confLimparFiltros(){
+  _confFiltros = { de:null, ate:null, motorista:'', cliente:'', status:'' };
+  renderizarCentralConferencia();
+}
+
+let _confAbaDetalhe = 'veiculos';
+// valores esperados de frete digitados manualmente (memória local até salvar): { pedidoId: valor }
+let _confValoresEsperados = {};
+
+function _confAbrirDetalhe(viagemId){
+  _confViagemSel = viagemId;
+  _confAbaDetalhe = 'veiculos';
+  _confValoresEsperados = {};
+  _confRenderPainel();
+}
+
+function _confFecharPainel(){
+  document.getElementById('confPainelOverlay')?.remove();
+  _confViagemSel = null;
+}
+
+function _confSelAbaDetalhe(aba){ _confAbaDetalhe = aba; _confRenderPainel(); }
+
+function _confRenderPainel(){
+  const r = (rotasGlobais||[]).find(x => String(x.id)===String(_confViagemSel));
+  if (!r){ _confFecharPainel(); return; }
+  const v = _histDadosViagem(r);
+  const st = _confStatusViagem(v);
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const cli = v.pedidos[0]?.cliente || '—';
+  const rota = `${v.pedidos[0]?.cidadeOrigem||'—'} → ${v.pedidos[v.pedidos.length-1]?.cidadeDestino||'—'}`;
+
+  const old = document.getElementById('confPainelOverlay'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'confPainelOverlay';
+  div.className = 'conf-painel-overlay';
+  div.innerHTML = `
+    <div class="conf-painel-bg" onclick="_confFecharPainel()"></div>
+    <div class="conf-painel">
+      <div class="conf-painel-head">
+        <div>
+          <div class="conf-painel-tit">Detalhes da Viagem #${v.id}</div>
+          <span class="conf-status-pill" style="background:${st.cor}22;color:${st.cor}">${st.label}</span>
+        </div>
+        <button class="conf-painel-x" onclick="_confFecharPainel()">✕</button>
+      </div>
+
+      <div class="conf-painel-info">
+        <div><span class="conf-info-lbl">👤 Motorista</span><strong>${v.motorista}</strong></div>
+        <div><span class="conf-info-lbl">🚛 Cegonha</span><strong>${v.cegonha}</strong></div>
+        <div><span class="conf-info-lbl">📅 Data</span><strong>${v.data?new Date(v.data).toLocaleDateString('pt-BR'):'—'}</strong></div>
+        <div><span class="conf-info-lbl">🗺️ Rota</span><strong>${rota}</strong></div>
+        <div><span class="conf-info-lbl">🏢 Cliente</span><strong>${cli}</strong></div>
+      </div>
+
+      <div class="conf-painel-abas">
+        <button class="conf-aba ${_confAbaDetalhe==='veiculos'?'ativo':''}" onclick="_confSelAbaDetalhe('veiculos')">Veículos (${v.pedidos.length})</button>
+        <button class="conf-aba ${_confAbaDetalhe==='frete'?'ativo':''}" onclick="_confSelAbaDetalhe('frete')">Frete e Tabela</button>
+        <button class="conf-aba ${_confAbaDetalhe==='ctes'?'ativo':''}" onclick="_confSelAbaDetalhe('ctes')">CT-es (${v.comCte}/${v.pedidos.length})</button>
+        <button class="conf-aba ${_confAbaDetalhe==='remuneracao'?'ativo':''}" onclick="_confSelAbaDetalhe('remuneracao')">Remuneração</button>
+      </div>
+
+      <div class="conf-painel-corpo">${_confAbaConteudo(v)}</div>
+
+      <div class="conf-painel-rodape">
+        ${st.chave==='conferida'
+          ? `<div class="conf-conferida-info">✅ Conferida ${r.conferida_por?('por '+r.conferida_por):''} ${r.conferida_em?('em '+new Date(r.conferida_em).toLocaleString('pt-BR')):''}</div>
+             <button class="btn btn-secondary btn-sm" onclick="_confDesmarcarConferida(${v.id})">Reabrir conferência</button>`
+          : `<button class="btn btn-primary" onclick="_confMarcarConferida(${v.id})">✅ Marcar viagem como conferida</button>`}
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function _confAbaConteudo(v){
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+
+  if (_confAbaDetalhe === 'veiculos'){
+    return `<table class="conf-det-tabela">
+      <thead><tr><th>#</th><th>Placa</th><th>Modelo</th><th>Origem</th><th>Destino</th><th>Frete</th><th>CT-e</th></tr></thead>
+      <tbody>${v.pedidos.map((p,i)=>`<tr>
+        <td>${i+1}</td>
+        <td><strong>${p.placa||'—'}</strong></td>
+        <td>${p.modelo||'—'}</td>
+        <td>${p.cidadeOrigem||'—'}</td>
+        <td>${p.cidadeDestino||'—'}</td>
+        <td class="right">${fmt(p.valorFrete)}</td>
+        <td class="center">${(p.numeroCte||cteInfoDoPedido(p.id))?'🟢':'🔴'}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="5"><strong>Total da viagem</strong></td><td class="right"><strong>${fmt(v.total)}</strong></td><td class="center">${v.comCte}/${v.pedidos.length}</td></tr></tfoot>
+    </table>`;
+  }
+
+  if (_confAbaDetalhe === 'frete'){
+    let totalLancado = 0, totalEsperado = 0, temEsperado = false;
+    const linhas = v.pedidos.map((p,i)=>{
+      const lancado = Number(p.valorFrete||0);
+      totalLancado += lancado;
+      const esperadoSalvo = (p.freteEsperado != null ? p.freteEsperado : null);
+      // Fase 2b: busca automática na tabela de frete cadastrada
+      const daTabela = (typeof valorTabelaFretePedido==='function') ? valorTabelaFretePedido(p) : null;
+      const esperado = _confValoresEsperados[p.id] != null ? _confValoresEsperados[p.id]
+                     : (esperadoSalvo != null ? esperadoSalvo
+                     : (daTabela ? daTabela.valor : null));
+      const fonteAuto = (esperadoSalvo == null && _confValoresEsperados[p.id] == null && daTabela);
+      if (esperado != null && esperado !== ''){ temEsperado = true; totalEsperado += Number(esperado); }
+      const dif = (esperado != null && esperado !== '') ? (lancado - Number(esperado)) : null;
+      const difCor = dif === null ? '' : (Math.abs(dif) < 0.01 ? '#22c55e' : '#f59e0b');
+      const difTxt = dif === null ? '—' : (Math.abs(dif) < 0.01 ? 'R$ 0,00 🟢' : fmt(dif)+' 🟠');
+      return `<tr>
+        <td><strong>${p.placa||'—'}</strong><br><span class="text-muted" style="font-size:.75rem">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span></td>
+        <td class="right">${fmt(lancado)}</td>
+        <td><input type="number" step="0.01" class="conf-esperado-input" value="${esperado!=null?esperado:''}" placeholder="valor tabela" oninput="_confSetEsperado(${p.id}, this.value)">${fonteAuto?'<br><span style="font-size:.68rem;color:#3b82f6">🔵 da tabela</span>':''}</td>
+        <td class="right" style="color:${difCor};font-weight:700">${difTxt}</td>
+      </tr>`;
+    }).join('');
+    const difTotal = temEsperado ? (totalLancado - totalEsperado) : null;
+    return `
+      <div class="conf-frete-aviso">💡 Valores marcados <span style="color:#3b82f6">🔵 da tabela</span> vieram do cadastro automático. Onde não há cadastro, digite o <strong>valor esperado</strong> manualmente — ou cadastre na aba <strong>Tabela de Frete</strong> para automatizar.</div>
+      <table class="conf-det-tabela">
+        <thead><tr><th>Carro</th><th>Frete lançado</th><th>Valor esperado (tabela)</th><th>Diferença</th></tr></thead>
+        <tbody>${linhas}</tbody>
+        <tfoot><tr><td><strong>Total</strong></td><td class="right"><strong>${fmt(totalLancado)}</strong></td><td class="right"><strong>${temEsperado?fmt(totalEsperado):'—'}</strong></td><td class="right"><strong>${difTotal!==null?fmt(difTotal):'—'}</strong></td></tr></tfoot>
+      </table>
+      <div class="conf-frete-acoes">
+        <label style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">Justificativa do ajuste (opcional)</label>
+        <input type="text" id="confJustificativa" class="conf-just-input" placeholder="ex: ajuste conforme tabela vigente para o cliente">
+        <button class="btn btn-primary btn-sm" onclick="_confSalvarFrete(${v.id})">💾 Salvar valores conferidos</button>
+      </div>`;
+  }
+
+  if (_confAbaDetalhe === 'ctes'){
+    return `<table class="conf-det-tabela">
+      <thead><tr><th>Placa</th><th>Nº CT-e</th><th>Status</th></tr></thead>
+      <tbody>${v.pedidos.map(p=>{
+        const info = cteInfoDoPedido(p.id);
+        const num = p.numeroCte || (info && info.numero) || null;
+        const temCte = num || info;
+        return `<tr>
+          <td><strong>${p.placa||'—'}</strong></td>
+          <td>${num || '<span class="text-muted">—</span>'}</td>
+          <td>${temCte?'<span style="color:#22c55e;font-weight:700">🟢 Emitido</span>':'<span style="color:#ef4444;font-weight:700">🔴 Pendente</span>'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr><td colspan="2"><strong>Conferidos</strong></td><td><strong>${v.comCte}/${v.pedidos.length}</strong></td></tr></tfoot>
+    </table>`;
+  }
+
+  if (_confAbaDetalhe === 'remuneracao'){
+    // Usa a função existente valorMotoristaPedido (tabela de preços / manual / ajuste)
+    let totalRemun = 0, temPendente = false;
+    const origemLabel = { pedido:'Ajuste do pedido', tabela:'Tabela de preços', manual:'Valor manual do trecho', pendente:'⚠️ Pendente' };
+    const linhas = v.pedidos.map(p => {
+      const vm = (typeof valorMotoristaPedido==='function') ? valorMotoristaPedido(p) : {valor:null, origem:'pendente'};
+      if (vm.valor == null) temPendente = true; else totalRemun += Number(vm.valor);
+      const corOrigem = vm.origem==='pendente' ? '#ef4444' : (vm.origem==='tabela' ? '#22c55e' : '#f59e0b');
+      return `<tr>
+        <td><strong>${p.placa||'—'}</strong><br><span class="text-muted" style="font-size:.75rem">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span></td>
+        <td>${p.categoriaVeiculo||p.categoria_veiculo||'—'}</td>
+        <td><span style="color:${corOrigem};font-size:.78rem;font-weight:600">${origemLabel[vm.origem]||vm.origem}</span></td>
+        <td class="right"><strong>${vm.valor!=null?fmt(vm.valor):'—'}</strong></td>
+      </tr>`;
+    }).join('');
+    return `
+      <div class="conf-frete-aviso">💡 A remuneração usa a <strong>tabela de preços</strong> (ou o valor manual/ajuste do pedido) que já existe no sistema. Trechos sem valor cadastrado aparecem como pendentes — cadastre na Tabela de Preços.</div>
+      <table class="conf-det-tabela">
+        <thead><tr><th>Carro</th><th>Categoria</th><th>Origem do valor</th><th>Remuneração</th></tr></thead>
+        <tbody>${linhas}</tbody>
+        <tfoot><tr><td colspan="3"><strong>Total da remuneração${temPendente?' <span style="color:#ef4444;font-size:.75rem">(há pendências)</span>':''}</strong></td><td class="right"><strong>${fmt(totalRemun)}</strong></td></tr></tfoot>
+      </table>
+      <div style="margin-top:14px;padding:12px 14px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;font-size:.85rem">
+        <div style="display:flex;justify-content:space-between"><span>Faturamento da viagem</span><strong>${fmt(v.total)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span>Remuneração do motorista</span><strong>${fmt(totalRemun)}</strong></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.1)"><span><strong>Resultado da viagem</strong></span><strong style="color:#22c55e">${fmt(v.total - totalRemun)}</strong></div>
+      </div>`;
+  }
+  return '';
+}
+
+function _confSetEsperado(pedidoId, valor){
+  _confValoresEsperados[pedidoId] = valor === '' ? null : parseFloat(valor);
+  const pos = (document.activeElement && typeof document.activeElement.selectionStart==='number') ? document.activeElement.selectionStart : null;
+  _confRenderPainel();
+  const inputs = document.querySelectorAll('.conf-esperado-input');
+  for (const inp of inputs){ if (inp.getAttribute('oninput')?.includes(`_confSetEsperado(${pedidoId},`)){ inp.focus(); if(pos!==null){try{inp.setSelectionRange(pos,pos);}catch(e){}} break; } }
+}
+
+async function _confSalvarFrete(viagemId){
+  const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
+  if ((window._fechamentosPeriodo||{})[chavePeriodo]){ alert('🔒 Este período está fechado. Reabra o fechamento para editar a conferência.'); return; }
+  const r = (rotasGlobais||[]).find(x=>String(x.id)===String(viagemId));
+  if (!r) return;
+  const v = _histDadosViagem(r);
+  const justificativa = document.getElementById('confJustificativa')?.value.trim() || null;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  try {
+    await Promise.all(v.pedidos.map(p => {
+      const esperado = _confValoresEsperados[p.id];
+      if (esperado == null) return Promise.resolve();
+      const pg = (pedidosGlobais||[]).find(x=>String(x.id)===String(p.id));
+      if (pg){ pg.freteEsperado = esperado; }
+      return supabase.from('pedidos').update({
+        frete_esperado: esperado,
+        frete_conferido_em: new Date().toISOString(),
+        frete_conferido_por: usuario,
+        frete_justificativa: justificativa
+      }).eq('id', p.id);
+    }));
+    if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('✅ Valores conferidos salvos!');
+    _confRenderPainel();
+  } catch(e){ alert('Erro ao salvar: '+(e.message||e)); }
+}
+
+async function _confMarcarConferida(viagemId){
+  const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
+  if ((window._fechamentosPeriodo||{})[chavePeriodo]){ alert('🔒 Este período está fechado. Reabra o fechamento para alterar a conferência.'); return; }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  try {
+    await supabase.from('rotas_planejadas').update({ conferida_em: new Date().toISOString(), conferida_por: usuario }).eq('id', viagemId);
+    const r = (rotasGlobais||[]).find(x=>String(x.id)===String(viagemId));
+    if (r){ r.conferida_em = new Date().toISOString(); r.conferida_por = usuario; }
+    if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('✅ Viagem marcada como conferida!');
+    _confRenderPainel();
+    renderizarCentralConferencia();
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
+async function _confDesmarcarConferida(viagemId){
+  if (!confirm('Reabrir a conferência desta viagem?')) return;
+  try {
+    await supabase.from('rotas_planejadas').update({ conferida_em: null, conferida_por: null }).eq('id', viagemId);
+    const r = (rotasGlobais||[]).find(x=>String(x.id)===String(viagemId));
+    if (r){ r.conferida_em = null; r.conferida_por = null; }
+    _confRenderPainel();
+    renderizarCentralConferencia();
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+
 function renderizarHistoricoCargas(containerId){
   const lista = document.getElementById('histvLista');
   if (!lista) return;
@@ -14836,6 +15560,7 @@ function abrirFecharEnviarCarga(rotaId){
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
       ${p.cliente?`<div class="rm-carro-cliente">👤 ${p.cliente}</div>`:''}
+      ${p.observacaoPedido?`<div class="rm-carro-obs">📝 <strong>Observação:</strong> ${p.observacaoPedido}</div>`:''}
       <div class="rm-end-campo">
         <label>📍 Coletar em / onde pegar o carro (editável)</label>
         <div class="rm-coleta-linha">
@@ -15017,7 +15742,7 @@ function _gerarPdfRomaneio(rotaId){
       <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
       <td>${p._local || p.romaneioEnderecoColeta || p.enderecoColeta || '—'}</td>
       <td>${p.romaneioEnderecoEntrega || p.enderecoEntrega || '—'}</td>
-    </tr>`).join('');
+    </tr>${p.observacaoPedido?`<tr><td colspan="7" style="background:#fff8f0;color:#b45309;font-size:11px;padding:4px 8px">📝 <strong>Obs. #${p.id}:</strong> ${p.observacaoPedido}</td></tr>`:''}`).join('');
   const corpo = `
     <div class="resumo">
       <strong>🚛 Cegonha:</strong> ${d.rota.placa_cegonha||'—'}
@@ -15231,6 +15956,10 @@ function _selosPedidoHTML(p){
   if (p.numeroCte || temCtePdf){
     const num = p.numeroCte ? ` ${p.numeroCte}` : '';
     selos.push(`<span class="selo-pedido selo-cte">🧾 CTe${num}</span>`);
+  }
+  if (p.observacaoPedido){
+    const obs = String(p.observacaoPedido).replace(/"/g,'&quot;');
+    selos.push(`<span class="selo-pedido selo-obs" title="${obs}">📝 Obs.</span>`);
   }
   return selos.length ? `<span class="selos-pedido">${selos.join(' ')}</span>` : '';
 }
@@ -15759,7 +16488,7 @@ function _viagemDetalheHTML(rota, carros){
           <td>${c.modelo||'—'}</td>
           <td title="${(c.cliente||'').replace(/"/g,'&quot;')}">${(c.cliente||'—')}</td>
           <td>${c.patioAtual ? '🅿️ '+(c.patioAtual.split('/')[0]) : (c.cidadeOrigem||'—')}</td>
-          <td><strong>${c.cidadeDestino||'—'}</strong></td>
+          <td><strong>${c.cidadeDestino||'—'}</strong>${c.transbordoPrevisto && !c.cidadeTransbordo ? `<br><span class="jv-transb-prev" title="Transbordo planejado para este carro">🔁 transborda em ${c.transbordoPrevisto}</span>` : ''}</td>
           <td>${_statusPillPlanilha(c)}</td>
         </tr>`).join('')}
       </tbody>
@@ -17743,6 +18472,7 @@ async function _cgAbrirRastreio(pedidoId){
         <div><span class="cg-rd-lbl">Destino</span><span class="cg-rd-val">${p.cidadeDestino||'—'}/${p.ufDestino||''}</span></div>
       </div>
 
+      ${p.observacaoPedido ? `<div class="cg-rastreio-obs">📝 <strong>Observação:</strong> ${p.observacaoPedido}</div>` : ''}
       ${p.aprovado === false ? `<div style="margin:12px 0;padding:12px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35)">
         <div style="font-size:.85rem;margin-bottom:8px">⏳ Este pedido está <strong>aguardando aprovação</strong>. Aprove para liberá-lo ao planejamento.</div>
         <button class="btn btn-primary btn-sm" style="background:#22c55e" onclick="_aprovarPedidoComercial(${p.id})">✅ Aprovar pedido</button>
