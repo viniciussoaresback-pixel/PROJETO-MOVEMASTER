@@ -1,0 +1,29 @@
+/* MoveMaster — modo claro: remove os blocos em torno dos numeros e rotulos dos indicadores. */
+[data-tema="claro"] [class*="kpi"] *,
+[data-tema="claro"] [class*="Kpi"] *,
+[data-tema="claro"] [class*="indicador"] *,
+[data-tema="claro"] [class*="Indicador"] *,
+[data-tema="claro"] .cg-kpi *,
+[data-tema="claro"] .dash-card > span,
+[data-tema="claro"] .dash-card > div:not([class]),
+[data-tema="claro"] .card > .num,
+[data-tema="claro"] .card > .valor {
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+[data-tema="claro"] .cg-kpi-var {
+  background: rgba(22, 163, 74, .1) !important;
+  border: 1px solid rgba(22, 163, 74, .28) !important;
+}
+[data-tema="claro"] .cg-kpi-var[data-dir="baixa"] {
+  background: rgba(220, 38, 38, .1) !important;
+  border-color: rgba(220, 38, 38, .28) !important;
+}
+[data-tema="claro"] .cg-kpi-var[data-dir="neutro"] {
+  background: rgba(16, 19, 26, .06) !important;
+  border-color: rgba(16, 19, 26, .14) !important;
+}
