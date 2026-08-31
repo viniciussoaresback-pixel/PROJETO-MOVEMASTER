@@ -13459,7 +13459,46 @@ function renderizarTabelaFrete(){
   const linhas = (tabelaFreteGlobais||[]).slice().sort((a,b)=>(a.cliente||'').localeCompare(b.cliente||''));
   const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
 
-  cont.innerHTML = `
+  const confCSS = `<style id="confEstilosInline">
+    #conferenciaConteudo .conf-header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+    #conferenciaConteudo .conf-titulo { font-size:1.5rem; font-weight:800; margin:0; }
+    #conferenciaConteudo .conf-sub { color:#9ca3af; font-size:.9rem; margin:.3rem 0 0; }
+    #conferenciaConteudo .conf-header-acoes { display:flex; gap:8px; flex-wrap:wrap; }
+    #conferenciaConteudo .conf-kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:18px; }
+    @media (max-width:1000px){ #conferenciaConteudo .conf-kpis { grid-template-columns:repeat(2,1fr); } }
+    #conferenciaConteudo .conf-kpi { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:14px 16px; }
+    #conferenciaConteudo .conf-kpi-lbl { font-size:.68rem; font-weight:700; letter-spacing:.4px; color:#9ca3af; text-transform:uppercase; }
+    #conferenciaConteudo .conf-kpi-num { font-size:1.5rem; font-weight:800; margin:6px 0 2px; }
+    #conferenciaConteudo .conf-kpi-hint { font-size:.72rem; color:#9ca3af; }
+    #conferenciaConteudo .conf-verde { color:#22c55e; } #conferenciaConteudo .conf-laranja { color:#f59e0b; }
+    #conferenciaConteudo .conf-filtros { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:14px 16px; margin-bottom:16px; }
+    #conferenciaConteudo .conf-filtro { display:flex; flex-direction:column; gap:4px; }
+    #conferenciaConteudo .conf-filtro label { font-size:.7rem; color:#9ca3af; font-weight:600; }
+    #conferenciaConteudo .conf-filtro input, #conferenciaConteudo .conf-filtro select { padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.04); color:inherit; font-size:.85rem; }
+    #conferenciaConteudo .conf-tabela-wrap { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.12); border-radius:12px; overflow:hidden; margin-bottom:16px; }
+    #conferenciaConteudo .conf-tabela-titulo { font-size:.78rem; font-weight:800; letter-spacing:.5px; color:#9ca3af; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.08); }
+    #conferenciaConteudo .conf-tabela { width:100%; border-collapse:collapse; font-size:.85rem; }
+    #conferenciaConteudo .conf-tabela th { text-align:left; padding:10px 12px; font-size:.72rem; color:#9ca3af; font-weight:700; border-bottom:1px solid rgba(255,255,255,.08); }
+    #conferenciaConteudo .conf-tabela td { padding:11px 12px; border-bottom:1px solid rgba(255,255,255,.05); }
+    #conferenciaConteudo .conf-tabela td.center, #conferenciaConteudo .conf-tabela th.center { text-align:center; }
+    #conferenciaConteudo .conf-tabela td.right { text-align:right; }
+    #conferenciaConteudo .conf-status-pill { font-size:.72rem; font-weight:700; padding:3px 10px; border-radius:999px; }
+    #conferenciaConteudo .conf-ver-btn { background:none; border:1px solid rgba(255,255,255,.15); border-radius:6px; padding:4px 8px; cursor:pointer; color:inherit; }
+    #conferenciaConteudo .conf-fechamento { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
+    #conferenciaConteudo .conf-fech-tit { font-size:.95rem; font-weight:800; margin-bottom:14px; }
+    #conferenciaConteudo .conf-fech-resumo { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+    @media (max-width:800px){ #conferenciaConteudo .conf-fech-resumo { grid-template-columns:repeat(2,1fr); } }
+    #conferenciaConteudo .conf-fech-resumo > div { display:flex; flex-direction:column; gap:3px; }
+    #conferenciaConteudo .conf-fech-resumo span { font-size:.72rem; color:#9ca3af; }
+    #conferenciaConteudo .conf-fech-resumo strong { font-size:1.05rem; }
+    #conferenciaConteudo .conf-fech-status { padding:12px 14px; border-radius:8px; font-size:.85rem; margin-bottom:12px; }
+    #conferenciaConteudo .conf-fech-ok { background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.25); color:#22c55e; }
+    #conferenciaConteudo .conf-fech-bloq { background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3); color:#f59e0b; }
+    #conferenciaConteudo .conf-fech-fechado { background:rgba(239,68,68,.06); border:1px solid rgba(239,68,68,.25); color:#ef4444; }
+    #conferenciaConteudo .conf-nota { font-size:.82rem; color:#9ca3af; background:rgba(59,130,246,.06); border:1px solid rgba(59,130,246,.2); border-radius:10px; padding:12px 16px; }
+  </style>`;
+
+  cont.innerHTML = confCSS + `
     <div class="conf-header">
       <div>
         <h1 class="conf-titulo">💵 Tabela de Frete</h1>
@@ -17127,7 +17166,7 @@ function _planAgruparErenderizar(pedidos){
           <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
         </div>
         <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''} ${_selosPedidoHTML(p)}</div>
-        ${p.referencia?`<div class="plan-pedido-ref">🏷️ Pregão: <strong>${p.referencia}</strong></div>`:''}
+        ${p.referencia?`<div class="plan-pedido-ref">🏷️ ID: <strong>${p.referencia}</strong></div>`:''}
         <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
         ${_planPedidoDatasHTML(p)}
         <div class="plan-pedido-acoes">
@@ -17145,7 +17184,7 @@ function _planAgruparErenderizar(pedidos){
         <span class="plan-pedido-valor">${totalFrete?('R$ '+totalFrete.toLocaleString('pt-BR')):''}</span>
       </div>
       <div class="plan-pedido-sub">${p.cliente||''} ${_selosPedidoHTML(p)}</div>
-      ${p.referencia?`<div class="plan-pedido-ref">🏷️ Pregão: <strong>${p.referencia}</strong></div>`:''}
+      ${p.referencia?`<div class="plan-pedido-ref">🏷️ ID: <strong>${p.referencia}</strong></div>`:''}
       <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
       ${_planPedidoDatasHTML(p)}
       <details class="plan-grupo-det" onclick="event.stopPropagation()">
