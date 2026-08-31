@@ -1,7 +1,7 @@
 /* MoveMaster — carregador: gráficos + toasts + exportação + tema claro + refinamentos. */
 (function () {
   'use strict';
-  ['tema-claro.css', 'refinamento-8.css', 'microinteracoes.css', 'tabelas-leves.css', 'refinamento-9.css', 'tema-claro-fix.css'].forEach(function (css) {
+  ['tema-claro.css', 'refinamento-8.css', 'microinteracoes.css', 'tabelas-leves.css', 'refinamento-9.css', 'tema-claro-fix.css', 'tema-claro-cores.css'].forEach(function (css) {
     var l = document.createElement('link');
     l.rel = 'stylesheet';
     l.href = css;
