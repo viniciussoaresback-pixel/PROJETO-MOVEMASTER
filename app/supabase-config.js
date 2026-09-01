@@ -16,7 +16,7 @@ const PERMISSOES = {
     admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca'],
     comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','orcamento','cobranca'],
     logistica:  ['painel','logistica','equipes','comercial','comercialPedidos','cadastros'],
-    financeiro: ['conferencia','faturamento','cobranca','tabelaFrete'],
+    financeiro: ['conferencia','cobranca','tabelaFrete','remunTrecho','relatoriosFin','epiUniforme'],
     motorista:  ['motorista'],
     equipe:     ['equipes'],
     fiscal:     ['fiscal','comercialPedidos','comercialViagens','painel'],
@@ -462,26 +462,8 @@ function aplicarPermissoes(perfil) {
     // Remove cabeçalhos de seção antigos (de uma troca de perfil anterior)
     document.querySelectorAll('.nav-secao-titulo').forEach(el => el.remove());
 
-    // Só para o FINANCEIRO: agrupa o menu em seções (Financeiro / Configurações).
-    // Outros perfis mantêm o menu exatamente como está.
-    if (perfil === 'financeiro') {
-        const inserirTitulo = (texto, antesTab) => {
-            try {
-                const btn = document.querySelector(`.nav-btn[data-tab="${antesTab}"]`);
-                if (!btn || !btn.parentNode) return;
-                // evita duplicar se já existe um título imediatamente antes
-                if (btn.previousElementSibling && btn.previousElementSibling.classList.contains('nav-secao-titulo')) return;
-                const h = document.createElement('div');
-                h.className = 'nav-secao-titulo';
-                h.textContent = texto;
-                // insere usando o PAI REAL do botão (não assume .nav-tabs)
-                btn.parentNode.insertBefore(h, btn);
-            } catch(e){ /* não bloqueia o login se falhar */ }
-        };
-        // FINANCEIRO agrupa: Conferência, Cobrança, Faturamento
-        inserirTitulo('FINANCEIRO', 'conferencia');
-        inserirTitulo('CONFIGURAÇÕES', 'tabelaFrete');
-    }
+    // (Removido) Cabeçalhos de seção no menu horizontal do financeiro —
+    // ficavam no meio da linha parecendo botões não-clicáveis. O menu segue simples.
     } catch(e){ console.warn('Falha ao reorganizar menu (login segue normal):', e); }
 
     // Card de Cadastro de Clientes: visível para todos os perfis que têm a aba Cadastros
