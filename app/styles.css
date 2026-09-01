@@ -8734,7 +8734,8 @@ html span.log-passo-bolinha {
 .plan-corr-nome { font-weight:600; font-size:.86rem; }
 .plan-corr-sub { font-size:.72rem; color:var(--text-secondary,#9ca3af); margin-top:2px; }
 
-.plan-pedidos-lista { display:flex; flex-direction:column; gap:8px; max-height:520px; overflow-y:auto; }
+.plan-pedidos-lista { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:8px; max-height:600px; overflow-y:auto; align-content:start; }
+@media(max-width:600px){ .plan-pedidos-lista{ grid-template-columns:1fr; } }
 .plan-pedido { border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:9px; padding:9px 11px; background:var(--surface-2,rgba(255,255,255,.03)); cursor:grab; transition:border-color .15s, box-shadow .15s; }
 .plan-pedido:hover { border-color:rgba(255,106,0,.5); box-shadow:0 2px 8px rgba(0,0,0,.15); }
 .plan-pedido:active { cursor:grabbing; }
@@ -9572,3 +9573,10 @@ html span.log-passo-bolinha {
 .selo-obs { background:rgba(245,158,11,.15) !important; color:#f59e0b !important; cursor:help; }
 .rm-carro-obs { font-size:.82rem; color:#b45309; margin:4px 0; padding:6px 10px; background:rgba(245,158,11,.08); border-radius:6px; border-left:3px solid #f59e0b; }
 .cg-rastreio-obs { margin:12px 0; padding:10px 14px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3); border-radius:8px; font-size:.85rem; color:#b45309; }
+
+/* Aba Pedidos: agrupamento de carga fechada */
+.cg-tr-grupo { cursor:pointer; background:rgba(255,106,0,.05); }
+.cg-tr-grupo:hover { background:rgba(255,106,0,.1); }
+.cg-tr-grupo td { font-size:.86rem; }
+.cg-tr-filho { background:rgba(255,255,255,.015); }
+.cg-tr-filho td:first-child { border-left:2px solid rgba(255,106,0,.4); }
