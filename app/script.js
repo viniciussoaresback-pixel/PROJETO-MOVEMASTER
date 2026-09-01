@@ -557,6 +557,8 @@ function adicionarVeiculoExtra() {
                     <option value="suv">SUV</option>
                     <option value="caminhonete">Caminhonete</option>
                     <option value="moto">Moto</option>
+                    <option value="furgao">Furgão</option>
+                    <option value="capota">Veículo com capota</option>
                 </select>
             </div>
             <div class="form-group" style="max-width:180px">
@@ -6131,7 +6133,7 @@ const CAMPOS_EDITAVEIS = [
     { k: 'referencia',     label: 'Referência (OC/ID)', tipo: 'text',   col: 'referencia', sec: 'Cliente' },
     { k: 'modelo',         label: 'Modelo',             tipo: 'text',   sec: 'Veículo' },
     { k: 'placa',          label: 'Placa',              tipo: 'text',   sec: 'Veículo' },
-    { k: 'categoriaVeiculo', label: 'Categoria (hatch/sedan/suv/caminhonete)', tipo: 'text', col: 'categoria_veiculo', sec: 'Veículo' },
+    { k: 'categoriaVeiculo', label: 'Categoria (hatch/sedan/suv/caminhonete/moto/furgão/capota)', tipo: 'text', col: 'categoria_veiculo', sec: 'Veículo' },
     { k: 'cidadeOrigem',   label: 'Cidade Origem',      tipo: 'text',   col: 'cidade_origem', sec: 'Origem' },
     { k: 'ufOrigem',       label: 'UF Origem',          tipo: 'text',   col: 'uf_origem', sec: 'Origem' },
     { k: 'enderecoColeta', label: 'Endereço de Coleta', tipo: 'text',   col: 'endereco_coleta', sec: 'Origem' },
@@ -7564,7 +7566,9 @@ const CATEGORIAS_VEICULO = {
     sedan:       'Sedan',
     suv:         'SUV',
     caminhonete: 'Caminhonete',
-    moto:        'Moto'
+    moto:        'Moto',
+    furgao:      'Furgão',
+    capota:      'Veículo com capota'
 };
 
 function _orcNorm(s) {
@@ -11883,6 +11887,15 @@ function popularResponsaveisComercial(){
   if (atual && atual !== '__outro__') sel.value = atual;
   else if (usuario){ const alvo = _tituloResp2(usuario); if (nomes.includes(alvo)) sel.value = alvo; }
   _toggleRespComOutro();
+
+  // Perfil que lança no próprio perfil (comercial, logística): não precisa perguntar quem é o
+  // responsável — é o próprio usuário logado. Esconde o campo.
+  // Admin mantém o campo (pode lançar em nome de terceiros).
+  const grupo = document.getElementById('grupoResponsavelComercial');
+  if (grupo){
+    const lancaNoProprioPerfil = (typeof perfilAtual !== 'undefined' && ['comercial','logistica'].includes(perfilAtual));
+    grupo.style.display = lancaNoProprioPerfil ? 'none' : '';
+  }
 }
 
 function _toggleRespComOutro(){
@@ -11893,12 +11906,18 @@ function _toggleRespComOutro(){
 }
 
 function _getResponsavelComercial(){
+  // Se o campo está oculto (perfil comercial lançando no próprio perfil), usa o usuário logado.
+  const wrap = document.getElementById('grupoResponsavelComercial');
+  if (wrap && wrap.style.display === 'none'){
+    return document.getElementById('usuarioLogado')?.textContent?.trim() || '';
+  }
   const sel = document.getElementById('responsavelComercial');
-  if (!sel) return '';
+  if (!sel) return document.getElementById('usuarioLogado')?.textContent?.trim() || '';
   if (sel.value === '__outro__'){
     return _tituloResp2(document.getElementById('responsavelComercialOutro')?.value || '');
   }
-  return sel.value || '';
+  // se não selecionou nada, cai para o usuário logado
+  return sel.value || document.getElementById('usuarioLogado')?.textContent?.trim() || '';
 }
 
 // ============================================================
@@ -16566,6 +16585,38 @@ function _transbSugereCorredor(){
   }
 }
 
+// Desfaz um transbordo marcado por engano: volta o pedido ao estado normal (sem transbordo)
+async function _desfazerTransbordo(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  if (!confirm(`Desfazer o transbordo do pedido #${pedidoId}?\n\nEle volta ao estado normal (deixa de contar como transbordado) e será realocado normalmente nos corredores.`)) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    // volta status para o fluxo normal e zera as marcas de transbordo
+    const novoStatus = (p.rotaId || p.rota_id) ? 'Em Transporte' : 'Pendente';
+    await supabase.from('pedidos').update({
+      status: novoStatus,
+      status_planilha: null,
+      aguardando_transbordo: false,
+      cidade_transbordo: null,
+      qtd_transbordos: Math.max(0, (p.qtdTransbordos || 0) - 1)
+    }).eq('id', parseInt(pedidoId));
+    Object.assign(p, {
+      status: novoStatus, statusPlanilha: null, aguardandoTransbordo: false,
+      cidadeTransbordo: null, qtdTransbordos: Math.max(0, (p.qtdTransbordos||0) - 1)
+    });
+    await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: 'Transbordo', status_novo: novoStatus,
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: '↩️ Transbordo desfeito (marcado por engano)'
+    });
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao('↩️ Transbordo desfeito.');
+    if (typeof renderizarPlanejamentoRotas === 'function') renderizarPlanejamentoRotas();
+    if (typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
+    if (typeof _cgFecharRastreio === 'function') _cgFecharRastreio();
+  } catch(e){ alert('Erro ao desfazer transbordo: '+(e.message||e)); }
+}
+
 async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
@@ -17166,10 +17217,13 @@ function _planPedidosDoCorredor(c){
     if (p.aprovado === false) return false;
     // aguardando transbordo tem área própria (não entra nos corredores por encaixe)
     if (p.aguardandoTransbordo) return false;
-    // Transbordado aparece no corredor para planejar a PRÓXIMA perna —
-    // MAS só enquanto não estiver já numa nova viagem (senão continuaria aparecendo em transporte).
+    // Transbordado direcionado a um corredor: aparece nele para planejar a PRÓXIMA perna,
+    // MESMO ainda estando na viagem antiga (rota_id preenchido). Ele só some quando entra
+    // numa nova viagem — momento em que o corredor_manual_id é limpo.
     if (p.status === 'Transbordo'){
-      return !p.rotaId && !p.rota_id && !p.placaCegonha;
+      const corrManual = p.corredorManualId || p.corredor_manual_id;
+      if (corrManual) return true;               // direcionado → aparece no corredor
+      return !p.rotaId && !p.rota_id && !p.placaCegonha; // sem corredor → só se estiver livre
     }
     // demais: só se não estiverem em nenhuma viagem
     return !p.rotaId && !p.rota_id && !p.placaCegonha;
@@ -17473,12 +17527,17 @@ function _planAgruparErenderizar(pedidos){
         <span class="plan-pedido-valor">${totalFrete?('R$ '+totalFrete.toLocaleString('pt-BR')):''}</span>
       </div>
       <div class="plan-pedido-sub">${p.cliente||''} ${_selosPedidoHTML(p)}</div>
-      ${p.referencia?`<div class="plan-pedido-ref">🏷️ ID: <strong>${p.referencia}</strong></div>`:''}
+      ${(() => {
+        const refs = [...new Set(g.itens.map(x=>x.referencia).filter(Boolean))];
+        if (refs.length === 0) return '';
+        if (refs.length === 1) return `<div class="plan-pedido-ref">🏷️ ID: <strong>${refs[0]}</strong></div>`;
+        return `<div class="plan-pedido-ref">🏷️ ${refs.length} referências (ver nos carros)</div>`;
+      })()}
       <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
       ${_planPedidoDatasHTML(p)}
       <details class="plan-grupo-det" onclick="event.stopPropagation()">
         <summary>Ver os ${g.itens.length} carros</summary>
-        ${g.itens.map(x => `<div class="plan-grupo-carro">🚗 <strong>${x.placa||'—'}</strong> · ${x.modelo||''}</div>`).join('')}
+        ${g.itens.map(x => `<div class="plan-grupo-carro">🚗 <strong>${x.placa||'—'}</strong> · ${x.modelo||''}${x.referencia?` · <span style="color:#f59e0b">🏷️ ${x.referencia}</span>`:''}${x.valorFrete?` · <span style="color:#22c55e">R$ ${Number(x.valorFrete).toLocaleString('pt-BR')}</span>`:''}</div>`).join('')}
       </details>
       <div class="plan-pedido-acoes">
         <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover o grupo para outro corredor →</button>
@@ -17582,6 +17641,7 @@ function _planTransbordoListaHTML(){
           <div class="plan-transb-proxima-lbl">PRÓXIMA AÇÃO</div>
           <div class="plan-transb-proxima-txt">🚛 Direcionar novo transporte a partir de ${String(patio).split('/')[0]} → ${p.cidadeDestino||''}</div>
           <button class="plan-transb-btn" onclick="_abrirModalTransbordoStatus(${p.id}, 'Transbordo')">🔀 DIRECIONAR TRANSBORDO</button>
+          <button class="plan-transb-btn" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.4);margin-top:6px" onclick="_desfazerTransbordo(${p.id})">↩️ Não é transbordo (desfazer)</button>
         </div>
       </div>`;
     }).join('');
@@ -17748,7 +17808,7 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
       <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:220px;overflow:auto">
         ${pedidos.length === 0 ? '<p class="text-muted" style="font-size:.82rem">Nenhum pedido neste corredor ainda. Você pode criar a rota vazia e arrastar pedidos depois.</p>' : pedidos.map(p => `<label class="jv-sel-linha">
           <input type="checkbox" class="plan-viagem-ped" value="${p.id}" ${rotaVazia ? '' : 'checked'}>
-          <span><strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''} <span class="text-muted">→ ${p.cidadeDestino||''}</span></span>
+          <span><strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''} <span class="text-muted">${p.patioAtual||p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span></span>
         </label>`).join('')}
       </div>
       <div class="form-group">
@@ -17829,10 +17889,19 @@ async function _planConfirmarViagem(corId){
       const upd = { rota_id: rota.id };
       if (cegonha) upd.placa_cegonha = cegonha;
       if (motorista) upd.motorista_1 = motorista;
+      // Se o pedido era um transbordado direcionado a este corredor, ao entrar na nova viagem
+      // ele deixa de ser "aguardando próxima perna": limpa o corredor manual e volta a status de transporte.
+      const pAtual = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+      if (pAtual && pAtual.status === 'Transbordo'){
+        upd.corredor_manual_id = null;
+        upd.status = 'Em Transporte';
+        upd.status_planilha = null;
+      }
       await supabase.from('pedidos').update(upd).eq('id', id);
       p.rotaId = rota.id; p.rota_id = rota.id;
       if (cegonha) p.placaCegonha = cegonha;
       if (motorista) p.motorista1 = motorista;
+      if (pAtual && pAtual.status === 'Transbordo'){ p.corredorManualId = null; p.corredor_manual_id = null; p.status = 'Em Transporte'; p.statusPlanilha = null; }
       await _registrarVinculoViagem(rota.id, id); // vínculo histórico permanente
     }
     document.getElementById('modalPlanViagem')?.remove();
@@ -18734,7 +18803,7 @@ function renderizarComercialPedidos(){
                 return `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
                 <td><strong>#${p.id}</strong></td>
                 <td>${p.cliente||'—'}</td>
-                <td>${p.modelo?`<div style="font-weight:600;font-size:.82rem">${p.modelo}</div>`:''}<span style="color:${p.modelo?'#9ca3af':'inherit'};font-size:${p.modelo?'.8rem':'inherit'}">${p.placa||'—'}</span> ${_selosPedidoHTML(p)}</td>
+                <td>${p.modelo?`<div style="font-weight:600;font-size:.82rem">${p.modelo}</div>`:''}<span style="color:${p.modelo?'#9ca3af':'inherit'};font-size:${p.modelo?'.8rem':'inherit'}">${p.placa||'—'}</span>${p.referencia?` <span style="color:#f59e0b;font-size:.72rem">🏷️ ${p.referencia}</span>`:''} ${_selosPedidoHTML(p)}</td>
                 <td>${p.cidadeOrigem||'—'}</td>
                 <td>${p.cidadeDestino||'—'}</td>
                 <td class="cg-corr-cel">${_cgCorredorDoPedido(p)}</td>
@@ -18771,7 +18840,7 @@ function renderizarComercialPedidos(){
                 return `<tr class="cg-tr cg-tr-filho" onclick="_cgAbrirRastreio(${p.id})">
                   <td style="padding-left:1.6rem"><strong>#${p.id}</strong></td>
                   <td>${p.cliente||'—'}</td>
-                  <td>${p.modelo?`<div style="font-weight:600;font-size:.82rem">${p.modelo}</div>`:''}<span style="color:${p.modelo?'#9ca3af':'inherit'};font-size:${p.modelo?'.8rem':'inherit'}">${p.placa||'—'}</span> ${_selosPedidoHTML(p)}</td>
+                  <td>${p.modelo?`<div style="font-weight:600;font-size:.82rem">${p.modelo}</div>`:''}<span style="color:${p.modelo?'#9ca3af':'inherit'};font-size:${p.modelo?'.8rem':'inherit'}">${p.placa||'—'}</span>${p.referencia?` <span style="color:#f59e0b;font-size:.72rem">🏷️ ${p.referencia}</span>`:''} ${_selosPedidoHTML(p)}</td>
                   <td>${p.cidadeOrigem||'—'}</td>
                   <td>${p.cidadeDestino||'—'}</td>
                   <td class="cg-corr-cel">${_cgCorredorDoPedido(p)}</td>
@@ -18885,6 +18954,11 @@ async function _cgAbrirRastreio(pedidoId){
       ${p.aprovado === false ? `<div style="margin:12px 0;padding:12px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35)">
         <div style="font-size:.85rem;margin-bottom:8px">⏳ Este pedido está <strong>aguardando aprovação</strong>. Aprove para liberá-lo ao planejamento.</div>
         <button class="btn btn-primary btn-sm" style="background:#22c55e" onclick="_aprovarPedidoComercial(${p.id})">✅ Aprovar pedido</button>
+      </div>` : ''}
+
+      ${(p.qtdTransbordos>0 || p.aguardandoTransbordo || p.status==='Transbordo') ? `<div style="margin:12px 0;padding:12px;border-radius:10px;background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.3)">
+        <div style="font-size:.85rem;margin-bottom:8px;color:#fb923c">🔀 Este pedido está marcado como <strong>transbordo</strong>${p.cidadeTransbordo?` em ${p.cidadeTransbordo}`:''}. Se foi por engano, desfaça abaixo.</div>
+        <button class="btn btn-sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.4)" onclick="_desfazerTransbordo(${p.id})">↩️ Não é transbordo (desfazer)</button>
       </div>` : ''}
 
       ${(p.qtdTransbordos>0 || p.aguardandoTransbordo) ? `<div class="cg-rastreio-tit">🚚 Jornada do veículo</div>${_linhaDoTempoPedidoHTML(p)}${p.aguardandoTransbordo?'<p style="font-size:.8rem;color:#a855f7;margin:4px 0 0">🟣 Aguardando transbordo — o veículo está no pátio aguardando a próxima etapa do transporte.</p>':''}` : ''}
