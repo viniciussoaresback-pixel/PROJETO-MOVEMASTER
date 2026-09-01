@@ -3585,6 +3585,13 @@ function abrirEdicaoCliente(clienteId) {
             </div>
 
             <div class="form-row">
+                <div class="form-group">
+                    <label>Nome Fantasia</label>
+                    <input type="text" id="edCliNomeFantasia" value="${(c.nome_fantasia||'').replace(/"/g,'&quot;')}" placeholder="Nome fantasia (opcional)">
+                </div>
+            </div>
+
+            <div class="form-row">
                 <div class="form-group" id="edGrupoCnpj" style="display:${(ehPJ || ehPF) ? '' : 'none'}">
                     <label>CNPJ</label>
                     <input type="text" id="edCliCnpj" value="${c.cnpj||''}" maxlength="18" oninput="mascaraCNPJ(this)" onblur="autoPreencherCNPJEdicao()">
@@ -3688,6 +3695,7 @@ async function salvarEdicaoCliente(clienteId) {
 
     const dados = {
         nome,
+        nome_fantasia: document.getElementById('edCliNomeFantasia')?.value.trim() || null,
         tipo_cliente: tipo,
         cnpj: (ehPJ || ehPF) ? (document.getElementById('edCliCnpj').value.trim() || null) : null,
         cpf:  ehPJ ? null : (document.getElementById('edCliCpf').value.trim() || null),
