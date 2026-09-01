@@ -6335,6 +6335,23 @@ function abrirEdicaoPedido(pedidoId) {
         </div>`;
     }).join('');
 
+    // Seção especial: Corredor (select). Só faz sentido se o pedido ainda não está numa viagem.
+    const _corrAtual = p.corredorManualId || p.corredor_manual_id || '';
+    const _corredores = (corredoresGlobais||[]).slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+    const _emViagem = !!(p.rotaId || p.rota_id || p.placaCegonha);
+    const corredorSecHTML = `<div class="ep-secao">
+        <div class="ep-secao-tit">📍 Corredor / Rota</div>
+        <div class="ep-secao-grid">
+            <div class="ep-campo ep-campo-full">
+                <label>Colocar em qual corredor${_emViagem?' (pedido já está numa viagem — alterar com cuidado)':''}</label>
+                <select id="edit_corredorManualId">
+                    <option value="">— Sem corredor —</option>
+                    ${_corredores.map(c=>`<option value="${c.id}" ${String(_corrAtual)===String(c.id)?'selected':''}>${c.nome||('corredor #'+c.id)}</option>`).join('')}
+                </select>
+            </div>
+        </div>
+    </div>`;
+
     const modal = document.createElement('div');
     modal.id = 'modalEdicaoPedido';
     modal.className = 'modal show ep-modal';
@@ -6351,7 +6368,7 @@ function abrirEdicaoPedido(pedidoId) {
             </div>
             <div class="ep-aviso">💡 Ao mudar a cidade de destino, confira também o <strong>endereço de entrega</strong> abaixo — eles não mudam sozinhos. A edição não altera o status do pedido.</div>
             ${p.observacaoPedido ? `<div style="margin:0 24px 8px;padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:8px;font-size:.84rem;color:#f59e0b"><strong>📝 Observação atual:</strong> ${p.observacaoPedido}</div>` : ''}
-            <div class="ep-body">${seccoesHTML}</div>
+            <div class="ep-body">${seccoesHTML}${corredorSecHTML}</div>
             <div id="mensagemEdicaoPedido" class="message"></div>
             <div class="ep-actions">
                 <button class="btn btn-primary" onclick="salvarEdicaoPedido(${p.id})">💾 Salvar alterações</button>
@@ -6388,6 +6405,17 @@ async function salvarEdicaoPedido(pedidoId) {
         }
     });
 
+    // Corredor (campo especial - select)
+    const corrEl = document.getElementById('edit_corredorManualId');
+    if (corrEl){
+        const novoCorr = corrEl.value ? parseInt(corrEl.value) : null;
+        const atualCorr = p.corredorManualId || p.corredor_manual_id || null;
+        if (String(novoCorr||'') !== String(atualCorr||'')){
+            update.corredor_manual_id = novoCorr;
+            mudancas.push('Corredor');
+        }
+    }
+
     if (mudancas.length === 0) {
         msgEl.textContent = 'Nenhuma alteração para salvar.';
         msgEl.className = 'message show error';
@@ -6404,7 +6432,7 @@ async function salvarEdicaoPedido(pedidoId) {
             status_anterior: p.status || '', status_novo: p.status || '',
             usuario_nome: usuarioNome,
             usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica',
-            observacao: `✏️ Pedido editado pela logística (${mudancas.join(', ')}) — status mantido em ${p.status || '—'}`
+            observacao: `✏️ Pedido editado (${mudancas.length} ${mudancas.length===1?'campo':'campos'})`
         });
 
         document.getElementById('modalEdicaoPedido').remove();
@@ -16196,7 +16224,7 @@ function renderizarEnvioDocsFiscal(){
               <input type="file" id="docMan_${r.id}" accept="application/pdf" multiple class="fisc-file">
               <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'manifesto')">📤 Enviar</button>
             </div>
-            ${listaDocs(mans)}
+            <div id="listaMan_${r.id}">${listaDocs(mans)}</div>
           </div>
           <div class="fisc-doc-box">
             <div class="fisc-doc-tit">🧾 CTes ${ctes.length?`<span class="fisc-badge">${ctes.length}</span>`:''}</div>
@@ -16204,7 +16232,7 @@ function renderizarEnvioDocsFiscal(){
               <input type="file" id="docCte_${r.id}" accept="application/pdf" multiple class="fisc-file">
               <button class="btn btn-primary btn-sm" onclick="_enviarDocRota(${r.id},'cte')">📤 Enviar</button>
             </div>
-            ${listaDocs(ctes)}
+            <div id="listaCte_${r.id}">${listaDocs(ctes)}</div>
           </div>
         </div>
         ${_fiscalNumerosCteHTML(r.id)}
@@ -16318,7 +16346,16 @@ async function _enviarDocRota(rotaId, tipo){
       });
     }
     if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`✅ ${enviados} ${tipo==='cte'?'CTe(s)':'manifesto(s)'} enviado(s) ao motorista!`);
-    _renderFiscalPreservandoAbertos();
+    // Atualiza SÓ a lista daquele tipo (não recria o card, pra não limpar o input do outro tipo)
+    const listaEl = document.getElementById((tipo==='cte'?'listaCte_':'listaMan_')+rotaId);
+    if (listaEl){
+      const docs = (documentosRotaGlobais||[]).filter(dd => String(dd.rota_id)===String(rotaId) && dd.tipo===tipo);
+      listaEl.innerHTML = docs.length === 0
+        ? '<div class="fisc-vazio">Nenhum arquivo enviado ainda.</div>'
+        : `<div class="fisc-arquivos">${docs.map(dd => `<div class="fisc-arq"><a href="${dd.url}" target="_blank" class="fisc-arq-link">📎 ${dd.nome_arquivo||'documento'}</a><button class="fisc-arq-del" onclick="_excluirDocRota(${dd.id})" title="Excluir">🗑️</button></div>`).join('')}</div>`;
+    }
+    // limpa só o input que foi enviado
+    if (input) input.value = '';
   } catch(e){ alert('Erro ao enviar: '+(e.message||e)); }
 }
 
@@ -17712,6 +17749,11 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
         <input type="text" id="planViagemMotorista" placeholder="Motorista da viagem" list="listaMotPlanViagem">
         <datalist id="listaMotPlanViagem">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
       </div>
+      <div style="margin-top:12px;padding:10px 12px;background:rgba(251,146,60,.06);border:1px solid rgba(251,146,60,.25);border-radius:8px">
+        <label style="display:block;font-size:.78rem;color:#fb923c;font-weight:600;margin-bottom:4px">🔁 Transbordo previsto (opcional)</label>
+        <input type="text" id="planViagemTransbordo" placeholder="Cidade onde os pedidos vão transbordar (deixe vazio se não haverá)" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:inherit;font-size:.85rem">
+        <div style="font-size:.72rem;color:#9ca3af;margin-top:4px">Marca os pedidos selecionados como "vão transbordar em X" — fica como aviso até o transbordo ser feito.</div>
+      </div>
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="btn btn-primary" style="flex:1" onclick="_planConfirmarViagem(${cor.id})">✅ Criar viagem</button>
         <button class="btn btn-secondary" onclick="document.getElementById('modalPlanViagem').remove()">Cancelar</button>
@@ -17748,6 +17790,7 @@ async function _planConfirmarViagem(corId){
   const ids = [...document.querySelectorAll('.plan-viagem-ped:checked')].map(c => parseInt(c.value));
   const cegonha = document.getElementById('planViagemCegonha')?.value || null;
   const motorista = document.getElementById('planViagemMotorista')?.value.trim() || null;
+  const transbordoPrev = document.getElementById('planViagemTransbordo')?.value.trim() || null;
   if (ids.length === 0 && !cegonha){ alert('Para criar a rota, selecione ao menos um pedido OU escolha o veículo.'); return; }
   window._criandoViagem = true;
   // desabilita o botão visualmente
@@ -17770,10 +17813,12 @@ async function _planConfirmarViagem(corId){
       const upd = { rota_id: rota.id };
       if (cegonha) upd.placa_cegonha = cegonha;
       if (motorista) upd.motorista_1 = motorista;
+      if (transbordoPrev){ upd.transbordo_previsto = transbordoPrev; }
       await supabase.from('pedidos').update(upd).eq('id', id);
       p.rotaId = rota.id; p.rota_id = rota.id;
       if (cegonha) p.placaCegonha = cegonha;
       if (motorista) p.motorista1 = motorista;
+      if (transbordoPrev){ p.transbordoPrevisto = transbordoPrev; }
       await _registrarVinculoViagem(rota.id, id); // vínculo histórico permanente
     }
     document.getElementById('modalPlanViagem')?.remove();
@@ -18477,7 +18522,7 @@ function _cgAbrirListaKpi(tipo){
       ${pedidos.length === 0 ? '<p class="text-muted" style="padding:1rem">Nenhum pedido neste grupo.</p>' : `
       <div class="cg-kpi-lista">
         ${pedidos.map(p => `<div class="cg-kpi-item" onclick="_cgAbrirRastreio(${p.id})">
-          <div class="cg-ki-top"><strong>#${p.id}</strong> · ${p.placa||'—'} <span class="cg-ki-status">${_cgStatusPill(p)}</span></div>
+          <div class="cg-ki-top"><strong>#${p.id}</strong>${p.modelo?` · ${p.modelo}`:''} · ${p.placa||'—'} <span class="cg-ki-status">${_cgStatusPill(p)}</span></div>
           <div class="cg-ki-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
           <div class="cg-ki-data">📅 Lançado: ${_dataLancamentoFmt(p)}${p.dataPrevEntrega||p.prazoEntregaEstimado?` · 🏁 Entrega: ${_cgFmtData(p.dataPrevEntrega||p.prazoEntregaEstimado)}`:''}</div>
         </div>`).join('')}
@@ -18523,7 +18568,7 @@ function _cgAbrirCorredor(corredorId){
       <div class="cg-corr-sec-tit" style="color:${cor}">${titulo} <span class="cg-corr-sec-num">${arr.length}</span></div>
       ${arr.length === 0 ? '<p class="text-muted" style="font-size:.82rem;padding:.3rem 0">Nenhum pedido.</p>' :
         arr.sort((a,b)=>new Date(a.dataSolicitacao||0)-new Date(b.dataSolicitacao||0)).map(p => `<div class="cg-kpi-item" onclick="_cgAbrirRastreio(${p.id})">
-          <div class="cg-ki-top"><strong>#${p.id}</strong> · ${p.placa||'—'} <span class="cg-ki-status">${_cgStatusPill(p)}</span></div>
+          <div class="cg-ki-top"><strong>#${p.id}</strong>${p.modelo?` · ${p.modelo}`:''} · ${p.placa||'—'} <span class="cg-ki-status">${_cgStatusPill(p)}</span></div>
           <div class="cg-ki-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
           <div class="cg-ki-data">📅 Lançado: ${_dataLancamentoFmt(p)}${p.dataPrevEntrega||p.prazoEntregaEstimado?` · 🏁 Entrega: ${_cgFmtData(p.dataPrevEntrega||p.prazoEntregaEstimado)}`:''}</div>
         </div>`).join('')}
@@ -18597,14 +18642,46 @@ async function _aprovarPedidoComercial(pedidoId){
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemComercial', `✅ Pedido #${pedidoId} aprovado.`, 'success');
 }
 
+// Grupos (carga fechada) expandidos na aba Pedidos
+let _cgGruposAbertos = new Set();
+function _cgToggleGrupo(gid){
+  if (_cgGruposAbertos.has(String(gid))) _cgGruposAbertos.delete(String(gid));
+  else _cgGruposAbertos.add(String(gid));
+  renderizarComercialPedidos();
+}
+
+// Agrupa os pedidos filtrados: cargas fechadas (mesmo grupo_id, 2+) viram 1 item.
+// Retorna lista de "itens": { tipo:'grupo', gid, itens } ou { tipo:'avulso', pedido }
+function _cgAgrupar(lista){
+  const grupos = {}; const ordem = []; const resultado = [];
+  lista.forEach(p => {
+    const gid = p.grupoId || p.grupo_id;
+    if (gid){
+      if (!grupos[gid]){ grupos[gid] = []; ordem.push(gid); }
+      grupos[gid].push(p);
+    } else {
+      resultado.push({ tipo:'avulso', pedido:p, _ord: lista.indexOf(p) });
+    }
+  });
+  ordem.forEach(gid => {
+    const itens = grupos[gid];
+    if (itens.length < 2){ resultado.push({ tipo:'avulso', pedido:itens[0], _ord: lista.indexOf(itens[0]) }); }
+    else { resultado.push({ tipo:'grupo', gid, itens, _ord: lista.indexOf(itens[0]) }); }
+  });
+  // preserva a ordem original (pela posição do primeiro item)
+  return resultado.sort((a,b)=>a._ord-b._ord);
+}
+
 function renderizarComercialPedidos(){
   const cont = document.getElementById('comercialPedidosConteudo');
   if (!cont) return;
-  const todos = _cgPedidosFiltrados();
-  const totalPag = Math.max(1, Math.ceil(todos.length / _CG_POR_PAGINA));
+  const todosPedidos = _cgPedidosFiltrados();
+  const itens = _cgAgrupar(todosPedidos);           // grupos + avulsos
+  const totalPag = Math.max(1, Math.ceil(itens.length / _CG_POR_PAGINA));
   if (_cgPedidoPagina > totalPag) _cgPedidoPagina = 1;
   const ini = (_cgPedidoPagina-1)*_CG_POR_PAGINA;
-  const pagina = todos.slice(ini, ini+_CG_POR_PAGINA);
+  const pagina = itens.slice(ini, ini+_CG_POR_PAGINA);
+  const todos = itens; // para o texto da paginação
 
   const cidades = [...new Set((pedidosGlobais||[]).flatMap(p => [p.cidadeOrigem, p.cidadeDestino]).filter(Boolean))].sort();
   const rotas = (rotasGlobais||[]).filter(r => !['cancelada'].includes(r.status));
@@ -18636,12 +18713,14 @@ function renderizarComercialPedidos(){
         <thead><tr><th>Pedido</th><th>Cliente</th><th>Veículo</th><th>Origem</th><th>Destino</th><th>Corredor</th><th>Rota</th><th>Status</th><th>Lançado</th><th>Ações</th></tr></thead>
         <tbody>
           ${pagina.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#9ca3af">Nenhum pedido encontrado.</td></tr>' :
-            pagina.map(p => {
-              const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
-              return `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
+            pagina.map(item => {
+              if (item.tipo === 'avulso'){
+                const p = item.pedido;
+                const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
+                return `<tr class="cg-tr" onclick="_cgAbrirRastreio(${p.id})">
                 <td><strong>#${p.id}</strong></td>
                 <td>${p.cliente||'—'}</td>
-                <td>${p.placa||'—'} ${_selosPedidoHTML(p)}</td>
+                <td>${p.modelo?`<div style="font-weight:600;font-size:.82rem">${p.modelo}</div>`:''}<span style="color:${p.modelo?'#9ca3af':'inherit'};font-size:${p.modelo?'.8rem':'inherit'}">${p.placa||'—'}</span> ${_selosPedidoHTML(p)}</td>
                 <td>${p.cidadeOrigem||'—'}</td>
                 <td>${p.cidadeDestino||'—'}</td>
                 <td class="cg-corr-cel">${_cgCorredorDoPedido(p)}</td>
@@ -18654,13 +18733,52 @@ function renderizarComercialPedidos(){
                   <button class="cg-acao-mini cg-acao-mini-del" onclick="excluirPedido(${p.id})" title="Excluir">🗑️</button>
                 </td>
               </tr>`;
+              }
+              // ---- GRUPO (carga fechada) ----
+              const itens = item.itens;
+              const p0 = itens[0];
+              const aberto = _cgGruposAbertos.has(String(item.gid));
+              const rota0 = (rotasGlobais||[]).find(r => String(r.id)===String(p0.rotaId||p0.rota_id));
+              const ref = p0.referencia ? ` · 🔖 ${p0.referencia}` : '';
+              const linhaMestre = `<tr class="cg-tr cg-tr-grupo" onclick="_cgToggleGrupo('${String(item.gid).replace(/'/g,"\\'")}')">
+                <td><strong>${aberto?'▾':'▸'} 📦 ${itens.length} carros</strong></td>
+                <td>${p0.cliente||'—'}</td>
+                <td><span class="cg-sub">carga fechada${ref}</span></td>
+                <td>${p0.cidadeOrigem||'—'}</td>
+                <td>${p0.cidadeDestino||'—'}</td>
+                <td class="cg-corr-cel">${_cgCorredorDoPedido(p0)}</td>
+                <td>${rota0 ? (rota0.nome||('R-'+rota0.id)) : '—'}</td>
+                <td><span class="cg-sub">${itens.length} veíc.</span></td>
+                <td class="cg-sub">${_dataLancamentoFmt(p0)}</td>
+                <td class="cg-acoes-cel"></td>
+              </tr>`;
+              const filhas = !aberto ? '' : itens.map(p => {
+                const rota = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
+                return `<tr class="cg-tr cg-tr-filho" onclick="_cgAbrirRastreio(${p.id})">
+                  <td style="padding-left:1.6rem"><strong>#${p.id}</strong></td>
+                  <td>${p.cliente||'—'}</td>
+                  <td>${p.modelo?`<div style="font-weight:600;font-size:.82rem">${p.modelo}</div>`:''}<span style="color:${p.modelo?'#9ca3af':'inherit'};font-size:${p.modelo?'.8rem':'inherit'}">${p.placa||'—'}</span> ${_selosPedidoHTML(p)}</td>
+                  <td>${p.cidadeOrigem||'—'}</td>
+                  <td>${p.cidadeDestino||'—'}</td>
+                  <td class="cg-corr-cel">${_cgCorredorDoPedido(p)}</td>
+                  <td>${rota ? (rota.nome||('R-'+rota.id)) : '—'}</td>
+                  <td>${_cgStatusPill(p)}</td>
+                  <td class="cg-sub">${_dataLancamentoFmt(p)}</td>
+                  <td class="cg-acoes-cel" onclick="event.stopPropagation()">
+                    <button class="cg-acao-mini" onclick="abrirEdicaoPedido(${p.id})" title="Editar">✏️</button>
+                    <button class="cg-acao-mini" onclick="abrirHistorico(${p.id})" title="Histórico">📜</button>
+                    <button class="cg-acao-mini cg-acao-mini-del" onclick="excluirPedido(${p.id})" title="Excluir">🗑️</button>
+                  </td>
+                </tr>`;
+              }).join('');
+              return linhaMestre + filhas;
             }).join('')}
         </tbody>
       </table>
     </div>
 
     <div class="cg-paginacao">
-      <span class="cg-sub">Mostrando ${todos.length===0?0:ini+1} a ${Math.min(ini+_CG_POR_PAGINA,todos.length)} de ${todos.length} pedidos</span>
+      <span class="cg-sub">Mostrando ${todos.length===0?0:ini+1} a ${Math.min(ini+_CG_POR_PAGINA,todos.length)} de ${todos.length} cargas/pedidos</span>
       <div class="cg-pag-btns">
         <button ${_cgPedidoPagina<=1?'disabled':''} onclick="_cgPagina(${_cgPedidoPagina-1})">‹</button>
         <span class="cg-pag-atual">${_cgPedidoPagina} / ${totalPag}</span>
