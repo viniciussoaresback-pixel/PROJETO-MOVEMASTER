@@ -18702,7 +18702,11 @@ function _cgPedidosFiltrados(){
   const f = _cgPedidoFiltros;
   return (pedidosGlobais||[]).filter(p => {
     if (['Cancelado'].includes(p.status||'')) return false;
-    if (f.pedido && !String(p.id).includes(f.pedido)) return false;
+    if (f.pedido){
+      const termo = f.pedido.toLowerCase().trim();
+      const alvo = `${p.id} ${p.referencia||''} ${p.solicitacao||''} ${p.requisicao||''}`.toLowerCase();
+      if (!alvo.includes(termo)) return false;
+    }
     if (f.cliente && !(p.cliente||'').toLowerCase().includes(f.cliente.toLowerCase())) return false;
     if (f.placa && !(p.placa||'').toLowerCase().includes(f.placa.toLowerCase())) return false;
     if (f.origem && !_cidadeIgual(p.cidadeOrigem, f.origem)) return false;
@@ -18774,7 +18778,11 @@ function renderizarComercialPedidos(){
   const todos = itens; // para o texto da paginação
 
   const cidades = [...new Set((pedidosGlobais||[]).flatMap(p => [p.cidadeOrigem, p.cidadeDestino]).filter(Boolean))].sort();
-  const rotas = (rotasGlobais||[]).filter(r => !['cancelada'].includes(r.status));
+  const rotas = (rotasGlobais||[]).filter(r => {
+    if (!['planejada','em_andamento'].includes(r.status)) return false;
+    // só rotas que têm ao menos 1 carro vinculado (evita listar rotas vazias)
+    return (pedidosGlobais||[]).some(p => String(p.rotaId||p.rota_id) === String(r.id));
+  });
 
   cont.innerHTML = `
     <div class="cg-header">
@@ -18783,7 +18791,7 @@ function renderizarComercialPedidos(){
     </div>
 
     <div class="cg-filtros">
-      <div class="cg-filtro"><label>Pedido</label><input type="text" value="${_cgPedidoFiltros.pedido}" oninput="var _v=this.value; _mmDeb('cgFiltro_pedido', function(){ _cgSetFiltro('pedido', _v); })" placeholder="Nº do pedido"></div>
+      <div class="cg-filtro"><label>Pedido / ID / Ref.</label><input type="text" value="${_cgPedidoFiltros.pedido}" oninput="var _v=this.value; _mmDeb('cgFiltro_pedido', function(){ _cgSetFiltro('pedido', _v); })" placeholder="Nº, ID, solicitação ou requisição"></div>
       <div class="cg-filtro"><label>Cliente</label><input type="text" value="${_cgPedidoFiltros.cliente}" oninput="var _v=this.value; _mmDeb('cgFiltro_cliente', function(){ _cgSetFiltro('cliente', _v); })" placeholder="Nome do cliente"></div>
       <div class="cg-filtro"><label>Placa</label><input type="text" value="${_cgPedidoFiltros.placa}" oninput="var _v=this.value; _mmDeb('cgFiltro_placa', function(){ _cgSetFiltro('placa', _v); })" placeholder="Placa do veículo"></div>
       <div class="cg-filtro"><label>Origem</label><select onchange="_cgSetFiltro('origem',this.value)"><option value="">Todas</option>${cidades.map(c=>`<option ${_cgPedidoFiltros.origem===c?'selected':''}>${c}</option>`).join('')}</select></div>
