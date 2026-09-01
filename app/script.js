@@ -16247,7 +16247,11 @@ function _selosPedidoHTML(p){
   if (!p) return '';
   const selos = [];
   if ((p.qtdTransbordos||0) > 0 || p.aguardandoTransbordo){
-    selos.push('<span class="selo-pedido selo-transb">🔀 Transbordado</span>');
+    const cidadeTb = p.cidadeTransbordo || p.patioAtual || '';
+    const cidadeCurta = cidadeTb ? String(cidadeTb).split('/')[0].replace('🅿️ ','').replace('PÁTIO ','').trim() : '';
+    const nVezes = (p.qtdTransbordos||0) > 1 ? ` (${p.qtdTransbordos}x)` : '';
+    const label = cidadeCurta ? `🔀 Transbordou em ${cidadeCurta}${nVezes}` : `🔀 Transbordado${nVezes}`;
+    selos.push(`<span class="selo-pedido selo-transb" title="Transbordo${cidadeTb?' em '+cidadeTb:''}">${label}</span>`);
   }
   const temCtePdf = (documentosRotaGlobais||[]).some(d => d.tipo==='cte' && String(d.rota_id)===String(p.rotaId||p.rota_id));
   if (p.numeroCte || temCtePdf){
@@ -17429,10 +17433,10 @@ function _planAgruparErenderizar(pedidos){
       return `<div class="plan-pedido" draggable="true" data-pedido="${p.id}" ondragstart="_planDragStart(event,${p.id})">
         <div class="plan-pedido-top">
           <span class="plan-pedido-id">#${p.id}</span>
-          <span class="plan-pedido-placa">${p.placa||'—'}</span>${indicado}
+          <span class="plan-pedido-placa">${p.modelo?`<strong>${p.modelo}</strong> · `:''}<strong>${p.placa||'—'}</strong></span>${indicado}
           <span class="plan-pedido-valor">${p.valorFrete?('R$ '+Number(p.valorFrete).toLocaleString('pt-BR')):''}</span>
         </div>
-        <div class="plan-pedido-sub">${p.modelo||''} · ${p.cliente||''} ${_selosPedidoHTML(p)}</div>
+        <div class="plan-pedido-sub">${p.cliente||''} ${_selosPedidoHTML(p)}</div>
         ${p.referencia?`<div class="plan-pedido-ref">🏷️ ID: <strong>${p.referencia}</strong></div>`:''}
         <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
         ${_planPedidoDatasHTML(p)}
@@ -17749,11 +17753,6 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
         <input type="text" id="planViagemMotorista" placeholder="Motorista da viagem" list="listaMotPlanViagem">
         <datalist id="listaMotPlanViagem">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
       </div>
-      <div style="margin-top:12px;padding:10px 12px;background:rgba(251,146,60,.06);border:1px solid rgba(251,146,60,.25);border-radius:8px">
-        <label style="display:block;font-size:.78rem;color:#fb923c;font-weight:600;margin-bottom:4px">🔁 Transbordo previsto (opcional)</label>
-        <input type="text" id="planViagemTransbordo" placeholder="Cidade onde os pedidos vão transbordar (deixe vazio se não haverá)" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:inherit;font-size:.85rem">
-        <div style="font-size:.72rem;color:#9ca3af;margin-top:4px">Marca os pedidos selecionados como "vão transbordar em X" — fica como aviso até o transbordo ser feito.</div>
-      </div>
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="btn btn-primary" style="flex:1" onclick="_planConfirmarViagem(${cor.id})">✅ Criar viagem</button>
         <button class="btn btn-secondary" onclick="document.getElementById('modalPlanViagem').remove()">Cancelar</button>
@@ -17790,7 +17789,6 @@ async function _planConfirmarViagem(corId){
   const ids = [...document.querySelectorAll('.plan-viagem-ped:checked')].map(c => parseInt(c.value));
   const cegonha = document.getElementById('planViagemCegonha')?.value || null;
   const motorista = document.getElementById('planViagemMotorista')?.value.trim() || null;
-  const transbordoPrev = document.getElementById('planViagemTransbordo')?.value.trim() || null;
   if (ids.length === 0 && !cegonha){ alert('Para criar a rota, selecione ao menos um pedido OU escolha o veículo.'); return; }
   window._criandoViagem = true;
   // desabilita o botão visualmente
@@ -17813,12 +17811,10 @@ async function _planConfirmarViagem(corId){
       const upd = { rota_id: rota.id };
       if (cegonha) upd.placa_cegonha = cegonha;
       if (motorista) upd.motorista_1 = motorista;
-      if (transbordoPrev){ upd.transbordo_previsto = transbordoPrev; }
       await supabase.from('pedidos').update(upd).eq('id', id);
       p.rotaId = rota.id; p.rota_id = rota.id;
       if (cegonha) p.placaCegonha = cegonha;
       if (motorista) p.motorista1 = motorista;
-      if (transbordoPrev){ p.transbordoPrevisto = transbordoPrev; }
       await _registrarVinculoViagem(rota.id, id); // vínculo histórico permanente
     }
     document.getElementById('modalPlanViagem')?.remove();
