@@ -1,7 +1,7 @@
 {
-  "name": "Movemaster | Controle Logí­stico",
+  "name": "Movemaster Controle Logístico",
   "short_name": "Movemaster",
-  "description": "Cargas, foto da placa e ocorrencias para motoristas.",
+  "description": "Cargas, foto da placa e ocorrências para motoristas.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
