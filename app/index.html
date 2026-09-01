@@ -496,6 +496,10 @@
                                         <option value="suv">SUV</option>
                                         <option value="caminhonete">Caminhonete</option>
                                         <option value="moto">Moto</option>
+                                <option value="furgao">Furgão</option>
+                                <option value="capota">Veículo com capota</option>
+                                        <option value="furgao">Furgão</option>
+                                        <option value="capota">Veículo com capota</option>
                                     </select>
                                 </div>
                             </div>
@@ -583,14 +587,14 @@
                                             oninput="mascaraMoeda(this); atualizarPreviewFrete()" required>
                                     </div>
                                     <select id="freteTipo" style="margin-top:6px" onchange="atualizarPreviewFrete()">
-                                        <option value="cheio">Frete cheio (total da carga)</option>
-                                        <option value="carro">Por carro</option>
+                                        <option value="cheio">Frete cheio (1 valor pra carga toda, dividido entre os carros)</option>
+                                        <option value="carro">Valor por carro (posso definir preço diferente pra cada um)</option>
                                     </select>
                                     <div id="fretePreview" class="frete-preview"></div>
                                 </div>
-                                <div class="form-group">
+                                <div class="form-group" id="grupoResponsavelComercial">
                                     <label for="responsavelComercial">Responsável Comercial *</label>
-                                    <select id="responsavelComercial" onchange="_toggleRespComOutro()" required>
+                                    <select id="responsavelComercial" onchange="_toggleRespComOutro()">
                                         <option value="">Selecione…</option>
                                         <option value="__outro__">➕ Outro (digitar)</option>
                                     </select>
@@ -698,6 +702,8 @@
                                 <option value="suv">SUV</option>
                                 <option value="caminhonete">Caminhonete</option>
                                 <option value="moto">Moto</option>
+                                <option value="furgao">Furgão</option>
+                                <option value="capota">Veículo com capota</option>
                             </select>
                         </div>
                         <div class="form-group">
