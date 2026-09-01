@@ -16277,8 +16277,7 @@ function _selosPedidoHTML(p){
   if ((p.qtdTransbordos||0) > 0 || p.aguardandoTransbordo){
     const cidadeTb = p.cidadeTransbordo || p.patioAtual || '';
     const cidadeCurta = cidadeTb ? String(cidadeTb).split('/')[0].replace('🅿️ ','').replace('PÁTIO ','').trim() : '';
-    const nVezes = (p.qtdTransbordos||0) > 1 ? ` (${p.qtdTransbordos}x)` : '';
-    const label = cidadeCurta ? `🔀 Transbordou em ${cidadeCurta}${nVezes}` : `🔀 Transbordado${nVezes}`;
+    const label = cidadeCurta ? `🔀 Transbordo em ${cidadeCurta}` : `🔀 Transbordado`;
     selos.push(`<span class="selo-pedido selo-transb" title="Transbordo${cidadeTb?' em '+cidadeTb:''}">${label}</span>`);
   }
   const temCtePdf = (documentosRotaGlobais||[]).some(d => d.tipo==='cte' && String(d.rota_id)===String(p.rotaId||p.rota_id));
@@ -17510,7 +17509,7 @@ function _planAgruparErenderizar(pedidos){
         </div>
         <div class="plan-pedido-sub">${p.cliente||''} ${_selosPedidoHTML(p)}</div>
         ${p.referencia?`<div class="plan-pedido-ref">🏷️ ID: <strong>${p.referencia}</strong></div>`:''}
-        <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
+        <div class="plan-pedido-rota">${p.cidadeOrigem||''} → <strong>${p.cidadeDestino||''}</strong>${(p.patioAtual && _norm(p.patioAtual)!==_norm(p.cidadeOrigem||''))?` <span style="color:#a855f7;font-size:.72rem">(está em ${String(p.patioAtual).split('/')[0]})</span>`:''}</div>
         ${_planPedidoDatasHTML(p)}
         <div class="plan-pedido-acoes">
           <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover para outro corredor →</button>
@@ -17533,7 +17532,7 @@ function _planAgruparErenderizar(pedidos){
         if (refs.length === 1) return `<div class="plan-pedido-ref">🏷️ ID: <strong>${refs[0]}</strong></div>`;
         return `<div class="plan-pedido-ref">🏷️ ${refs.length} referências (ver nos carros)</div>`;
       })()}
-      <div class="plan-pedido-rota">${(p.patioAtual||p.cidadeOrigem||'')} → <strong>${p.cidadeDestino||''}</strong></div>
+      <div class="plan-pedido-rota">${p.cidadeOrigem||''} → <strong>${p.cidadeDestino||''}</strong>${(p.patioAtual && _norm(p.patioAtual)!==_norm(p.cidadeOrigem||''))?` <span style="color:#a855f7;font-size:.72rem">(está em ${String(p.patioAtual).split('/')[0]})</span>`:''}</div>
       ${_planPedidoDatasHTML(p)}
       <details class="plan-grupo-det" onclick="event.stopPropagation()">
         <summary>Ver os ${g.itens.length} carros</summary>
