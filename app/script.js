@@ -559,7 +559,6 @@ function adicionarVeiculoExtra() {
                     <option value="moto">Moto</option>
                     <option value="furgao">Furgão</option>
                     <option value="capota">Veículo com capota</option>
-                    <option value="capota">Utilitário</option>
                 </select>
             </div>
             <div class="form-group" style="max-width:180px">
@@ -7570,7 +7569,6 @@ const CATEGORIAS_VEICULO = {
     moto:        'Moto',
     furgao:      'Furgão',
     capota:      'Veículo com capota'
-    utilitário:  'Utilitário'
 };
 
 function _orcNorm(s) {
