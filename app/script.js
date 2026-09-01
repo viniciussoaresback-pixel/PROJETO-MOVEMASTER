@@ -158,6 +158,9 @@ function trocarAba(event) {
     if (tabAlvo === 'cobranca' && typeof renderizarCobranca === 'function') renderizarCobranca();
     if (tabAlvo === 'conferencia' && typeof renderizarCentralConferencia === 'function') renderizarCentralConferencia();
     if (tabAlvo === 'tabelaFrete' && typeof renderizarTabelaFrete === 'function') renderizarTabelaFrete();
+    if (tabAlvo === 'remunTrecho' && typeof renderizarTabelaPrecos === 'function') renderizarTabelaPrecos();
+    if (tabAlvo === 'relatoriosFin' && typeof renderizarRelatorioFaturamento === 'function') renderizarRelatorioFaturamento();
+    if (tabAlvo === 'epiUniforme' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
     if (tabAlvo === 'meusPedidos') {
         renderizarPedidosComercial();
         if (typeof renderizarRotasComercial === 'function') renderizarRotasComercial();
@@ -13529,8 +13532,8 @@ function renderizarTabelaFrete(){
   cont.innerHTML = confCSS + `
     <div class="conf-header">
       <div>
-        <h1 class="conf-titulo">💵 Tabela de Frete</h1>
-        <p class="conf-sub">Valores de referência por cliente e rota — usados na conferência automática</p>
+        <h1 class="conf-titulo">💵 Frete do Cliente</h1>
+        <p class="conf-sub">Valor que cobramos do cliente por trecho — usado na conferência do frete. (Receita)</p>
       </div>
       <button class="btn btn-primary btn-sm" onclick="_tabFreteNovo()">➕ Nova linha</button>
     </div>
@@ -15515,6 +15518,23 @@ async function carregarRelatorioFaturamento(){
     if (typeof renderizarRemuneracaoMotorista === 'function') renderizarRemuneracaoMotorista();
   } catch(e){
     if (cont) cont.innerHTML = `<p class="text-muted" style="padding:1rem 0">Erro ao carregar: ${e.message||e}</p>`;
+  }
+}
+
+// Troca entre as sub-abas da tela Relatórios (Faturamento / Remuneração)
+function _relSubaba(qual, btn){
+  document.querySelectorAll('#relatoriosFin .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
+  if (btn) btn.classList.add('ativo');
+  const fat = document.getElementById('relFaturamentoView');
+  const rem = document.getElementById('relRemuneracaoView');
+  if (qual === 'faturamento'){
+    if (fat) fat.style.display = '';
+    if (rem) rem.style.display = 'none';
+    if (typeof renderizarRelatorioFaturamento === 'function') renderizarRelatorioFaturamento();
+  } else {
+    if (fat) fat.style.display = 'none';
+    if (rem) rem.style.display = '';
+    if (typeof renderizarRemuneracaoMotorista === 'function') renderizarRemuneracaoMotorista();
   }
 }
 
