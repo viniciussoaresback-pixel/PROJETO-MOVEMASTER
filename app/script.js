@@ -559,6 +559,7 @@ function adicionarVeiculoExtra() {
                     <option value="moto">Moto</option>
                     <option value="furgao">Furgão</option>
                     <option value="capota">Veículo com capota</option>
+                    <option value="utilitario">Utilitário</option>
                 </select>
             </div>
             <div class="form-group" style="max-width:180px">
@@ -4520,7 +4521,7 @@ async function _aplicarStatusEmPedidoLote(pedidoObj, d) {
 
     // Transbordo: preserva o vínculo histórico (marca saída, NÃO apaga) da viagem de origem
     if (d.statusNovo === 'Transbordo' && _rotaOrigemTransbordo){
-        await _marcarSaidaTransbordo(_rotaOrigemTransbordo, pedidoId, `transbordo em ${d.cidadeTransbordo || d.cegonhaDestino || ''}`);
+        await _marcarSaidaTransbordo(_rotaOrigemTransbordo, pedidoId, `transbordo em ${d.cidadeTransbordo || d.cegonhaDestino || ''}`, d.cidadeTransbordo || null);
     }
 
     let descTransbordo = '';
@@ -7568,7 +7569,8 @@ const CATEGORIAS_VEICULO = {
     caminhonete: 'Caminhonete',
     moto:        'Moto',
     furgao:      'Furgão',
-    capota:      'Veículo com capota'
+    capota:      'Veículo com capota',
+    utilitario:  'Utilitário'
 };
 
 function _orcNorm(s) {
@@ -15064,12 +15066,15 @@ async function _registrarVinculoViagem(rotaId, pedidoId){
 }
 
 // Marca a saída do pedido de uma viagem por transbordo (não apaga o vínculo)
-async function _marcarSaidaTransbordo(rotaId, pedidoId, motivo){
+async function _marcarSaidaTransbordo(rotaId, pedidoId, motivo, cidadeTransbordo){
   const v = _vinculoViagemPedido(rotaId, pedidoId);
   if (!v) return;
   try {
-    await supabase.from('viagem_pedidos').update({ saiu_em: new Date().toISOString(), motivo_saida: motivo || 'transbordo' }).eq('id', v.id);
-    v.saiu_em = new Date().toISOString(); v.motivo_saida = motivo || 'transbordo';
+    const upd = { saiu_em: new Date().toISOString(), motivo_saida: motivo || 'transbordo' };
+    if (cidadeTransbordo) upd.cidade_transbordo = cidadeTransbordo;
+    await supabase.from('viagem_pedidos').update(upd).eq('id', v.id);
+    v.saiu_em = upd.saiu_em; v.motivo_saida = upd.motivo_saida;
+    if (cidadeTransbordo) v.cidade_transbordo = cidadeTransbordo;
   } catch(e){}
 }
 
@@ -16216,6 +16221,38 @@ function _renderFiscalPreservandoAbertos(){
   });
 }
 
+// Resumo dos carros da carga direto no card do fiscal (dados para emitir CTe)
+function _fiscalResumoCargaHTML(rotaId){
+  const carros = (typeof _veiculosNaRota === 'function') ? _veiculosNaRota(rotaId) : [];
+  if (!carros || carros.length === 0) return '<div class="fisc-vazio" style="margin-bottom:12px">Nenhum carro vinculado a esta carga ainda.</div>';
+  const clientesMap = {};
+  (clientesGlobais||[]).forEach(c => { clientesMap[String(c.id)] = c; if (c.nome) clientesMap[_norm(c.nome)] = c; });
+  const linhas = carros.map((p,i) => {
+    const cli = clientesMap[String(p.clienteId)] || clientesMap[_norm(p.cliente||'')] || {};
+    const cnpjO = p.cnpjColeta || cli.cnpj || '';
+    const cnpjD = p.cnpjEntrega || '';
+    const cteJa = p.numeroCte || p.numero_cte;
+    return `<tr>
+      <td>${i+1}</td>
+      <td><strong>${p.placa||'—'}</strong><br><span class="text-muted" style="font-size:.72rem">${p.modelo||''}</span></td>
+      <td>${p.cliente||'—'}${p.referencia?`<br><span style="color:#f59e0b;font-size:.72rem">🏷️ ${p.referencia}</span>`:''}</td>
+      <td style="font-size:.78rem"><strong>${p.cidadeOrigem||'—'}/${p.ufOrigem||''}</strong>${cnpjO?`<br><span class="text-muted">CNPJ: ${cnpjO}</span>`:''}</td>
+      <td style="font-size:.78rem"><strong>${p.cidadeDestino||'—'}/${p.ufDestino||''}</strong>${cnpjD?`<br><span class="text-muted">CNPJ: ${cnpjD}</span>`:''}</td>
+      <td style="text-align:right">R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td style="text-align:center">${cteJa?`<span style="color:#22c55e;font-weight:700" title="CTe ${cteJa}">✅</span>`:'<span style="color:#ef4444">⚠️</span>'}</td>
+    </tr>`;
+  }).join('');
+  const totalFrete = carros.reduce((s,p)=>s+Number(p.valorFrete||0),0);
+  return `<div class="fisc-resumo-carga">
+    <div class="fisc-doc-tit" style="margin-bottom:6px">🚗 Carros da carga (${carros.length}) — dados para emissão</div>
+    <div style="overflow-x:auto"><table class="fisc-resumo-tab">
+      <thead><tr><th>#</th><th>Placa/Modelo</th><th>Cliente</th><th>Origem</th><th>Destino</th><th>Frete</th><th>CTe</th></tr></thead>
+      <tbody>${linhas}</tbody>
+      <tfoot><tr><td colspan="5"><strong>Total</strong></td><td style="text-align:right"><strong>R$ ${totalFrete.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></td><td></td></tr></tfoot>
+    </table></div>
+  </div>`;
+}
+
 function renderizarEnvioDocsFiscal(){
   const cont = document.getElementById('envioDocsFiscalWrap');
   if (!cont) return;
@@ -16246,6 +16283,17 @@ function renderizarEnvioDocsFiscal(){
         </div>
       </summary>
       <div class="fisc-card-corpo">
+        ${(() => {
+          const fisc = _fiscalDocsCompletos(r.id);
+          return fisc.ok
+            ? '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;font-size:.83rem;color:#22c55e">✅ Documentos completos — manifesto, CTe e números preenchidos. A viagem já pode ser finalizada pela logística.</div>'
+            : `<div style="margin-bottom:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.83rem;color:#f59e0b"><strong>⚠️ Pendências do fiscal</strong> (a viagem não pode ser finalizada até concluir):<br>• ${fisc.faltas.join('<br>• ')}</div>`;
+        })()}
+        <div style="margin-bottom:12px">
+          <button class="btn btn-secondary btn-sm" onclick="gerarEspelhoCarga('${r.placa_cegonha}', { rotaId: ${r.id} })">📄 Ver espelho da carga (dados para emitir)</button>
+          <span class="text-muted" style="font-size:.78rem;margin-left:6px">Placas, modelos, clientes, origem/destino e CNPJs desta carga.</span>
+        </div>
+        ${_fiscalResumoCargaHTML(r.id)}
         <div class="fisc-docs-grid">
           <div class="fisc-doc-box">
             <div class="fisc-doc-tit">📋 Manifestos ${mans.length?`<span class="fisc-badge">${mans.length}</span>`:''}</div>
@@ -16643,7 +16691,7 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
     };
     await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
     // preserva o vínculo histórico da viagem de origem (marca saída, não apaga)
-    if (_rotaOrigem){ await _marcarSaidaTransbordo(_rotaOrigem, pedidoId, `transbordo em ${patio}`); }
+    if (_rotaOrigem){ await _marcarSaidaTransbordo(_rotaOrigem, pedidoId, `transbordo em ${patio}`, patio); }
     Object.assign(p, {
       status:'Transbordo', statusPlanilha:'Transbordo', cidadeTransbordo:patio,
       patioAtual:patio,
@@ -17145,7 +17193,32 @@ async function _viagemRegistrarTransbordo(rota, carros){
   });
 }
 
+// Verifica se o fiscal completou os documentos de uma viagem:
+// manifesto enviado + CTe enviado + número de CTe preenchido em TODOS os carros.
+// Retorna { ok:true } ou { ok:false, faltas:[...] }
+function _fiscalDocsCompletos(rotaId){
+  const faltas = [];
+  const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(rotaId));
+  const temManifesto = docs.some(d => d.tipo === 'manifesto');
+  const temCtePdf = docs.some(d => d.tipo === 'cte');
+  if (!temManifesto) faltas.push('Manifesto não foi enviado');
+  if (!temCtePdf) faltas.push('CTe (PDF) não foi enviado');
+  // número de CTe em todos os carros (agrupa por grupo, 1 CTe por pedido)
+  const carros = (typeof _veiculosNaRota === 'function') ? _veiculosNaRota(rotaId) : [];
+  const semNumero = carros.filter(p => !(p.numeroCte || p.numero_cte));
+  if (semNumero.length > 0) faltas.push(`${semNumero.length} carro(s) sem número de CTe preenchido`);
+  return { ok: faltas.length === 0, faltas };
+}
+
 async function _viagemFinalizar(rota, carros){
+  // TRAVA FISCAL: não deixa finalizar se o fiscal não completou manifesto + CTe + números.
+  const fisc = _fiscalDocsCompletos(rota.id);
+  if (!fisc.ok){
+    alert('🚫 Não é possível finalizar esta viagem — o setor fiscal ainda não concluiu os documentos:\n\n• '
+      + fisc.faltas.join('\n• ')
+      + '\n\nSem isso, o motorista fica sem os documentos e o financeiro não consegue conferir. Aguarde o fiscal emitir/enviar tudo.');
+    return;
+  }
   const emViagem = carros.filter(c => !['Entregue','Cancelado','Transbordo'].includes(c.status));
   if (emViagem.length > 0){
     if (!confirm(`Ainda há ${emViagem.length} carro(s) não entregue(s) nesta viagem. Finalizar mesmo assim?`)) return;
