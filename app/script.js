@@ -12028,7 +12028,7 @@ function _buscarClienteEndereco(qual, termo){
   const t = (termo||'').trim().toLowerCase();
   if (t.length < 2){ lista.innerHTML = ''; lista.classList.remove('aberta'); return; }
   const achados = (clientesGlobais||[]).filter(c => {
-    const alvo = `${c.nome||''} ${c.cidade||''} ${c.cnpj||''} ${c.cpf||''} ${c.bairro||''}`.toLowerCase();
+    const alvo = `${c.nome||''} ${c.nome_fantasia||''} ${c.cidade||''} ${c.cnpj||''} ${c.cpf||''} ${c.bairro||''}`.toLowerCase();
     return t.split(/\s+/).every(parte => alvo.includes(parte));
   }).slice(0, 8);
   if (achados.length === 0){ lista.innerHTML = '<div class="cli-auto-vazio">Nenhum cliente encontrado</div>'; lista.classList.add('aberta'); return; }
@@ -12036,8 +12036,9 @@ function _buscarClienteEndereco(qual, termo){
     const endResumo = [c.endereco, c.numero, c.bairro].filter(Boolean).join(', ');
     const cidadeUf = `${c.cidade||''}${c.uf?('/'+c.uf):''}`;
     const doc = c.cnpj || c.cpf || '';
+    const fantasia = (c.nome_fantasia && _norm(c.nome_fantasia) !== _norm(c.nome||'')) ? ` <span class="cai-cidade" style="color:#f59e0b">🏷️ ${c.nome_fantasia}</span>` : '';
     return `<div class="cli-auto-item" onmousedown="event.preventDefault();_selecionarClienteEndereco('${qual}', ${c.id})">
-      <div class="cai-nome">${c.nome||''}${cidadeUf?` <span class="cai-cidade">📍 ${cidadeUf}</span>`:''}</div>
+      <div class="cai-nome">${c.nome||''}${fantasia}${cidadeUf?` <span class="cai-cidade">📍 ${cidadeUf}</span>`:''}</div>
       <div class="cai-end">${doc?`🏢 ${doc}`:''}${doc&&endResumo?' · ':''}${endResumo||''}</div>
     </div>`;
   }).join('');
@@ -17162,19 +17163,28 @@ function _planPedidosDoCorredor(c){
   const paradasStr = seq.filter(Boolean);
   const vivos = (pedidosGlobais||[]).filter(p => {
     if (['Entregue','Cancelado'].includes(p.status||'')) return false;
-    if (p.aprovado === false || p.aguardandoTransbordo) return false;
-    // Item 2: transbordado aparece no corredor mesmo ainda estando na viagem antiga (com rota_id)
-    if (p.status === 'Transbordo') return true;
+    if (p.aprovado === false) return false;
+    // aguardando transbordo tem área própria (não entra nos corredores por encaixe)
+    if (p.aguardandoTransbordo) return false;
+    // Transbordado aparece no corredor para planejar a PRÓXIMA perna —
+    // MAS só enquanto não estiver já numa nova viagem (senão continuaria aparecendo em transporte).
+    if (p.status === 'Transbordo'){
+      return !p.rotaId && !p.rota_id && !p.placaCegonha;
+    }
     // demais: só se não estiverem em nenhuma viagem
     return !p.rotaId && !p.rota_id && !p.placaCegonha;
   });
   return vivos.filter(p => {
     // Corredor manual MANDA e é EXCLUSIVO: se o pedido foi jogado num corredor, só aparece nele
     if (p.corredorManualId) return String(p.corredorManualId) === String(c.id);
+    // Encaixe automático: a carga só aparece no corredor cujo INÍCIO = origem e FIM = destino.
+    // (corredor exato). Corredores que só passam pelo trecho no meio NÃO pegam a carga —
+    // nesse caso ela cai em "Sem rota" para ser direcionada manualmente.
     const partida = p.patioAtual || p.cidadeOrigem;
-    const io = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, partida) : paradasStr.indexOf(partida);
-    const id = (typeof _posNaSeq === 'function') ? _posNaSeq(paradasStr, p.cidadeDestino) : paradasStr.indexOf(p.cidadeDestino);
-    return (io !== -1 && id !== -1 && io < id);
+    const soCidade = v => _norm((v || '').toString().split('/')[0]);
+    const inicioCorr = paradasStr[0];
+    const fimCorr = paradasStr[paradasStr.length - 1];
+    return soCidade(partida) === soCidade(inicioCorr) && soCidade(p.cidadeDestino) === soCidade(fimCorr);
   });
 }
 
