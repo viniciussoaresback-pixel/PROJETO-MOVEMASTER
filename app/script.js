@@ -10969,7 +10969,8 @@ async function salvarReservaComercial(){
     toggleModoReserva();
     renderizarReservasAtivas();
   } catch(e){
-    exibirMensagem('mensagemComercial', 'Erro ao criar reserva: ' + (e.message||e), 'error');
+    console.error('Erro ao criar reserva:', e, '| details:', e.details, '| hint:', e.hint, '| code:', e.code);
+    exibirMensagem('mensagemComercial', 'Erro ao criar reserva: ' + (e.message||'') + (e.details?(' — '+e.details):''), 'error');
   }
 }
 
@@ -16661,7 +16662,14 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
     await recarregarPedidos();
     if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
     if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+    if (typeof renderizarPlanejamentoRotas === 'function') renderizarPlanejamentoRotas();
+    if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento();
     if (typeof renderizarVagasPorRota === 'function') renderizarVagasPorRota();
+    // notifica comercial sobre o transbordo do pedido
+    if (typeof notificar === 'function'){
+      try { notificar({ perfil:'comercial', tipo:'status', pedidoId: parseInt(pedidoId),
+        titulo:'🔁 Transbordo registrado', mensagem:`#${pedidoId} transbordou no pátio de ${patio}.` }); } catch(_){}
+    }
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
       `🔁 #${pedidoId} em transbordo no pátio de ${patio}${corredorId?' e direcionado ao corredor':''}. ${corredorId?'':'Veja em "Aguardando transbordo".'}`, 'success');
   } catch(e){ alert('Erro ao registrar transbordo: '+(e.message||e)); }
