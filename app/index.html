@@ -319,7 +319,10 @@
                     <button class="nav-btn" data-tab="equipes">🧑‍🔧 Equipes</button>
                     <button class="nav-btn" data-tab="fiscal">🧾 Área Fiscal</button>
                     <button class="nav-btn" data-tab="conferencia">✅ Central de Conferência</button>
-                    <button class="nav-btn" data-tab="tabelaFrete">💵 Tabela de Frete</button>
+                    <button class="nav-btn" data-tab="tabelaFrete">💵 Frete do Cliente</button>
+                    <button class="nav-btn" data-tab="remunTrecho">🚚 Remuneração por Trecho</button>
+                    <button class="nav-btn" data-tab="relatoriosFin">📊 Relatórios</button>
+                    <button class="nav-btn" data-tab="epiUniforme">🦺 EPI / Uniforme</button>
                     <button class="nav-btn" data-tab="faturamento">Faturamento</button>
                     <button class="nav-btn" data-tab="cadastros">Cadastros</button>
                     <button class="nav-btn" data-tab="manutencao">🔧 Manutenção</button>
@@ -1417,7 +1420,62 @@
                 <div id="tabelaFreteConteudo"></div>
             </section>
 
-            <section id="faturamento" class="tab-content">
+            <section id="remunTrecho" class="tab-content">
+                <div style="margin-bottom:18px">
+                    <h1 style="font-size:1.5rem;font-weight:800;margin:0">🚚 Remuneração por Trecho</h1>
+                    <p style="color:#9ca3af;font-size:.9rem;margin:.3rem 0 0">Valor que o <strong>motorista recebe</strong> por trecho — usado no cálculo da remuneração na conferência. (Custo)</p>
+                </div>
+                <div id="remunTrechoConteudo">
+                <div class="card card-minimizavel">                    <div class="painel-header-bar">
+                        <h2>💵 Trechos cadastrados</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarTabelaPrecos()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Valor que o <strong>motorista recebe por trecho</strong> (entre duas cidades). Viagens longas somam os trechos. Duas faixas: comum (hatch/sedan/passeio) e SUV/caminhonete.</p>
+                    <div class="epi-motorista-form">
+                        <div class="manut-toolbar-campo"><label for="tpOrigem">Cidade origem</label>
+                            <input type="text" id="tpOrigem" placeholder="Ex.: Curitiba"></div>
+                        <div class="manut-toolbar-campo" style="max-width:80px"><label for="tpUfOrigem">UF</label>
+                            <input type="text" id="tpUfOrigem" placeholder="PR" maxlength="2" style="text-transform:uppercase"></div>
+                        <div class="manut-toolbar-campo"><label for="tpDestino">Cidade destino</label>
+                            <input type="text" id="tpDestino" placeholder="Ex.: Cascavel"></div>
+                        <div class="manut-toolbar-campo" style="max-width:80px"><label for="tpUfDestino">UF</label>
+                            <input type="text" id="tpUfDestino" placeholder="PR" maxlength="2" style="text-transform:uppercase"></div>
+                        <div class="manut-toolbar-campo" style="max-width:150px"><label for="tpComum">Comum (R$)</label>
+                            <input type="text" id="tpComum" placeholder="750,00"></div>
+                        <div class="manut-toolbar-campo" style="max-width:150px"><label for="tpSuv">SUV/Caminhonete (R$)</label>
+                            <input type="text" id="tpSuv" placeholder="800,00"></div>
+                    </div>
+                    <div id="mensagemTabelaPreco" class="message"></div>
+                    <div class="manut-acoes">
+                        <button type="button" class="btn btn-primary" onclick="salvarTabelaPreco()">💵 Salvar trecho</button>
+                    </div>
+                    <div id="listaTabelaPrecos"><p class="text-muted">Nenhum trecho cadastrado.</p></div>
+                </div>
+                </div>
+            </section>
+
+            <section id="relatoriosFin" class="tab-content">
+                <div style="margin-bottom:16px">
+                    <h1 style="font-size:1.5rem;font-weight:800;margin:0">📊 Relatórios</h1>
+                    <p style="color:#9ca3af;font-size:.9rem;margin:.3rem 0 0">Consulte os resultados consolidados: quanto faturamos, por cliente, por motorista.</p>
+                </div>
+                <div class="cad-subtabs" style="margin-bottom:16px">
+                    <button class="cad-subtab-btn ativo" onclick="_relSubaba('faturamento', this)">💰 Faturamento</button>
+                    <button class="cad-subtab-btn" onclick="_relSubaba('remuneracao', this)">🚚 Remuneração por Motorista</button>
+                </div>
+                <div id="relFaturamentoView">
+                    <div id="relatFatWrap"></div>
+                </div>
+                <div id="relRemuneracaoView" style="display:none">
+                    <div id="remuneracaoWrap"></div>
+                </div>
+            </section>
+
+            <section id="epiUniforme" class="tab-content">
+                <div style="margin-bottom:16px">
+                    <h1 style="font-size:1.5rem;font-weight:800;margin:0">🦺 EPI / Uniforme</h1>
+                    <p style="color:#9ca3af;font-size:.9rem;margin:.3rem 0 0">Solicitações de EPI e uniforme vindas da manutenção e dos motoristas.</p>
+                </div>
                 <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>🦺 Solicitações de EPI / Uniforme (Compras)</h2>
@@ -1429,6 +1487,10 @@
                     </p>
                     <div id="listaSolicitacoesEPI"><p class="text-muted">Clique em Atualizar para carregar.</p></div>
                 </div>
+            </section>
+
+
+            <section id="faturamento" class="tab-content">
                 <div class="card card-minimizavel">
                     <div class="painel-header-bar">
                         <h2>💰 Receitas — conferência de recebimentos</h2>
@@ -1519,36 +1581,10 @@
                 </div>
                 <div class="card card-minimizavel">
                     <div class="painel-header-bar">
-                        <h2>💵 Tabela de Preços (remuneração do motorista por trecho)</h2>
-                        <button class="btn btn-secondary btn-sm" onclick="renderizarTabelaPrecos()">↻ Atualizar</button>
-                    </div>
-                    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Valor que o <strong>motorista recebe por trecho</strong> (entre duas cidades). Viagens longas somam os trechos. Duas faixas: comum (hatch/sedan/passeio) e SUV/caminhonete.</p>
-                    <div class="epi-motorista-form">
-                        <div class="manut-toolbar-campo"><label for="tpOrigem">Cidade origem</label>
-                            <input type="text" id="tpOrigem" placeholder="Ex.: Curitiba"></div>
-                        <div class="manut-toolbar-campo" style="max-width:80px"><label for="tpUfOrigem">UF</label>
-                            <input type="text" id="tpUfOrigem" placeholder="PR" maxlength="2" style="text-transform:uppercase"></div>
-                        <div class="manut-toolbar-campo"><label for="tpDestino">Cidade destino</label>
-                            <input type="text" id="tpDestino" placeholder="Ex.: Cascavel"></div>
-                        <div class="manut-toolbar-campo" style="max-width:80px"><label for="tpUfDestino">UF</label>
-                            <input type="text" id="tpUfDestino" placeholder="PR" maxlength="2" style="text-transform:uppercase"></div>
-                        <div class="manut-toolbar-campo" style="max-width:150px"><label for="tpComum">Comum (R$)</label>
-                            <input type="text" id="tpComum" placeholder="750,00"></div>
-                        <div class="manut-toolbar-campo" style="max-width:150px"><label for="tpSuv">SUV/Caminhonete (R$)</label>
-                            <input type="text" id="tpSuv" placeholder="800,00"></div>
-                    </div>
-                    <div id="mensagemTabelaPreco" class="message"></div>
-                    <div class="manut-acoes">
-                        <button type="button" class="btn btn-primary" onclick="salvarTabelaPreco()">💵 Salvar trecho</button>
-                    </div>
-                    <div id="listaTabelaPrecos"><p class="text-muted">Nenhum trecho cadastrado.</p></div>
-                </div>
-                <div class="card card-minimizavel">
-                    <div class="painel-header-bar">
                         <h2>📊 Relatório de Faturamento (fechamento 25→25)</h2>
                     </div>
                     <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Considera <strong>CTe emitido no período</strong> de pedidos já <strong>entregues</strong>. Agrupe por cliente, categoria, motorista, caminhão, veículo ou trecho. Exporta para Excel.</p>
-                    <div id="relatFatWrap"></div>
+                    <div id="relatFatWrapLegado"></div>
                 </div>
                 <div class="card card-minimizavel">
                     <div class="painel-header-bar">
@@ -1557,7 +1593,7 @@
                     </div>
                     <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Valor que cada motorista recebe por trecho (hierarquia: ajuste do pedido › tabela › manual do trecho). Os <strong>trechos fora da tabela</strong> aparecem destacados para você informar o valor. Usa o mesmo período do relatório acima.</p>
                     <div id="mensagemFaturamento" class="message"></div>
-                    <div id="remuneracaoWrap"><p class="text-muted">Gere o relatório de faturamento acima para ver a remuneração.</p></div>
+                    <div id="remuneracaoWrapLegado"><p class="text-muted">Gere o relatório de faturamento acima para ver a remuneração.</p></div>
                 </div>
                 <div class="card card-minimizavel">
                     <div class="painel-header-bar">
