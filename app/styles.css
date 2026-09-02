@@ -9580,3 +9580,28 @@ html span.log-passo-bolinha {
 .cg-tr-grupo td { font-size:.86rem; }
 .cg-tr-filho { background:rgba(255,255,255,.015); }
 .cg-tr-filho td:first-child { border-left:2px solid rgba(255,106,0,.4); }
+
+/* Fiscal: resumo da carga (dados para emitir) */
+.fisc-resumo-carga { margin-bottom:14px; padding:12px; background:rgba(255,255,255,.02); border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:10px; }
+.fisc-resumo-tab { width:100%; border-collapse:collapse; font-size:.82rem; }
+.fisc-resumo-tab th { text-align:left; padding:6px 8px; font-size:.7rem; color:var(--text-tertiary,#6b7280); font-weight:700; border-bottom:1px solid var(--border,rgba(255,255,255,.1)); white-space:nowrap; }
+.fisc-resumo-tab td { padding:7px 8px; border-bottom:1px solid var(--border-soft,rgba(255,255,255,.04)); vertical-align:top; }
+.fisc-resumo-tab tfoot td { border-top:2px solid var(--border,rgba(255,255,255,.12)); }
+
+/* ===== Correção de responsividade da tela do MOTORISTA no celular ===== */
+#motorista { width: 100%; max-width: 100%; box-sizing: border-box; }
+#motorista .card { width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
+/* tabelas de romaneio: viram scroll horizontal contido, não estouram a página */
+#motorista .table-container,
+#motorista .romaneio-tabela-wrap,
+#motorista [class*="tabela"] { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#motorista table { min-width: 640px; } /* a tabela rola dentro do container, sem empurrar a tela */
+
+@media (max-width: 768px) {
+  #motorista { padding: 0 !important; }
+  #motorista .card { padding: 1rem !important; margin-bottom: 0.8rem; border-radius: 12px; }
+  #motorista table { font-size: 0.78rem; min-width: 560px; }
+  #motorista .painel-header-bar { flex-wrap: wrap; gap: 6px; }
+  /* garante que textos longos quebrem em vez de esticar a tela */
+  #motorista, #motorista * { word-break: break-word; overflow-wrap: anywhere; }
+}
