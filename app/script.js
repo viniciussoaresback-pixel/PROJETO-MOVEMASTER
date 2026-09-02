@@ -52,6 +52,215 @@ let notificacoesEnviadas = new Set();
 // Populado por carregarMapaCTE(); usado por cteInfoDoPedido() nas telas.
 let ctePorPedido = {};
 
+
+/* =========================================================================
+   ATUALIZAÇÃO LOCAL + RELOAD LEVE (performance)
+   Evita recarregar o sistema inteiro após cada ação.
+   ========================================================================= */
+
+/** Converte linha do Supabase → formato de pedidosGlobais */
+function normalizarPedido(p) {
+    if (!p) return null;
+    return {
+        id: p.id,
+        cliente: p.cliente,
+        clienteId: p.cliente_id || null,
+        dataSolicitacao: p.data_solicitacao,
+        prazoEntregaEstimado: p.prazo_entrega_estimado || null,
+        modelo: p.modelo,
+        placa: p.placa,
+        cidadeOrigem: p.cidade_origem,
+        categoriaVeiculo: p.categoria_veiculo || null,
+        ufOrigem: p.uf_origem,
+        cidadeDestino: p.cidade_destino,
+        ufDestino: p.uf_destino,
+        enderecoColeta: p.endereco_coleta,
+        cnpjColeta: p.cnpj_coleta || null,
+        cnpjEntrega: p.cnpj_entrega || null,
+        enderecoEntrega: p.endereco_entrega,
+        valorFrete: p.valor_frete,
+        freteTipo: p.frete_tipo || 'cheio',
+        responsavelComercial: p.responsavel_comercial,
+        referencia: p.referencia || null,
+        observacaoPedido: p.observacao_pedido || null,
+        status: p.status || 'Pendente',
+        rota: p.rota,
+        placaCegonha: p.placa_cegonha,
+        motorista1: p.motorista_1,
+        percentMotorista1: p.percent_motorista_1,
+        motorista2: p.motorista_2,
+        percentMotorista2: p.percent_motorista_2,
+        dataPrevColeta: p.data_prev_coleta,
+        dataPrevEntrega: p.data_prev_entrega,
+        cidadeTransbordo: p.cidade_transbordo || null,
+        transbordoPrevisto: p.transbordo_previsto || null,
+        statusPlanilha: p.status_planilha || null,
+        transbordoEm: p.transbordo_em || null,
+        patioAtual: p.patio_atual || null,
+        corredorManualId: p.corredor_manual_id || null,
+        cobrancaStatus: p.cobranca_status || 'a_cobrar',
+        pagoEm: p.pago_em || null,
+        freteEsperado: p.frete_esperado != null ? p.frete_esperado : null,
+        cobrancaForma: p.cobranca_forma || null,
+        cobradoEm: p.cobrado_em || null,
+        pagtoConfirmadoEm: p.pagto_confirmado_em || null,
+        patioDesde: p.patio_desde || null,
+        qtdTransbordos: p.qtd_transbordos || 0,
+        aguardandoTransbordo: p.aguardando_transbordo || false,
+        precisaEquipeEntrega: p.precisa_equipe_entrega || false,
+        numeroCte: p.numero_cte || null,
+        cteEmitidoEm: p.cte_emitido_em || null,
+        aprovado: p.aprovado !== false,
+        aprovadoEm: p.aprovado_em || null,
+        fluxoEntrega: p.fluxo_entrega || null,
+        equipeEntregaId: p.equipe_entrega_id || null,
+        coletaEquipeEm: p.coleta_equipe_em || null,
+        coletaEquipePor: p.coleta_equipe_por || null,
+        formaColeta: p.forma_coleta || null,
+        localCarro: p.local_carro || null,
+        valorMotoristaTerceiro: p.valor_motorista_terceiro != null ? p.valor_motorista_terceiro : null,
+        guiaIcmsValor: p.guia_icms_valor != null ? p.guia_icms_valor : null,
+        romaneioEnderecoColeta: p.romaneio_endereco_coleta || null,
+        romaneioEnderecoEntrega: p.romaneio_endereco_entrega || null,
+        patioColeta: p.patio_coleta || null,
+        equipeColetaId: p.equipe_coleta_id || null,
+        entregaEquipeId: p.entrega_equipe_id || null,
+        obsColeta: p.obs_coleta || null,
+        entregaEquipeEm: p.entrega_equipe_em || null,
+        entregaEquipePor: p.entrega_equipe_por || null,
+        origemLancamento: p.origem_lancamento || null,
+        criadoPorNome: p.criado_por_nome || null,
+        isReserva: p.is_reserva === true,
+        reservaStatus: p.reserva_status || null,
+        reservaExpiraEm: p.reserva_expira_em || null,
+        statusReprogramacao: p.status_reprogramacao || null,
+        etaReprogramado: p.eta_reprogramado || null,
+        confLogisticaEm: p.confirmacao_logistica_em || null,
+        confLogisticaPor: p.confirmacao_logistica_por || null,
+        confComercialEm: p.confirmacao_comercial_em || null,
+        confComercialPor: p.confirmacao_comercial_por || null,
+        receitaConfirmada: p.receita_confirmada === true,
+        receitaConfirmadaEm: p.receita_confirmada_em || null,
+        receitaConfirmadaPor: p.receita_confirmada_por || null,
+        receitaObservacao: p.receita_observacao || null,
+        createdAt: p.created_at
+    };
+}
+
+function atualizarPedidoLocal(id, patch) {
+    const idx = pedidosGlobais.findIndex(p => Number(p.id) === Number(id));
+    if (idx === -1) return null;
+    pedidosGlobais[idx] = Object.assign({}, pedidosGlobais[idx], patch || {});
+    return pedidosGlobais[idx];
+}
+
+function removerPedidoLocal(id) {
+    const antes = pedidosGlobais.length;
+    pedidosGlobais = pedidosGlobais.filter(p => Number(p.id) !== Number(id));
+    return pedidosGlobais.length < antes;
+}
+
+function upsertPedidoLocal(pedidoDoBanco) {
+    const normalizado = normalizarPedido(pedidoDoBanco);
+    if (!normalizado || normalizado.id == null) return null;
+    const idx = pedidosGlobais.findIndex(p => Number(p.id) === Number(normalizado.id));
+    if (idx >= 0) {
+        pedidosGlobais[idx] = Object.assign({}, pedidosGlobais[idx], normalizado);
+        return pedidosGlobais[idx];
+    }
+    pedidosGlobais.unshift(normalizado);
+    return pedidosGlobais[0];
+}
+
+/** Re-renderiza apenas a aba que está aberta */
+function refrescarTelaAtual() {
+    try {
+        const ativa = document.querySelector('.tab-content.active');
+        if (!ativa) return;
+        const id = ativa.id;
+        if (id === 'logistica') {
+            if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
+            if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+            if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
+        } else if (id === 'painel') {
+            if (typeof renderizarKanban === 'function') renderizarKanban();
+        } else if (id === 'comercial') {
+            if (typeof renderizarReservasAtivas === 'function') renderizarReservasAtivas();
+            if (typeof renderizarConfirmacaoComercial === 'function') renderizarConfirmacaoComercial();
+        } else if (id === 'meusPedidos') {
+            if (typeof renderizarPedidosComercial === 'function') renderizarPedidosComercial();
+            if (typeof renderizarRotasComercial === 'function') renderizarRotasComercial();
+            if (typeof atualizarDashboardComercial === 'function') atualizarDashboardComercial();
+            if (typeof renderizarLiberacoesComercial === 'function') renderizarLiberacoesComercial();
+            if (typeof renderizarOcorrenciasComercial === 'function') renderizarOcorrenciasComercial();
+        } else if (id === 'comercialPedidos' && typeof renderizarComercialPedidos === 'function') {
+            renderizarComercialPedidos();
+        } else if (id === 'comercialViagens' && typeof renderizarComercialViagens === 'function') {
+            renderizarComercialViagens();
+        } else if (id === 'cobranca' && typeof renderizarCobranca === 'function') {
+            renderizarCobranca();
+        } else if (id === 'faturamento') {
+            if (typeof renderizarTabelaPrecos === 'function') renderizarTabelaPrecos();
+            if (typeof abrirRelatorioFaturamento === 'function') abrirRelatorioFaturamento();
+        } else if (id === 'conferencia' && typeof renderizarCentralConferencia === 'function') {
+            renderizarCentralConferencia();
+        } else if (id === 'equipes' && typeof renderizarEquipesPainel === 'function') {
+            renderizarEquipesPainel();
+        } else if (id === 'diretoria' && typeof renderizarDiretoria === 'function') {
+            renderizarDiretoria();
+        } else if (id === 'fiscal' && typeof renderizarEnvioDocsFiscal === 'function') {
+            renderizarEnvioDocsFiscal();
+        } else if (id === 'manutencao' && typeof carregarManutencao === 'function') {
+            carregarManutencao();
+        } else if (id === 'cadastros') {
+            if (typeof renderizarListaClientes === 'function') renderizarListaClientes();
+            if (typeof renderizarListaMotoristas === 'function') renderizarListaMotoristas();
+            if (typeof renderizarListaVeiculos === 'function') renderizarListaVeiculos();
+        } else if (id === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') {
+            renderizarVisaoGlobal();
+        }
+    } catch (e) {
+        console.warn('refrescarTelaAtual:', e);
+    }
+}
+
+/**
+ * Após mutação em pedidos:
+ * - se patch/ids → atualiza memória local (instantâneo)
+ * - senão → reload LEVE só de pedidos + rotas
+ * Nunca recarrega clientes/motoristas/veículos/etc. desnecessariamente.
+ */
+async function aposMutacaoPedidos(opts) {
+    opts = opts || {};
+    try {
+        if (opts.forceFull) {
+            await aposMutacaoPedidos();
+            refrescarTelaAtual();
+            return;
+        }
+        if (opts.pedidosDoBanco) {
+            const arr = Array.isArray(opts.pedidosDoBanco) ? opts.pedidosDoBanco : [opts.pedidosDoBanco];
+            arr.forEach(function (p) { upsertPedidoLocal(p); });
+            refrescarTelaAtual();
+            return;
+        }
+        if (opts.ids && opts.patch) {
+            const ids = Array.isArray(opts.ids) ? opts.ids : [opts.ids];
+            ids.forEach(function (id) { atualizarPedidoLocal(id, opts.patch); });
+            refrescarTelaAtual();
+            return;
+        }
+        // fallback: só pedidos + rotas (muito mais rápido que reload completo)
+        await carregarDadosDoSupabase({ somentePedidos: true });
+        refrescarTelaAtual();
+    } catch (e) {
+        console.error('aposMutacaoPedidos:', e);
+        try { await carregarDadosDoSupabase({ somentePedidos: true }); } catch (e2) {}
+        refrescarTelaAtual();
+    }
+}
+
+
 // ============================================
 // UTILITÁRIOS
 // ============================================
@@ -1082,9 +1291,7 @@ function rotaComTransbordoHTML(p) {
 }
 
 async function carregarPainel() {
-    if (supabase) {
-        try { await carregarDadosDoSupabase(); } catch(e) {}
-    }
+    // Usa dados em memória — evita reload completo a cada abertura da aba
     renderizarKanban();
     verificarNotificacoesColeta();
     // Abre na primeira aba (Planejamento de Rotas), se o botão existir e nenhuma view estiver ativa
@@ -1270,9 +1477,7 @@ let pedidoArrastando = null;
 let veiculoAlvoDrop = null;
 
 async function carregarLogistica() {
-    if (supabase) {
-        try { await carregarDadosDoSupabase(); } catch(e) {}
-    }
+    // Usa dados em memória — evita reload completo a cada abertura da aba
     renderizarPedidosDrag();
     renderizarVeiculosDrop();
     verificarNotificacoesColeta();
@@ -1472,7 +1677,7 @@ async function abrirModalAlocacaoCarga(itens, veiculo) {
             });
         }
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarPedidosDrag();
         renderizarVeiculosDrop();
         if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
@@ -2346,7 +2551,7 @@ async function vincularMotoristaVeiculo(placa, motoristaNome) {
                 .update({ motorista_padrao: motoristaNome || null })
                 .eq('placa', placa);
             if (error) throw error;
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos({ forceFull: true });
             renderizarVeiculosDrop();
             exibirMensagem('mensagemLogistica', `✅ Motorista ${motoristaNome || 'removido'} do veículo ${placa}`, 'success');
         } catch (error) {
@@ -2419,7 +2624,7 @@ async function salvarAlteracoesLogistica(event) {
         try {
             const { error } = await supabase.from('pedidos').update(alteracoes).eq('id', pedidoID);
             if (error) throw error;
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos({ forceFull: true });
             exibirMensagem('mensagemLogistica', 'Pedido alocado com sucesso!', 'success');
             fecharModal('modalEdicao');
             renderizarPedidosDrag();
@@ -2654,7 +2859,7 @@ async function renderizarReceitas() {
     const lista = document.getElementById('listaReceitas');
     const resumo = document.getElementById('resumoReceitas');
     if (!lista || !resumo) return;
-    if (supabase) { try { await carregarDadosDoSupabase(); } catch (e) {} }
+    if (supabase) { try { await aposMutacaoPedidos(); } catch (e) {} }
 
     const linhas = _receitaLinhas();
     const money = v => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
@@ -2835,7 +3040,7 @@ function gerarPDFFaturamento() {
 }
 
 async function carregarFaturamento() {
-    if (supabase) { try { await carregarDadosDoSupabase(); } catch (e) {} }
+    if (supabase) { try { await aposMutacaoPedidos(); } catch (e) {} }
     if (supabase) {
         try {
             const { data } = await supabase.from('pedido_trechos').select('*').order('created_at', { ascending: false });
@@ -3050,7 +3255,7 @@ async function salvarCadastroCliente(event) {
                 codigo
             });
             if (error) throw error;
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos({ forceFull: true });
             exibirMensagem('mensagemCadastroCliente', '✅ Cliente salvo com sucesso!', 'success');
             document.getElementById('formCadastroCliente').reset();
             ajustarFormCliente(''); // volta os campos condicionais ao estado inicial
@@ -3236,7 +3441,7 @@ async function salvarEdicaoMotorista(motoristaId) {
         }
 
         document.getElementById('modalEdicaoMotorista').remove();
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarListaMotoristas();
         exibirMensagem('mensagemCadastroMotorista', `✅ Motorista "${nome}" atualizado!`, 'success');
     } catch (e) {
@@ -3262,7 +3467,7 @@ async function excluirMotorista(motoristaId) {
     try {
         const { error } = await supabase.from('motoristas').delete().eq('id', motoristaId);
         if (error) throw error;
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarListaMotoristas();
         exibirMensagem('mensagemCadastroMotorista', `Motorista "${m.nome}" excluído.`, 'success');
     } catch (e) {
@@ -3470,7 +3675,7 @@ async function salvarEdicaoVeiculo(veiculoId) {
         }
 
         document.getElementById('modalEdicaoVeiculo').remove();
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarListaVeiculos();
         exibirMensagem('mensagemCadastroVeiculo', `✅ Veículo ${placa} atualizado!`, 'success');
     } catch (e) {
@@ -3494,7 +3699,7 @@ async function excluirVeiculo(veiculoId) {
     try {
         const { error } = await supabase.from('veiculos').delete().eq('id', veiculoId);
         if (error) throw error;
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarListaVeiculos();
         exibirMensagem('mensagemCadastroVeiculo', `Veículo ${v.placa} excluído.`, 'success');
     } catch (e) {
@@ -3719,7 +3924,7 @@ async function salvarEdicaoCliente(clienteId) {
         if (error) throw error;
 
         document.getElementById('modalEdicaoCliente').remove();
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarListaClientes();
         exibirMensagem('mensagemCadastroCliente', `✅ Cliente "${nome}" atualizado com sucesso!`, 'success');
     } catch (e) {
@@ -3746,7 +3951,7 @@ async function excluirCliente(clienteId) {
     try {
         const { error } = await supabase.from('clientes').delete().eq('id', clienteId);
         if (error) throw error;
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarListaClientes();
         exibirMensagem('mensagemCadastroCliente', `Cliente "${c.nome}" excluído.`, 'success');
     } catch (e) {
@@ -3845,7 +4050,7 @@ async function salvarCadastroMotorista(event) {
                 nome, cpf, telefone, cnh, vinculo, transportador
             });
             if (error) throw error;
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos({ forceFull: true });
             exibirMensagem('mensagemCadastroMotorista', 'Motorista salvo com sucesso!', 'success');
             document.getElementById('formCadastroMotorista').reset();
         } catch (error) {
@@ -3919,7 +4124,7 @@ async function salvarCadastroVeiculo(event) {
                 propriedade, transportador_nome: transportadorNome, transportador_contato: transportadorContato
             });
             if (error) throw error;
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos({ forceFull: true });
             exibirMensagem('mensagemCadastroVeiculo', 'Veículo salvo com sucesso!', 'success');
             document.getElementById('formCadastroVeiculo').reset();
         } catch (error) {
@@ -4891,7 +5096,7 @@ async function confirmarMudancaStatus() {
         _statusGrupoIds = [];
 
         // 3. Atualizar dados locais
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         fecharModal('modalStatus');
         exibirMensagem('mensagemLogistica', `✅ Status atualizado: ${statusAnterior} → ${statusNovo}${avancadosLote ? ` · +${avancadosLote} carros do grupo` : ''}`, 'success');
         renderizarPedidosDrag();
@@ -5309,7 +5514,7 @@ async function confirmarSairPatio() {
         try { await registrarEventoManifesto(cegonha, { ...pedido, placaCegonha: cegonha }, 'transbordo_entrada', +1); } catch (e) {}
         try { notificarMudancaStatus({ ...pedido, placaCegonha: cegonha }, 'Transbordo', 'Em Transporte'); } catch (e) {}
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         fecharModal('modalSairPatio');
         exibirMensagem('mensagemLogistica', `✅ Saiu do pátio na cegonha ${cegonha} · agora Em Transporte.`, 'success');
     } catch (e) {
@@ -5515,7 +5720,7 @@ async function confirmarChecklist() {
             if (_ped) notificarMudancaStatus({ ..._ped, status: 'Em Coleta' }, 'Aguardando Confirmação', 'Em Coleta');
         } catch (e) {}
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         fecharModal('modalChecklist');
         renderizarPedidosComercial();
         if (typeof renderizarRotasComercial === 'function') renderizarRotasComercial();
@@ -6275,7 +6480,7 @@ async function aprovarSolicitacaoEdicao(solicitacaoId, pedidoId) {
             status: 'aprovada', resolvida_por: usuarioNome, resolvida_em: new Date().toISOString()
         }).eq('id', solicitacaoId);
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         renderizarSolicitacoesEdicao();
         exibirMensagem('mensagemLogistica', `✅ Edição aprovada. Abrindo o pedido #${pedidoId} para edição...`, 'success');
         abrirEdicaoPedido(pedidoId);
@@ -6447,7 +6652,7 @@ async function salvarEdicaoPedido(pedidoId) {
         });
 
         document.getElementById('modalEdicaoPedido').remove();
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
         if (typeof renderizarKanban === 'function') renderizarKanban();
         if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
@@ -6650,7 +6855,7 @@ async function _varrerAutoOkParaColeta(ocorrencias) {
         const ok = await _avancarParaColeta(o.pedido_id, `foto ${o.ocr_placa_lida || ''} · ${o.ocr_confianca || '?'}% confiança`);
         if (ok) n++;
     }
-    if (n > 0) { try { await carregarDadosDoSupabase(); } catch (e) {} }
+    if (n > 0) { try { await aposMutacaoPedidos(); } catch (e) {} }
     return n;
 }
 
@@ -6980,7 +7185,7 @@ async function cancelarPedido(pedidoId) {
         // Sino: avisa o comercial responsável do cancelamento
         try { notificarMudancaStatus(p, 'Pendente', 'Cancelado'); } catch (e) {}
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         renderizarPedidosDrag();
         if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
         exibirMensagem('mensagemLogistica', `✅ Pedido #${pedidoId} cancelado. Ele sai da operação e fica registrado no histórico.`, 'success');
@@ -7016,7 +7221,7 @@ async function excluirPedido(pedidoId) {
         await supabase.from('ocorrencias').delete().eq('pedido_id', pedidoId);
         const { error } = await supabase.from('pedidos').delete().eq('id', pedidoId);
         if (error) throw error;
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
         if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
         if (typeof renderizarPedidosComercial === 'function') renderizarPedidosComercial();
@@ -7044,7 +7249,7 @@ async function registrarIntencaoADefinir(pedidoId) {
             '⏳ Intenção registrada — caminhão e motorista a definir'
         );
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         if (typeof renderizarAlocacao === 'function') renderizarAlocacao();
         if (typeof carregarPainel === 'function') carregarPainel();
         notificar({
@@ -7407,7 +7612,7 @@ let _realtimeDebounce = null;
 function _recarregarRealtime() {
     clearTimeout(_realtimeDebounce);
     _realtimeDebounce = setTimeout(async () => {
-        try { await carregarDadosDoSupabase(); } catch (e) {}
+        try { await aposMutacaoPedidos(); } catch (e) {}
         // Views da logística que o carregarDadosDoSupabase não cobre:
         try { if (typeof renderizarOcupacao === 'function') renderizarOcupacao(); } catch (e) {}
         try { if (typeof renderizarPainelCegonhas === 'function') renderizarPainelCegonhas(); } catch (e) {}
@@ -8743,7 +8948,7 @@ async function salvarNovaRota() {
 
             _rotaEditandoId = null;
             document.getElementById('modalNovaRota').remove();
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos();
             renderizarRotas();
             const suffix = (cegonhaAntes !== cegonhaAgora)
                 ? ` · ${migrados} pedido(s) migrados para a nova cegonha`
@@ -8757,7 +8962,7 @@ async function salvarNovaRota() {
             if (error) throw error;
             _rotaEditandoId = null;
             document.getElementById('modalNovaRota').remove();
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos();
             renderizarRotas();
             exibirMensagem('mensagemLogistica', '✅ Rota planejada criada! Agora vincule os pedidos compatíveis.', 'success');
         }
@@ -8792,7 +8997,7 @@ async function vincularPedidoRota(pedidoId, rotaId) {
             observacao: `🛣️ Vinculado à rota planejada "${rota.nome || '#' + rota.id}"${rota.placa_cegonha ? ' — cegonha ' + rota.placa_cegonha : ''}`
         });
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         renderizarRotas();
         if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
         exibirMensagem('mensagemLogistica', `✅ Pedido #${pedidoId} vinculado à rota.`, 'success');
@@ -8817,7 +9022,7 @@ async function desvincularPedidoRota(pedidoId) {
         }).eq('id', pedidoId);
         if (error) throw error;
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarRotas();
         if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
         exibirMensagem('mensagemLogistica', `Pedido #${pedidoId} removido da rota.`, 'success');
@@ -8848,7 +9053,7 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
                     observacao: `🚚 Viagem iniciada — carro entrou em trânsito.`
                 }); } catch(_){}
             }
-            await carregarDadosDoSupabase();
+            await aposMutacaoPedidos();
             renderizarRotas();
             if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `🚚 Viagem iniciada — ${carros.length} carro(s) em trânsito.`, 'success');
         } catch(e){ alert('Erro: ' + (e.message||e)); }
@@ -8923,7 +9128,7 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
             }
             documentosRotaGlobais = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)!==String(rotaId));
         }
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         renderizarRotas();
         if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
         if (typeof renderizarVagasPorRota === 'function') renderizarVagasPorRota();
@@ -9171,7 +9376,7 @@ async function salvarPatioManual(pedidoId) {
         await registrarMovimentacaoPatio(p, texto);
 
         document.getElementById('modalPatio').remove();
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         renderizarPainelPatios();
         if (typeof carregarPainel === 'function') carregarPainel();
         if (typeof renderizarCarteiraDemanda === 'function') renderizarCarteiraDemanda();
@@ -9198,7 +9403,7 @@ async function retirarDoPatio(pedidoId) {
 
         const det = document.getElementById('modalDetalheCarro');
         if (det) det.remove();
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         renderizarPainelPatios();
         if (typeof carregarPainel === 'function') carregarPainel();
         exibirMensagem('mensagemLogistica', `✅ Pedido #${pedidoId} retirado do pátio.`, 'success');
@@ -9470,7 +9675,7 @@ async function salvarCustoTerceiro(veiculoId, placa) {
         if (error) throw error;
 
         document.getElementById('modalCustoTerceiro').remove();
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos({ forceFull: true });
         renderizarPainelCegonhas();
         exibirMensagem('mensagemLogistica', `✅ Custo do transportador atualizado para R$ ${custo.toLocaleString('pt-BR',{minimumFractionDigits:2})}.`, 'success');
     } catch (e) {
@@ -9588,7 +9793,7 @@ async function confirmarMoverPedido() {
             observacao: obsHistorico
         });
 
-        await carregarDadosDoSupabase();
+        await aposMutacaoPedidos();
         fecharModal('modalMoverPedido');
         exibirMensagem('mensagemLogistica', '✅ Pedido atualizado com sucesso!', 'success');
         renderizarPedidosDrag();
@@ -13119,7 +13324,7 @@ async function _inserirCarroNaRota(pedidoId, rotaId){
       usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica', observacao: obs
     }); } catch(_){}
 
-    await carregarDadosDoSupabase();
+    await aposMutacaoPedidos();
     if (typeof renderizarRotas === 'function') renderizarRotas();
     _renderInserirCarroLista(rotaId);
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `✅ ${obs}`, 'success');
@@ -13216,7 +13421,7 @@ async function _aplicarChegada(rotaId, modo){
       }); } catch(_){}
     }
     // Recarrega e verifica se a rota ainda tem carros pendentes de chegada
-    await carregarDadosDoSupabase();
+    await aposMutacaoPedidos();
     const restantes = (pedidosGlobais||[]).filter(p =>
       String(p.rotaId || p.rota_id) === String(rotaId) &&
       !['Entregue','Cancelado'].includes(p.status||'Pendente'));
@@ -13370,7 +13575,7 @@ async function marcarColetaEquipe(pedidoId, equipeId){
       usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
       observacao: `📥 Coletado pela equipe ${eq.nome}${membro?' ('+membro+')':''} — levado ao pátio de ${eq.cidade_base}.`
     }); } catch(_){}
-    await carregarDadosDoSupabase();
+    await aposMutacaoPedidos();
     renderizarEquipesPainel();
   } catch(e){ alert('Erro ao marcar coleta: '+(e.message||e)); }
 }
@@ -13393,7 +13598,7 @@ async function marcarEntregaEquipe(pedidoId, equipeId){
       usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
       observacao: `📤 Entregue pela equipe ${eq.nome}${membro?' ('+membro+')':''} — do pátio ao cliente.`
     }); } catch(_){}
-    await carregarDadosDoSupabase();
+    await aposMutacaoPedidos();
     renderizarEquipesPainel();
   } catch(e){ alert('Erro ao marcar entrega: '+(e.message||e)); }
 }
@@ -13480,7 +13685,7 @@ async function _aplicarAvancarRota(rotaId){
       }); } catch(_){}
       ok++;
     }
-    await carregarDadosDoSupabase();
+    await aposMutacaoPedidos();
     if (typeof renderizarRotas === 'function') renderizarRotas();
     document.getElementById('modalAvancarRota')?.remove();
     const msg = `⏩ ${ok} carro(s) avançado(s).` + (pulados ? ` ${pulados} exigem ação individual (checklist/transbordo/cegonha).` : '');
