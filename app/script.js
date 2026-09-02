@@ -7999,9 +7999,60 @@ function _dirMesLabel(ym) {
     return `${nomes[parseInt(m, 10) - 1]}/${a.slice(2)}`;
 }
 
+// Resumo geral consolidado de TODOS os meses (visão macro para a diretoria)
+function _dirMostrarGeral(){
+  const validos = pedidosGlobais.filter(p => p.status !== 'Cancelado');
+  const soma = arr => arr.reduce((s,p)=> s + Number(p.valorFrete||0), 0);
+  const moeda = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  // agrupa por mês
+  const porMes = {};
+  validos.forEach(p => { const m = _dirMes(_dirDataPedido(p)); if(!m) return; (porMes[m]=porMes[m]||[]).push(p); });
+  const meses = Object.keys(porMes).sort().reverse();
+  const totalGeral = soma(validos);
+  const carrosGeral = validos.length;
+  const entreguesGeral = validos.filter(p=>p.status==='Entregue').length;
+  const mediaMes = meses.length ? totalGeral/meses.length : 0;
+  const linhas = meses.map(m => {
+    const ps = porMes[m];
+    const ent = ps.filter(p=>p.status==='Entregue').length;
+    return `<tr>
+      <td><strong>${_dirMesLabel(m)}</strong></td>
+      <td style="text-align:center">${ps.length}</td>
+      <td style="text-align:center">${ent}</td>
+      <td style="text-align:right"><strong>${moeda(soma(ps))}</strong></td>
+    </tr>`;
+  }).join('');
+  const old = document.getElementById('dirGeralOverlay'); if(old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'dirGeralOverlay';
+  div.style.cssText = 'position:fixed;inset:0;z-index:100060;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,.6)" onclick="document.getElementById('dirGeralOverlay').remove()"></div>
+    <div style="position:relative;background:var(--surface-1,#14141a);border:1px solid rgba(255,255,255,.12);border-radius:16px;width:92%;max-width:640px;max-height:88vh;overflow-y:auto;padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+        <div><h2 style="margin:0">📊 Resumo Geral</h2><p style="color:#9ca3af;font-size:.85rem;margin:.3rem 0 0">Consolidado de todos os meses (${meses.length} ${meses.length===1?'mês':'meses'})</p></div>
+        <button onclick="document.getElementById('dirGeralOverlay').remove()" style="background:none;border:none;color:#9ca3af;font-size:1.4rem;cursor:pointer">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px">
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px"><div style="font-size:.7rem;color:#9ca3af;text-transform:uppercase">Faturamento total</div><div style="font-size:1.4rem;font-weight:800;color:#22c55e">${moeda(totalGeral)}</div></div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px"><div style="font-size:.7rem;color:#9ca3af;text-transform:uppercase">Média por mês</div><div style="font-size:1.4rem;font-weight:800">${moeda(mediaMes)}</div></div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px"><div style="font-size:.7rem;color:#9ca3af;text-transform:uppercase">Carros transportados</div><div style="font-size:1.4rem;font-weight:800">${carrosGeral}</div></div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px"><div style="font-size:.7rem;color:#9ca3af;text-transform:uppercase">Entregues</div><div style="font-size:1.4rem;font-weight:800">${entreguesGeral}</div></div>
+      </div>
+      <div style="font-size:.78rem;font-weight:700;color:#9ca3af;margin-bottom:8px">DETALHAMENTO POR MÊS</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead><tr style="border-bottom:1px solid rgba(255,255,255,.1)"><th style="text-align:left;padding:8px;font-size:.7rem;color:#9ca3af">Mês</th><th style="text-align:center;padding:8px;font-size:.7rem;color:#9ca3af">Carros</th><th style="text-align:center;padding:8px;font-size:.7rem;color:#9ca3af">Entregues</th><th style="text-align:right;padding:8px;font-size:.7rem;color:#9ca3af">Faturamento</th></tr></thead>
+        <tbody>${linhas}</tbody>
+        <tfoot><tr style="border-top:2px solid rgba(255,255,255,.15)"><td style="padding:8px"><strong>TOTAL</strong></td><td style="text-align:center;padding:8px"><strong>${carrosGeral}</strong></td><td style="text-align:center;padding:8px"><strong>${entreguesGeral}</strong></td><td style="text-align:right;padding:8px"><strong>${moeda(totalGeral)}</strong></td></tr></tfoot>
+      </table>
+    </div>`;
+  document.body.appendChild(div);
+}
+
 function renderizarDiretoria() {
     const hoje = _dirHoje();
-    const mesAtual = _dirMes(hoje);
+    const mesReal = _dirMes(hoje);
+    const mesAtual = (typeof _dirMesSel !== 'undefined' && _dirMesSel) ? _dirMesSel : mesReal;
     const dataAnterior = new Date();
     dataAnterior.setMonth(dataAnterior.getMonth() - 1);
     const mesAnterior = _dirMes(dataAnterior.toISOString());
@@ -8074,8 +8125,15 @@ function renderizarDiretoria() {
         </div>` : ''}`;
 
     const elPeriodo = document.getElementById('dirPeriodo');
-    if (elPeriodo) elPeriodo.textContent =
-        'Mês de referência: ' + _dirMesLabel(mesAtual) + ' · atualizado agora';
+    if (elPeriodo) {
+        // meses disponíveis (com dados) para o seletor
+        const mesesDisp = [...new Set(validos.map(p => _dirMes(_dirDataPedido(p))).filter(Boolean))].sort().reverse();
+        if (!mesesDisp.includes(mesReal)) mesesDisp.unshift(mesReal);
+        elPeriodo.innerHTML = '<span style=\'font-size:.85rem;color:#9ca3af\'>Mês de referência:</span> ' +
+          '<select onchange=\'_dirMesSel=this.value; renderizarDiretoria();\' style=\'margin:0 8px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:inherit;font-weight:700\'>' +
+          mesesDisp.map(m => `<option value="${m}" ${m===mesAtual?'selected':''}>${_dirMesLabel(m)}</option>`).join('') + '</select>' +
+          `<button onclick="_dirMostrarGeral()" style="margin-left:8px;padding:6px 12px;border-radius:8px;border:1px solid rgba(255,106,0,.4);background:rgba(255,106,0,.1);color:#ff6a00;font-weight:700;cursor:pointer">📊 Resumo geral (todos os meses)</button>`;
+    }
 
     // ---------- Alertas ----------
     const prazoVencido = validos.filter(p =>
@@ -10319,6 +10377,10 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
         <div class="info-item">
             <label>Rota Principal</label>
             <span style="font-size:0.78rem">${rotaPrincipal}</span>
+        </div>
+        <div class="info-item">
+            <label>Prev. Saída</label>
+            <span>${(() => { const _r = (rotasGlobais||[]).find(x => String(x.id)===String(opcoes.rotaId) || (x.placa_cegonha===placaCegonha && x.status!=='concluida')); return _r && _r.data_saida ? new Date(_r.data_saida+'T12:00').toLocaleDateString('pt-BR') : '—'; })()}</span>
         </div>
         ${pedidos[0]?.dataPrevColeta ? `
         <div class="info-item">
@@ -16327,9 +16389,10 @@ function _renderRotaVeiculosEditor(rotaId){
 // ÁREA DO MOTORISTA: documentos (manifesto/CTe) + histórico de viagens
 // ============================================================
 // Documentos da viagem ATIVA do motorista (some quando a rota é finalizada)
-function renderizarDocsMotorista(){
+async function renderizarDocsMotorista(){
   const cont = document.getElementById('docsMotoristaWrap');
   if (!cont) return;
+  try { const { data } = await supabase.from('documentos_rota').select('*').order('enviado_em', { ascending:false }); if (data) documentosRotaGlobais = data; } catch(e){}
   let rotasAtivas = [];
   if (typeof nomesDoMotoristaLogado === 'function'){
     const { nomes } = nomesDoMotoristaLogado();
