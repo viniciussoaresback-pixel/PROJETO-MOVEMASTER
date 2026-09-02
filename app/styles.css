@@ -9605,3 +9605,14 @@ html span.log-passo-bolinha {
   /* garante que textos longos quebrem em vez de esticar a tela */
   #motorista, #motorista * { word-break: break-word; overflow-wrap: anywhere; }
 }
+
+/* Pátios: discernimento entregar vs transbordando (chips bonitos) */
+.patio-discern { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:0 0 12px; }
+.patio-discern-chip { display:flex; align-items:center; gap:8px; padding:9px 11px; border-radius:10px; border:1px solid transparent; }
+.patio-discern-chip .pd-ico { font-size:1.05rem; line-height:1; }
+.patio-discern-chip .pd-txt { font-size:.76rem; line-height:1.15; color:var(--text-secondary,#9ca3af); }
+.patio-discern-chip .pd-txt strong { display:block; font-size:1.15rem; font-weight:800; line-height:1; margin-bottom:2px; }
+.patio-discern-entregar { background:rgba(34,197,94,.09); border-color:rgba(34,197,94,.3); }
+.patio-discern-entregar .pd-txt strong { color:#22c55e; }
+.patio-discern-transb { background:rgba(251,146,60,.09); border-color:rgba(251,146,60,.3); }
+.patio-discern-transb .pd-txt strong { color:#fb923c; }
