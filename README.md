@@ -93,9 +93,17 @@ PROJETO-MOVEMASTER/
 git clone https://github.com/viniciussoaresback-pixel/PROJETO-MOVEMASTER.git
 cd PROJETO-MOVEMASTER/app
 
+2. Configure as credenciais do Supabase em supabase-config.js:
 const SUPABASE_URL = 'https://SEU_PROJETO.supabase.co';
 const SUPABASE_ANON_KEY = 'sua-anon-key';
 
+3. Abra o index.html com um servidor local (recomendado):
+# Com Python
+python -m http.server 5500
+
+# Ou com VS Code / Live Server
+
+4.Importante: O sistema depende de tabelas e políticas RLS já configuradas no Supabase. Sem o backend correto, a autenticação e os dados não funcionarão.
 --
 
 🔐 Segurança
