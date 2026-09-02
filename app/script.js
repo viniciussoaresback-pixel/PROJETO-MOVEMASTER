@@ -9314,8 +9314,14 @@ async function renderizarPainelPatios() {
                 const entregar = lista.filter(p => _norm(p.cidadeDestino||'') === cidadePatio).length;
                 const transbordando = lista.length - entregar;
                 return `<div class="patio-discern">
-                    <span class="patio-discern-item patio-discern-entregar" title="Carros cujo destino final é ${patio}">🏁 ${entregar} p/ entregar aqui</span>
-                    <span class="patio-discern-item patio-discern-transb" title="Carros que vão seguir para outro destino (transbordo)">🔀 ${transbordando} transbordando</span>
+                    <div class="patio-discern-chip patio-discern-entregar">
+                        <span class="pd-ico">🏁</span>
+                        <span class="pd-txt"><strong>${entregar}</strong> p/ entregar aqui</span>
+                    </div>
+                    <div class="patio-discern-chip patio-discern-transb">
+                        <span class="pd-ico">🔀</span>
+                        <span class="pd-txt"><strong>${transbordando}</strong> transbordando</span>
+                    </div>
                 </div>`;
             })()}
             <div class="patio-carros">${carrosHTML}</div>
@@ -14717,6 +14723,7 @@ function renderizarHistoricoCargas(containerId){
   const fMot = _norm(document.getElementById('histMotorista')?.value || '');
   const fCeg = _norm(document.getElementById('histCegonha')?.value || '');
   const fDest = _norm(document.getElementById('histDestino')?.value || '');
+  const fOrig = _norm(document.getElementById('histOrigem')?.value || '');
   const fDe = document.getElementById('histDataDe')?.value || '';
   const fAte = document.getElementById('histDataAte')?.value || '';
 
@@ -14729,6 +14736,7 @@ function renderizarHistoricoCargas(containerId){
   if (fMot) viagens = viagens.filter(v => _norm(v.motorista).includes(fMot));
   if (fCeg) viagens = viagens.filter(v => _norm(v.cegonha).includes(fCeg));
   if (fDest) viagens = viagens.filter(v => v.pedidos.some(p => _norm(p.cidadeDestino||'').includes(fDest)));
+  if (fOrig) viagens = viagens.filter(v => v.pedidos.some(p => _norm(p.cidadeOrigem||'').includes(fOrig)));
   if (fDe) viagens = viagens.filter(v => v.data && v.data >= fDe);
   if (fAte) viagens = viagens.filter(v => v.data && v.data <= fAte);
   if (fBusca) viagens = viagens.filter(v =>
@@ -14785,6 +14793,7 @@ function _histViagensFiltradas(){
   const fMot = _norm(document.getElementById('histMotorista')?.value || '');
   const fCeg = _norm(document.getElementById('histCegonha')?.value || '');
   const fDest = _norm(document.getElementById('histDestino')?.value || '');
+  const fOrig = _norm(document.getElementById('histOrigem')?.value || '');
   const fDe = document.getElementById('histDataDe')?.value || '';
   const fAte = document.getElementById('histDataAte')?.value || '';
 
@@ -14793,6 +14802,7 @@ function _histViagensFiltradas(){
   if (fMot) viagens = viagens.filter(v => _norm(v.motorista).includes(fMot));
   if (fCeg) viagens = viagens.filter(v => _norm(v.cegonha).includes(fCeg));
   if (fDest) viagens = viagens.filter(v => v.pedidos.some(p => _norm(p.cidadeDestino||'').includes(fDest)));
+  if (fOrig) viagens = viagens.filter(v => v.pedidos.some(p => _norm(p.cidadeOrigem||'').includes(fOrig)));
   if (fDe) viagens = viagens.filter(v => v.data && v.data >= fDe);
   if (fAte) viagens = viagens.filter(v => v.data && v.data <= fAte);
   if (fBusca) viagens = viagens.filter(v =>
@@ -15241,7 +15251,8 @@ function _histCargasCasca(){
       <input type="text" id="histBusca" class="histv-busca" placeholder="🔎 Buscar viagem, motorista, placa..." oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <input type="text" id="histMotorista" class="histv-fil" placeholder="👤 Motorista" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <input type="text" id="histCegonha" class="histv-fil" placeholder="🚛 Cegonha" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
-      <input type="text" id="histDestino" class="histv-fil" placeholder="📍 Destino" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
+      <input type="text" id="histOrigem" class="histv-fil" placeholder="📍 Origem" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
+      <input type="text" id="histDestino" class="histv-fil" placeholder="🏁 Destino" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <label class="hist-data">De <input type="date" id="histDataDe" onchange="renderizarHistoricoCargas()"></label>
       <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
       <button class="histv-btn-relatorio" onclick="_histAbrirRelatorio()">📊 Relatório do período</button>
