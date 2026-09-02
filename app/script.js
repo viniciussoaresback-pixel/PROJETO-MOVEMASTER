@@ -7986,7 +7986,8 @@ const _dirMes = (d) => String(d || '').slice(0, 7);          // 'AAAA-MM'
 const _dirHoje = () => new Date().toISOString().slice(0, 10);
 
 function _dirDataPedido(p) {
-    return String(p.dataPrevColeta || p.dataSolicitacao || p.createdAt || '').slice(0, 10);
+    // usa a data de REGISTRO (confiável), não a prev. de coleta (editável, pode ter erro de digitação).
+    return String(p.dataSolicitacao || p.createdAt || p.created_at || p.dataPrevColeta || '').slice(0, 10);
 }
 
 function _dirMoeda(v) {
@@ -8127,7 +8128,10 @@ function renderizarDiretoria() {
     const elPeriodo = document.getElementById('dirPeriodo');
     if (elPeriodo) {
         // meses disponíveis (com dados) para o seletor
-        const mesesDisp = [...new Set(validos.map(p => _dirMes(_dirDataPedido(p))).filter(Boolean))].sort().reverse();
+        const _anoMin = 2024;
+        const mesesDisp = [...new Set(validos.map(p => _dirMes(_dirDataPedido(p))).filter(Boolean))]
+          .filter(m => { const a = parseInt(m.slice(0,4),10); return a >= _anoMin && a <= (new Date().getFullYear()+1); })
+          .sort().reverse();
         if (!mesesDisp.includes(mesReal)) mesesDisp.unshift(mesReal);
         elPeriodo.innerHTML = '<span style=\'font-size:.85rem;color:#9ca3af\'>Mês de referência:</span> ' +
           '<select onchange=\'_dirMesSel=this.value; renderizarDiretoria();\' style=\'margin:0 8px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:inherit;font-weight:700\'>' +
@@ -9304,6 +9308,16 @@ async function renderizarPainelPatios() {
                 <span class="patio-nome">🅿️ ${patio}</span>
                 <span class="patio-qtd">${lista.length} carro${lista.length === 1 ? '' : 's'}</span>
             </div>
+            ${(() => {
+                if (lista.length === 0) return '';
+                const cidadePatio = _norm(String(patio).split('/')[0]);
+                const entregar = lista.filter(p => _norm(p.cidadeDestino||'') === cidadePatio).length;
+                const transbordando = lista.length - entregar;
+                return `<div class="patio-discern">
+                    <span class="patio-discern-item patio-discern-entregar" title="Carros cujo destino final é ${patio}">🏁 ${entregar} p/ entregar aqui</span>
+                    <span class="patio-discern-item patio-discern-transb" title="Carros que vão seguir para outro destino (transbordo)">🔀 ${transbordando} transbordando</span>
+                </div>`;
+            })()}
             <div class="patio-carros">${carrosHTML}</div>
         </div>`;
     }).join('');
