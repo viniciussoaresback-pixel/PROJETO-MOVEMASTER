@@ -3226,7 +3226,7 @@ async function salvarCadastroCliente(event) {
     if (cnpj) {
         const existeCnpj = await verificarDocumentoUnico('cnpj', cnpj);
         if (existeCnpj !== true) {
-            exibirMensagem('mensagemCadastroCliente', `CNPJ já cadastrado para: ${existeCnpj.nome}`, 'error');
+            exibirMensagem('mensagemCadastroCliente', `⚠️ Este CNPJ já está cadastrado no cliente: "${existeCnpj.nome}" (procure por ele na lista de clientes e edite, em vez de criar de novo). Se não achar na lista, ele pode ter sido criado automaticamente pela importação do Evo.`, 'error');
             return;
         }
     }
@@ -5370,14 +5370,12 @@ async function verificarDocumentoUnico(campo, valor) {
     if (digits.length < 11) return true;
 
     try {
-        const { data } = await supabase
-            .from('clientes')
-            .select('id, nome')
-            .eq(campo, valor)
-            .limit(1);
-
-        if (data && data.length > 0) {
-            return data[0]; // retorna o cliente existente
+        // Busca todos os clientes e compara só os DÍGITOS (ignora pontuação/formatação),
+        // pra não dar falso positivo nem falso negativo por causa de "." "/" "-".
+        const { data } = await supabase.from('clientes').select('id, nome, cnpj, cpf');
+        if (data && data.length){
+            const achado = data.find(c => String(c[campo]||'').replace(/\D/g,'') === digits);
+            if (achado) return achado; // já existe (retorna o cliente)
         }
         return true; // ok, não existe
     } catch(e) {
@@ -15253,8 +15251,10 @@ function _histCargasCasca(){
       <input type="text" id="histCegonha" class="histv-fil" placeholder="🚛 Cegonha" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <input type="text" id="histOrigem" class="histv-fil" placeholder="📍 Origem" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <input type="text" id="histDestino" class="histv-fil" placeholder="🏁 Destino" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
-      <label class="hist-data">De <input type="date" id="histDataDe" onchange="renderizarHistoricoCargas()"></label>
-      <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
+      <div class="hist-datas-grupo">
+        <label class="hist-data">De <input type="date" id="histDataDe" onchange="renderizarHistoricoCargas()"></label>
+        <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
+      </div>
       <button class="histv-btn-relatorio" onclick="_histAbrirRelatorio()">📊 Relatório do período</button>
     </div>
     <div class="histv-layout">
@@ -16638,23 +16638,25 @@ function _selosPedidoHTML(p){
 function _fiscalNumerosCteHTML(rotaId){
   const pedidos = _pedidosHistoricoDaViagem(rotaId).filter(p => p.status !== 'Cancelado');
   if (pedidos.length === 0) return '';
-  // Agrupa por grupo_id (carros do mesmo pedido = mesma CTe). Sem grupo, cada pedido é um grupo.
+  // Agrupa por grupo_id + referência: carros do mesmo pedido SÓ compartilham CTe se tiverem
+  // a MESMA requisição/referência. Requisições (ou valores) diferentes = CTes separados.
   const grupos = [];
   const vistos = {};
   pedidos.forEach(p => {
-    const chave = p.grupoId ? 'g'+p.grupoId : 'p'+p.id;
+    const ref = (p.referencia||'').trim();
+    const chave = (p.grupoId && ref) ? ('g'+p.grupoId+'|r'+_norm(ref)) : 'p'+p.id;
     if (!vistos[chave]){ vistos[chave] = { chave, itens:[], lider:p }; grupos.push(vistos[chave]); }
     vistos[chave].itens.push(p);
   });
   return `<div style="margin-top:10px;border-top:1px dashed var(--border,rgba(255,255,255,.12));padding-top:10px">
-    <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe por pedido (1 pedido = 1 CTe, mesmo com vários carros):</div>
+    <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe (carros com a mesma requisição compartilham CTe; requisições diferentes = CTes separados):</div>
     ${grupos.map(g => {
       const lider = g.lider;
       const placas = g.itens.map(x => x.placa||'—').join(', ');
       const multi = g.itens.length > 1;
       return `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:8px;padding:8px 10px;margin-bottom:6px" id="cteGrupo_${g.chave}">
         <div style="font-size:.82rem;margin-bottom:5px">
-          <strong>#${lider.id}</strong>${multi?` <span style="background:rgba(255,106,0,.15);color:#ff6a00;font-size:.68rem;padding:1px 7px;border-radius:999px">🔗 ${g.itens.length} carros</span>`:''} · 🚗 ${placas} ${_selosPedidoHTML(lider)}<br>
+          <strong>#${lider.id}</strong>${multi?` <span style="background:rgba(255,106,0,.15);color:#ff6a00;font-size:.68rem;padding:1px 7px;border-radius:999px">🔗 ${g.itens.length} carros</span>`:''} · 🚗 ${placas} ${_selosPedidoHTML(lider)}${lider.referencia?` <span style="color:#f59e0b;font-size:.72rem">🏷️ ${lider.referencia}</span>`:''}<br>
           <span style="color:var(--text-secondary,#9ca3af);font-size:.78rem">${lider.cliente||'—'} · ${lider.cidadeOrigem||'—'} → <strong>${lider.cidadeDestino||'—'}</strong></span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
