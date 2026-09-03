@@ -1088,6 +1088,9 @@ function mostrarViewPainel(view, btn){
   if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="_mmDeb('renderizarVagasPorRota', renderizarVagasPorRota)"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
+  // toque de "surgir" na view que ficou visível
+  const _vis = [corredores,avancar,historico,vagas,viagens,planejamento,central].find(e => e && e.style.display !== 'none');
+  if (_vis){ _vis.classList.remove('mm-surge'); void _vis.offsetWidth; _vis.classList.add('mm-surge'); }
 }
 
 function renderizarCarteiraDemanda(){
@@ -1621,4 +1624,3 @@ function _rotaCorrPreencheMotorista(){
   const inp = document.getElementById('rotaCorrMotorista');
   if (inp) inp.value = mot;  // motorista padrão da cegonha
 }
-
