@@ -327,13 +327,30 @@ body::after {
 
 .tab-content {
     display: none;
-    animation: fadeIn 0.3s ease-in;
 }
 
 .tab-content.active {
     display: block;
+    animation: mmTelaSurge 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+@keyframes mmTelaSurge {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.995);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* respeita quem prefere menos animação (acessibilidade) */
+@media (prefers-reduced-motion: reduce) {
+    .tab-content.active { animation: none; }
+}
+
+/* mantém o keyframe antigo por compatibilidade com quem ainda usa */
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -9616,3 +9633,12 @@ html span.log-passo-bolinha {
 .patio-discern-entregar .pd-txt strong { color:#22c55e; }
 .patio-discern-transb { background:rgba(251,146,60,.09); border-color:rgba(251,146,60,.3); }
 .patio-discern-transb .pd-txt strong { color:#fb923c; }
+
+/* Histórico de cargas: De/Até empilhados */
+.hist-datas-grupo { display:flex; flex-direction:column; gap:4px; }
+.hist-datas-grupo .hist-data { justify-content:space-between; }
+.hist-datas-grupo .hist-data input { flex:1; margin-left:6px; }
+
+/* Animação de "surgir" reutilizável (sub-views, painéis) */
+.mm-surge { animation: mmTelaSurge 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) { .mm-surge { animation: none; } }
