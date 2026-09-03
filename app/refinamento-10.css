@@ -1,0 +1,171 @@
+/* MoveMaster — refinamento 10: tooltips nos KPIs, entrada escalonada das linhas e login premium.
+   Camada aditiva: não altera styles.css nem script.js. */
+
+/* ---------- 1. Tooltips nos indicadores ---------- */
+[data-mm-tip] {
+  position: relative;
+  cursor: help;
+}
+[data-mm-tip]::after {
+  content: attr(data-mm-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 4px);
+  min-width: 120px;
+  max-width: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #111418;
+  color: #f4f6f8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.1px;
+  text-align: center;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 9000;
+}
+[data-mm-tip]::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 3px);
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, 4px) rotate(45deg);
+  background: #111418;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 9001;
+}
+[data-mm-tip]:hover::after,
+[data-mm-tip]:focus-visible::after,
+[data-mm-tip]:hover::before,
+[data-mm-tip]:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+[data-mm-tip]:hover::before,
+[data-mm-tip]:focus-visible::before {
+  transform: translate(-50%, 0) rotate(45deg);
+}
+[data-tema='claro'] [data-mm-tip]::after,
+[data-tema='claro'] [data-mm-tip]::before {
+  background: #1f2937;
+  color: #fff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- 2. Entrada escalonada das linhas da tabela ---------- */
+@keyframes mmRowIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+tr.mm-row-in {
+  animation: mmRowIn 260ms ease both;
+  animation-delay: var(--mm-row-delay, 0ms);
+}
+
+/* ---------- 3. Login premium ---------- */
+.mm-login-premium {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.mm-login-premium::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 137, 30, 0.22), transparent 45%),
+    radial-gradient(circle at 82% 78%, rgba(48, 122, 255, 0.18), transparent 48%),
+    linear-gradient(160deg, #0d0f13 0%, #14171d 55%, #0b0d10 100%);
+  animation: mmAura 18s ease-in-out infinite alternate;
+}
+.mm-login-premium::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 78%);
+}
+@keyframes mmAura {
+  from {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(2%, -2%, 0);
+  }
+}
+[data-tema='claro'] .mm-login-premium::before {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 137, 30, 0.16), transparent 45%),
+    radial-gradient(circle at 82% 78%, rgba(48, 122, 255, 0.12), transparent 48%),
+    linear-gradient(160deg, #f7f9fc 0%, #eef2f7 60%, #f9fafc 100%);
+}
+[data-tema='claro'] .mm-login-premium::after {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px);
+}
+.mm-login-premium .mm-login-card,
+.mm-login-premium form {
+  backdrop-filter: blur(6px);
+}
+.mm-login-card {
+  border-radius: 16px !important;
+  box-shadow:
+    0 24px 60px -22px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset !important;
+  animation: mmRowIn 420ms ease both;
+}
+[data-tema='claro'] .mm-login-card {
+  box-shadow:
+    0 22px 48px -24px rgba(15, 23, 42, 0.28),
+    0 0 0 1px rgba(15, 23, 42, 0.06) inset !important;
+}
+.mm-login-premium input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 137, 30, 0.22) !important;
+}
+.mm-login-premium button[type='submit'],
+.mm-login-premium .btn-entrar {
+  transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+}
+.mm-login-premium button[type='submit']:hover,
+.mm-login-premium .btn-entrar:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 10px 24px -12px rgba(255, 137, 30, 0.65);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  tr.mm-row-in,
+  .mm-login-card,
+  .mm-login-premium::before {
+    animation: none !important;
+  }
+  [data-mm-tip]::after,
+  [data-mm-tip]::before {
+    transition: none;
+  }
+}
