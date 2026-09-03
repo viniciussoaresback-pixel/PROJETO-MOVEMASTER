@@ -3,7 +3,8 @@
 Sistema interno desenvolvido para centralizar e otimizar a **operação comercial e logística** da empresa: pedidos, rotas, alocação de frota, faturamento, fiscal (CTE), manutenção e acompanhamento em tempo real.
 
 > **Status:** Em produção  
-> **Deploy:** [projeto-movemaster.vercel.app](https://projeto-movemaster.vercel.app)
+> **Deploy:** [projeto-movemaster.vercel.app](https://projeto-movemaster.vercel.app)  
+> **Build:** v326 · Service Worker v327
 
 ---
 
@@ -11,7 +12,7 @@ Sistema interno desenvolvido para centralizar e otimizar a **operação comercia
 
 O MoveMaster é uma aplicação web (PWA) que substitui planilhas e processos manuais por um fluxo digital completo, com controle de acesso por perfil e interface otimizada tanto para desktop quanto para celular (motoristas e equipes de campo).
 
-### Principais módulos
+### Principais módulos de negócio
 
 | Módulo | Descrição |
 |--------|-----------|
@@ -25,13 +26,11 @@ O MoveMaster é uma aplicação web (PWA) que substitui planilhas e processos ma
 | **EPI / Uniforme** | Solicitação e controle de equipamentos |
 | **Diretoria** | Dashboard executivo com indicadores, faturamento, frota e performance comercial |
 | **Equipes** | Gestão de coletas e entregas por equipes de campo |
-| **Motorista** | Interface simplificada para motoristas (cargas, foto de placa, ocorrências) |
+| **Motorista** | App de campo (cargas, foto de placa, ocorrências) |
 
 ---
 
 ## 👥 Perfis de Acesso
-
-O sistema possui controle de permissões por perfil:
 
 | Perfil | Acesso principal |
 |--------|------------------|
@@ -56,106 +55,136 @@ Login aceita **e-mail, CPF ou telefone**.
 - **PWA:** Service Worker + Manifest (instalável no celular)
 - **Deploy:** Vercel
 - **APIs externas:** IBGE (estados e municípios)
-- **Extras:** Temas claro/escuro, toasts, gráficos, exportação (CSV/PDF)
+- **Extras:** Temas claro/escuro, toasts, gráficos, exportação (CSV/PDF), importação Excel (Evo)
 
 ---
 
 ## 📁 Estrutura do Projeto
 
+```text
 PROJETO-MOVEMASTER/
 └── app/
-├── index.html              # Página principal
-├── script.js               # Lógica principal da aplicação
-├── supabase-config.js      # Configuração e autenticação Supabase
-├── styles.css              # Estilos base
-├── refinamento*.css        # Refinamentos de UI
-├── graficos.js / graficos-core.js
-├── toasts.js
-├── exportar.js
-├── sw.js                   # Service Worker (PWA)
-├── manifest.json           # Manifesto PWA
-├── vercel.json             # Configuração de headers (cache)
-└── ícones / logos
+    ├── index.html                 # Página principal (carrega os módulos em ordem)
+    ├── modules/
+    │   ├── mod-01.js              # Core: globals, performance, init, dados
+    │   ├── mod-02.js … mod-12.js  # Lógica da aplicação (carregar nesta ordem)
+    │   └── …
+    ├── supabase-config.js         # Auth, perfis e permissões
+    ├── styles.css                 # Estilos base
+    ├── refinamento*.css           # Refinamentos de UI / tema
+    ├── graficos.js / graficos-core.js
+    ├── toasts.js / exportar.js / split.js
+    ├── sw.js                      # Service Worker (PWA) — rede primeiro
+    ├── manifest.json
+    ├── vercel.json                # Headers de cache
+    └── ícones / logos
+```
 
+> A lógica que antes ficava em um único `script.js` foi **dividida em 12 módulos** (`mod-01` … `mod-12`).  
+> A ordem dos `<script>` no `index.html` é **obrigatória** — não reordene.
+
+### Performance (front)
+
+Após ações (status, alocação, etc.), o app evita recarregar o sistema inteiro:
+
+- atualização local em memória (`atualizarPedidoLocal` / `upsertPedidoLocal`)
+- ou reload **leve** só de pedidos/rotas (`somentePedidos`)
+- reload completo (`forceFull`) apenas quando necessário (ex.: cadastros)
 
 ---
 
 ## 🚀 Como rodar localmente
 
 ### Pré-requisitos
-- Conta no Supabase com o projeto configurado
+
+- Conta no Supabase com o projeto e tabelas configurados
 - Navegador moderno
 
 ### Passos
 
 1. Clone o repositório:
+
 ```bash
 git clone https://github.com/viniciussoaresback-pixel/PROJETO-MOVEMASTER.git
 cd PROJETO-MOVEMASTER/app
+```
 
-2. Configure as credenciais do Supabase em supabase-config.js:
+2. Configure as credenciais em `supabase-config.js`:
+
+```js
 const SUPABASE_URL = 'https://SEU_PROJETO.supabase.co';
 const SUPABASE_ANON_KEY = 'sua-anon-key';
+```
 
-3. Abra o index.html com um servidor local (recomendado):
-# Com Python
+3. Suba um servidor local (não abra o HTML só como arquivo):
+
+```bash
 python -m http.server 5500
+# ou Live Server no VS Code
+```
 
-# Ou com VS Code / Live Server
+4. Acesse `http://localhost:5500`
 
-4.Importante: O sistema depende de tabelas e políticas RLS já configuradas no Supabase. Sem o backend correto, a autenticação e os dados não funcionarão.
---
+> O sistema depende de Auth, tabelas e **RLS** no Supabase. Sem isso, login e dados não funcionam.
 
-🔐 Segurança
+---
 
-Autenticação via Supabase Auth
-Controle de acesso por perfil (frontend + validação de sessão)
-Row Level Security (RLS) no banco (deve estar configurado no Supabase)
-Service Worker não armazena dados sensíveis do Supabase em cache
-Recuperação de senha por e-mail / CPF / telefone
+## 🔐 Segurança
 
---
+- Autenticação via Supabase Auth
+- Controle de acesso por perfil no frontend (menu e fluxos)
+- Row Level Security (RLS) no Postgres — acesso anônimo às tabelas críticas deve permanecer desabilitado
+- Service Worker **não** guarda dados do Supabase em cache
+- Recuperação de senha por e-mail / CPF / telefone
 
-📱 PWA (Progressive Web App)
-O MoveMaster pode ser instalado na tela inicial do celular:
+---
 
-Funciona offline no esqueleto da aplicação
-Estratégia de cache: rede primeiro (dados sempre atualizados quando há conexão)
-Otimizado para uso por motoristas e equipes de campo
+## 📱 PWA
 
---
+- Instalável na tela inicial (Android e iOS)
+- Offline: esqueleto do app (HTML/CSS/JS dos módulos)
+- Estratégia: **rede primeiro** — dados de operação sempre ao vivo quando há conexão
+- Pensado para motoristas e equipes de campo
 
-📦 Deploy (Vercel)
-O projeto está preparado para deploy na Vercel. O arquivo vercel.json já configura os headers de cache corretos para o Service Worker e assets.
-Recomendação de configuração na Vercel:
+---
 
-Root Directory: app
-Build Command: (deixar vazio — é estático)
-Output Directory: .
+## 📦 Deploy (Vercel)
 
---
+Configuração recomendada:
 
-🗺️ Roadmap / Melhorias futuras
+| Campo | Valor |
+|--------|--------|
+| **Root Directory** | `app` |
+| **Build Command** | *(vazio — site estático)* |
+| **Output Directory** | `.` |
 
- Modularização do script.js (quebra em módulos por domínio)
- Documentação completa do schema do banco
- Testes automatizados
- Melhorias de performance em listagens grandes
- Versionamento de API / Edge Functions
+O `vercel.json` já define headers de cache adequados para o Service Worker e os assets.
 
---
+---
 
-👨‍💻 Autor
-Desenvolvido por Vinicius Soares
+## 🗺️ Roadmap
 
-Projeto interno da empresa — focado em resolver a operação real de logística e comercial.
+- [x] Modularização do front (`modules/mod-01` … `mod-12`)
+- [x] Melhorias de performance (reload leve / update local)
+- [x] Fechamento de acesso anônimo em tabelas sensíveis (RLS)
+- [ ] Organização dos módulos por domínio (comercial, logística, etc.)
+- [ ] Documentação do schema do banco
+- [ ] Testes automatizados dos fluxos críticos
+- [ ] Paginação / filtros em listagens grandes
+- [ ] RLS por perfil (motorista/equipe só vê o que é dele)
 
---
+---
 
-📄 Licença
-Uso interno / proprietário.
+## 👨‍💻 Autor
+
+Desenvolvido por **Vinicius Soares**  
+
+Projeto interno da empresa — focado na operação real de logística e comercial.
+
+---
+
+## 📄 Licença
+
+Uso interno / proprietário.  
 
 Não é um projeto open-source destinado a redistribuição pública.
-
---
-
