@@ -48,6 +48,20 @@ let entregasLastMileGlobais = [];
 let estadosBrasil = [];
 let cidadesPorEstado = {};
 let notificacoesEnviadas = new Set();
+
+// ===== Helpers universais de documento (CNPJ/CPF) =====
+// Comparação SEMPRE por dígitos: "22.941.518/0001-62" === "22941518000162".
+function _soDigitos(v){ return String(v||'').replace(/\D/g,''); }
+function _docsIguais(a, b){
+  const da = _soDigitos(a), db = _soDigitos(b);
+  return da.length > 0 && da === db;
+}
+// true se algum documento (cnpj/cpf) do cliente casa com o termo digitado (por dígitos)
+function _clienteTemDoc(c, termo){
+  const t = _soDigitos(termo);
+  if (!t) return false;
+  return _soDigitos(c.cnpj).includes(t) || _soDigitos(c.cpf).includes(t);
+}
 // Mapa pedidoId -> { emitido: true/false, numero: 'XXXX' } derivado dos espelhos fiscais.
 // Populado por carregarMapaCTE(); usado por cteInfoDoPedido() nas telas.
 let ctePorPedido = {};
@@ -234,7 +248,11 @@ async function aposMutacaoPedidos(opts) {
     opts = opts || {};
     try {
         if (opts.forceFull) {
-            await aposMutacaoPedidos();
+            // Recarga COMPLETA de verdade: clientes, motoristas, veículos, pedidos, etc.
+            // (antes recarregava só pedidos, por isso cadastros novos de cliente/motorista/
+            //  veículo não apareciam sem sair e voltar da página.)
+            try { await carregarDadosDoSupabase(); }
+            catch(e){ try { await carregarDadosDoSupabase({ somentePedidos: true }); } catch(_){} }
             refrescarTelaAtual();
             return;
         }
@@ -1033,7 +1051,7 @@ async function _evoConfirmarImportacao(){
       let clienteId = null, clienteNome = c.embarcador || '';
       if (c.embarcador){
         let cli = (clientesGlobais||[]).find(x =>
-          (c.embarcadorDoc && _norm(x.cnpj||'')===_norm(c.embarcadorDoc)) || _norm(x.nome||'')===_norm(c.embarcador));
+          (c.embarcadorDoc && _docsIguais(x.cnpj, c.embarcadorDoc)) || _norm(x.nome||'')===_norm(c.embarcador));
         if (!cli){
           const novoCli = {
             nome: c.embarcador, cnpj: c.embarcadorDoc || null, tipo_cliente: 'empresa',
@@ -3255,7 +3273,12 @@ async function salvarCadastroCliente(event) {
                 codigo
             });
             if (error) throw error;
-            await aposMutacaoPedidos({ forceFull: true });
+            // Recarrega os clientes do banco para o novo aparecer NA HORA (sem sair e voltar).
+            try {
+                const { data: cli } = await supabase.from('clientes').select('*').order('nome');
+                if (cli) clientesGlobais = cli;
+            } catch(_){}
+            if (typeof renderizarListaClientes === 'function') renderizarListaClientes();
             exibirMensagem('mensagemCadastroCliente', '✅ Cliente salvo com sucesso!', 'success');
             document.getElementById('formCadastroCliente').reset();
             ajustarFormCliente(''); // volta os campos condicionais ao estado inicial
@@ -3728,10 +3751,14 @@ function renderizarListaClientes() {
     let lista = clientesGlobais || [];
 
     if (busca) {
-        lista = lista.filter(c =>
-            `${c.nome||''} ${c.cnpj||''} ${c.cpf||''} ${c.cidade||''} ${c.uf||''} ${c.email||''} ${c.telefone||''} ${c.inscricao_estadual||''}`
-                .toLowerCase().includes(busca)
-        );
+        const buscaDigitos = busca.replace(/\D/g,'');
+        lista = lista.filter(c => {
+            const alvo = `${c.nome||''} ${c.nome_fantasia||''} ${c.cnpj||''} ${c.cpf||''} ${c.cidade||''} ${c.uf||''} ${c.email||''} ${c.telefone||''} ${c.inscricao_estadual||''}`.toLowerCase();
+            if (alvo.includes(busca)) return true;
+            // se o termo tem dígitos, compara também com os dígitos do documento
+            if (buscaDigitos.length >= 3 && (_soDigitos(c.cnpj).includes(buscaDigitos) || _soDigitos(c.cpf).includes(buscaDigitos))) return true;
+            return false;
+        });
     }
 
     const contador = document.getElementById('contadorClientes');
@@ -12335,7 +12362,7 @@ function _buscarClienteEndereco(qual, termo){
   const t = (termo||'').trim().toLowerCase();
   if (t.length < 2){ lista.innerHTML = ''; lista.classList.remove('aberta'); return; }
   const achados = (clientesGlobais||[]).filter(c => {
-    const alvo = `${c.nome||''} ${c.nome_fantasia||''} ${c.cidade||''} ${c.cnpj||''} ${c.cpf||''} ${c.bairro||''}`.toLowerCase();
+    const alvo = `${c.nome||''} ${c.nome_fantasia||''} ${c.cidade||''} ${c.cnpj||''} ${c.cpf||''} ${_soDigitos(c.cnpj)} ${_soDigitos(c.cpf)} ${c.bairro||''}`.toLowerCase();
     return t.split(/\s+/).every(parte => alvo.includes(parte));
   }).slice(0, 8);
   if (achados.length === 0){ lista.innerHTML = '<div class="cli-auto-vazio">Nenhum cliente encontrado</div>'; lista.classList.add('aberta'); return; }
