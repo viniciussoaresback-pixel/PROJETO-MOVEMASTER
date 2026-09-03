@@ -1,0 +1,149 @@
+/* MoveMaster — Etapa 11: cabeçalhos ordenáveis, densidade e dica de atalho. */
+
+/* ---------- 1. Cabeçalho ordenável ---------- */
+th.mm-th-ord {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 22px !important;
+  transition: color .15s ease, background-color .15s ease;
+}
+
+th.mm-th-ord:hover {
+  color: #ff8a29;
+}
+
+th.mm-th-ord:focus-visible {
+  outline: 2px solid #ff8a29;
+  outline-offset: -2px;
+}
+
+th.mm-th-ord::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  opacity: .25;
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 45%, 0 45%, 50% 0, 50% 100%, 100% 55%, 0 55%);
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+th.mm-th-ord:hover::after { opacity: .55; }
+
+th.mm-ord-asc::after,
+th.mm-ord-desc::after {
+  opacity: 1;
+  width: 9px;
+  height: 6px;
+  margin-top: -3px;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  color: #ff8a29;
+}
+
+th.mm-ord-desc::after { transform: rotate(180deg); }
+
+/* ---------- 2. Densidade ---------- */
+:root[data-densidade='compacta'] table td,
+:root[data-densidade='compacta'] table th {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  font-size: .86rem;
+  line-height: 1.35;
+}
+
+:root[data-densidade='confortavel'] table td,
+:root[data-densidade='confortavel'] table th {
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+}
+
+.mm-dens-btn {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .05);
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .15s ease, transform .12s ease, border-color .15s ease;
+}
+
+.mm-dens-btn:hover {
+  background: rgba(255, 138, 41, .16);
+  border-color: rgba(255, 138, 41, .45);
+}
+
+.mm-dens-btn:active { transform: scale(.94); }
+
+:root[data-densidade='compacta'] .mm-dens-btn {
+  background: rgba(255, 138, 41, .18);
+  border-color: rgba(255, 138, 41, .5);
+  color: #ff8a29;
+}
+
+/* Fora da topbar, o botão flutua no canto inferior direito */
+body > .mm-dens-btn {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 900;
+  width: 40px;
+  height: 40px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+}
+
+/* ---------- 3. Tema claro ---------- */
+[data-tema='claro'] th.mm-th-ord:hover,
+html[data-theme='light'] th.mm-th-ord:hover { color: #d9600a; }
+
+[data-tema='claro'] .mm-dens-btn,
+html[data-theme='light'] .mm-dens-btn {
+  border-color: rgba(15, 23, 42, .12);
+  background: #fff;
+  color: #334155;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+}
+
+[data-tema='claro'] .mm-dens-btn:hover,
+html[data-theme='light'] .mm-dens-btn:hover {
+  background: #fff5ed;
+  border-color: rgba(217, 96, 10, .4);
+  color: #d9600a;
+}
+
+/* ---------- 4. Dica de atalho na busca ---------- */
+.mm-busca { position: relative; }
+
+.mm-busca::after {
+  content: 'Ctrl K';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: .66rem;
+  letter-spacing: .04em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, .35);
+  color: rgba(148, 163, 184, .9);
+  pointer-events: none;
+}
+
+.mm-busca:focus-within::after { opacity: 0; }
+
+@media (max-width: 720px) {
+  .mm-busca::after { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  th.mm-th-ord,
+  th.mm-th-ord::after,
+  .mm-dens-btn { transition: none; }
+}
