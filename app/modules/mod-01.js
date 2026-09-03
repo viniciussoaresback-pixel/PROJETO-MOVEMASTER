@@ -360,7 +360,13 @@ function trocarAba(event) {
     document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
     event.currentTarget.classList.add('active');
     const secao = document.getElementById(tabAlvo);
-    if (secao) secao.classList.add('active');
+    if (secao) {
+        secao.classList.add('active');
+        // força a animação de "surgir" reiniciar a cada troca de tela
+        secao.style.animation = 'none';
+        void secao.offsetWidth; // reflow
+        secao.style.animation = '';
+    }
     if (tabAlvo === 'diretoria') renderizarDiretoria();
     if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
     if (tabAlvo === 'comercialPedidos' && typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
