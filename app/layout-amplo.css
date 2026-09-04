@@ -106,3 +106,125 @@
   opacity: .4;
   cursor: not-allowed;
 }
+
+/* =========================================================================
+   LOGÍSTICA — barra de abas no mesmo padrão do Financeiro
+   Antes: caixa com grupos empilhados ("1 Coordenar", "2 Conferência", ...),
+   cada um com rótulo e linha divisória. Agora: uma única barra de pílulas,
+   igual à navegação do Financeiro.
+   Só CSS — o HTML e os onclick continuam iguais.
+   ========================================================================= */
+
+.logistica-tabs-nova {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text-light) 6%, transparent);
+  border: 1px solid var(--border-color);
+  margin-bottom: 1.2rem;
+  position: relative;
+}
+
+/* Os grupos deixam de ser caixas: os botões sobem para a barra */
+.logistica-tabs-nova .log-grupo,
+.logistica-tabs-nova .log-grupo-abas {
+  display: contents;
+}
+
+/* Rótulos dos passos e divisórias saem de cena */
+.logistica-tabs-nova .log-grupo-rotulo {
+  display: none;
+}
+
+.logistica-tabs-nova .log-grupo + .log-grupo {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* Botões no mesmo desenho dos .nav-btn do topo */
+.logistica-tabs-nova .log-tab-btn,
+.logistica-tabs-nova .log-grupo-operacao .log-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-family: 'Oswald', 'Inter', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-light);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.logistica-tabs-nova .log-tab-btn:hover:not(.active),
+.logistica-tabs-nova .log-grupo-operacao .log-tab-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--white);
+  border-color: transparent;
+}
+
+.logistica-tabs-nova .log-tab-btn.active,
+.logistica-tabs-nova .log-grupo-operacao .log-tab-btn.active {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: var(--black-void);
+  font-weight: 700;
+}
+
+/* "Atualizar" vira o último item da barra, encostado à direita */
+.logistica-tabs-nova .log-atualizar {
+  position: static;
+  margin-left: auto;
+}
+
+[data-tema="claro"] .logistica-tabs-nova {
+  background: rgba(15, 17, 21, 0.04);
+  border-color: rgba(15, 17, 21, 0.1);
+}
+
+[data-tema="claro"] .logistica-tabs-nova .log-tab-btn { color: #4b5058; }
+[data-tema="claro"] .logistica-tabs-nova .log-tab-btn:hover:not(.active) {
+  color: #111;
+  background: rgba(15, 17, 21, 0.06);
+}
+
+@media (max-width: 640px) {
+  .logistica-tabs-nova { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .logistica-tabs-nova::-webkit-scrollbar { display: none; }
+  .logistica-tabs-nova .log-tab-btn { flex: 0 0 auto; }
+  .logistica-tabs-nova .log-atualizar { margin-left: 0.35rem; }
+}
+
+/* =========================================================================
+   HEADER — barra de abas sempre na própria linha
+   .header-content é um flex com wrap. Em tela larga (e mais ainda depois
+   que este arquivo alargou o container), logo + área do usuário + abas
+   passaram a caber todos numa linha só — foi o que aconteceu na Logística.
+   Forçando a quebra antes da <nav>, todo perfil fica com a mesma estrutura
+   de duas linhas: logo e usuário em cima, abas embaixo.
+   ========================================================================= */
+
+.header-content {
+  flex-wrap: wrap;
+  row-gap: 0.75rem;
+}
+
+/* Empurra a área do usuário para a direita e fecha a primeira linha */
+.header-content > .header-right {
+  margin-left: auto;
+}
+
+/* A <nav> começa sempre numa linha nova e ocupa a largura toda */
+.header-content > .nav-tabs {
+  flex: 1 0 100%;
+  width: 100%;
+}
