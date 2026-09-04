@@ -87,6 +87,21 @@ function _limparUrlRecuperacao() {
     } catch (e) { /* navegador antigo: segue sem limpar */ }
 }
 
+// O Supabase processa o token da URL de forma assíncrona: quando a tela de
+// nova senha aparece, a sessão pode ainda não existir. Sem esta espera, o
+// updateUser() falha com "Auth session missing".
+async function _aguardarSessaoRecuperacao(msTimeout) {
+    const limite = Date.now() + (msTimeout || 8000);
+    while (Date.now() < limite) {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) return true;
+        } catch (e) { /* segue tentando */ }
+        await new Promise(r => setTimeout(r, 250));
+    }
+    return false;
+}
+
 function _mostrarTelaNovaSenha() {
     ocultarTodasTelas();
     const boot = document.getElementById('bootLoading');
@@ -182,7 +197,7 @@ function direcionarPorPerfil(perfil, email) {
 // ============================================
 
 function ocultarTodasTelas() {
-    ['telaLogin','telaSemPermissao','telaAdmin','appPrincipal'].forEach(id => {
+    ['telaLogin','telaSemPermissao','telaAdmin','appPrincipal','telaNovaSenha'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -386,6 +401,14 @@ function prepararTelaNovaSenha() {
         btn.disabled = true;
         btn.textContent = 'Salvando...';
 
+        const temSessao = await _aguardarSessaoRecuperacao(8000);
+        if (!temSessao) {
+            erroEl.textContent = 'Sessão de recuperação não encontrada. O link pode ter expirado — peça um novo em "Esqueci minha senha".';
+            btn.disabled = false;
+            btn.textContent = 'Salvar nova senha';
+            return;
+        }
+
         const { error } = await supabase.auth.updateUser({ password: s1 });
 
         if (error) {
@@ -493,6 +516,11 @@ function mostrarAppComPerfil(email, perfilData) {
 
     // Registrar último acesso (nunca pode travar o login)
     if (usuarioAtual?.id) registrarUltimoAcesso(usuarioAtual.id);
+
+    // Avisos no celular (hoje só para o fiscal). Nunca trava o login.
+    if (typeof prepararPushNotificacoes === 'function') {
+        try { prepararPushNotificacoes(perfilData?.perfil); } catch (e) { console.warn(e); }
+    }
 
     // Badge de perfil
     const badge = document.getElementById('badgePerfil');
