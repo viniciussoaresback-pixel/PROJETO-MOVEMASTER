@@ -31,24 +31,38 @@ function _dacteTrechoObservacoes(texto) {
   return fim === -1 ? corte : corte.slice(0, fim);
 }
 
+// Identificador do carro transportado. Pode ser:
+//   - placa antiga    ABC1234
+//   - placa Mercosul  ABC1D23
+//   - chassi          T3023502 (carro 0km, ainda sem placa)
+// Regra: 7 a 17 caracteres, só letras e números, contendo letra E número.
+// Exigir letra descarta sozinho RENAVAM, CIOT, CPF, protocolo e apólice,
+// que são sequências só de dígitos.
+const _DACTE_RE_ID = /\b(?=[A-Z0-9]{7,17}\b)(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{7,17}\b/g;
+
 function _dactePlacasDosCarros(texto) {
   const obs = _dacteTrechoObservacoes(texto);
 
-  // Placas que NÃO são carro: vêm logo depois de "PLACA" ou "CONJUNTO PLACA"
+  // O caminhão e a carreta também aparecem aqui. Ficam de fora: vêm sempre
+  // logo depois de "PLACA" ou "CONJUNTO PLACA".
   const ignorar = new Set();
-  const reIgnorar = /(?:CONJUNTO\s+PLACA|PLACA)\s*:?\s*([A-Z]{3}\d[A-Z0-9]\d{2})\b/gi;
+  const reIgnorar = /(?:CONJUNTO\s+PLACA|PLACA)\s*:?\s*([A-Z0-9]{7,17})\b/gi;
   let m;
   while ((m = reIgnorar.exec(obs)) !== null) ignorar.add(m[1].toUpperCase());
 
-  const placas = [];
-  _DACTE_RE_PLACA.lastIndex = 0;
-  while ((m = _DACTE_RE_PLACA.exec(obs)) !== null) {
-    const placa = m[1].toUpperCase();
-    if (ignorar.has(placa)) continue;
-    if (placas.includes(placa)) continue;
-    placas.push(placa);
+  // Varre o texto inteiro das observações, e não linha a linha: quando o PDF
+  // é montado, uma linha de carro pode acabar grudada na do CIOT ou do
+  // seguro. Filtrando por linha, esses carros sumiam.
+  const encontrados = [];
+  _DACTE_RE_ID.lastIndex = 0;
+  let t;
+  while ((t = _DACTE_RE_ID.exec(obs)) !== null) {
+    const id = t[0].toUpperCase();
+    if (ignorar.has(id)) continue;
+    if (encontrados.includes(id)) continue;
+    encontrados.push(id);
   }
-  return placas;
+  return encontrados;
 }
 
 function _dacteNumeroCte(texto) {
