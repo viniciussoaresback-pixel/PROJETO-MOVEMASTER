@@ -1,4 +1,6 @@
-/* MoveMaster — carregador: gráficos + toasts + exportação + tema claro + refinamentos. */
+/* MoveMaster — carregador de CSS e JS auxiliares.
+   Antes se chamava graficos.js, mas ele nunca fez gráfico: só monta as tags
+   <link> e <script> dos arquivos abaixo. O nome antigo enganava. */
 (function () {
   'use strict';
   // ATENÇÃO: a ordem importa. O último arquivo da lista tem a última palavra
