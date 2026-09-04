@@ -1,3 +1,11 @@
+/* Protege contra o arquivo ser carregado duas vezes: com `const` no escopo
+   global, a segunda carga estoura "already been declared" e derruba o
+   arquivo inteiro — nada dentro dele chega a rodar. */
+if (window.__mmPushCarregado) {
+  console.info('push-notificacoes.js já estava carregado; ignorando 2ª carga.');
+} else {
+  window.__mmPushCarregado = true;
+
 /* =========================================================================
    MOVEMASTER — Notificações push no celular
    Avisa o fiscal quando existe carga aguardando emissão de CT-e, mesmo com
@@ -15,11 +23,12 @@
    ========================================================================= */
 
 // COLE AQUI a chave pública VAPID gerada no passo 1 do guia.
-const VAPID_PUBLICA = '';
+// Chave PÚBLICA VAPID. A privada fica só nos secrets do Supabase.
+var VAPID_PUBLICA = window.VAPID_PUBLICA || '';
 
 // Quem recebe push no celular. Para incluir outro setor depois, basta
 // acrescentar o perfil nesta lista — nada mais precisa mudar.
-const PERFIS_COM_PUSH = ['fiscal'];
+var PERFIS_COM_PUSH = ['fiscal'];
 
 function _pushSuportado() {
   return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
@@ -168,4 +177,6 @@ function forcarConvitePush() {
   const antigo = document.getElementById('pushConvite');
   if (antigo) antigo.remove();
   _mostrarConvitePush(p);
+}
+
 }
