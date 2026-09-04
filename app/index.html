@@ -2370,6 +2370,15 @@
     <!-- SheetJS: leitura de planilhas Excel (importação do Evo) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+    <!-- Leitura do texto dos DACTEs (PDF) — preenchimento automático dos CT-es -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+    </script>
+
     <script src="modules/mod-01.js"></script>
     <script src="modules/mod-02.js"></script>
     <script src="modules/mod-03.js"></script>
@@ -2384,6 +2393,8 @@
     <script src="modules/mod-12.js"></script>
 
     <!-- Gráficos da Diretoria (SVG puro, adicionado direto no repositório) -->
+    <script src="dacte-leitor.js"></script>
+    <script src="push-notificacoes.js"></script>
     <script src="graficos.js"></script>
 
     <!-- PWA: registra o service worker e mostra a dica de instalação -->
