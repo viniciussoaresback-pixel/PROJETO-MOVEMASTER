@@ -47,10 +47,59 @@ const CORES_PERFIL = {
     manutencao: 'badge-manutencao'
 };
 
+// ============================================
+// RECUPERAÇÃO DE SENHA — detecção do link do e-mail
+// ============================================
+// Quando a pessoa clica no link do e-mail, o Supabase devolve a URL com
+// "type=recovery" (no hash ou na query) e JÁ CRIA UMA SESSÃO VÁLIDA.
+// Sem esta checagem, verificarSessao() encontra essa sessão e joga a pessoa
+// direto pra dentro do sistema — a tela de nova senha nunca aparece.
+// Por isso a detecção precisa acontecer ANTES de qualquer redirecionamento.
+var _modoRecuperacaoSenha = false;
+var _erroLinkRecuperacao = null;
+
+function _detectarRecuperacaoSenha() {
+    try {
+        const hash  = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+        const query = new URLSearchParams(window.location.search || '');
+        const tipo  = hash.get('type') || query.get('type');
+        const erro  = hash.get('error_description') || query.get('error_description')
+                   || hash.get('error') || query.get('error');
+
+        if (erro) {
+            // link expirado ou já usado
+            _erroLinkRecuperacao = decodeURIComponent(String(erro).replace(/\+/g, ' '));
+            return;
+        }
+        if (tipo === 'recovery') _modoRecuperacaoSenha = true;
+    } catch (e) {
+        console.warn('Não foi possível ler os parâmetros da URL:', e);
+    }
+}
+
+_detectarRecuperacaoSenha();
+
+// Limpa o token da barra de endereços (evita reenvio ao recarregar a página)
+function _limparUrlRecuperacao() {
+    try {
+        window.history.replaceState({}, document.title,
+            window.location.origin + window.location.pathname);
+    } catch (e) { /* navegador antigo: segue sem limpar */ }
+}
+
+function _mostrarTelaNovaSenha() {
+    ocultarTodasTelas();
+    const boot = document.getElementById('bootLoading');
+    if (boot) boot.style.display = 'none';
+    const tela = document.getElementById('telaNovaSenha');
+    if (tela) tela.style.display = 'flex';
+}
+
 function inicializarSupabase() {
     if (bibliotecaOriginal && typeof bibliotecaOriginal.createClient === 'function') {
         supabase = bibliotecaOriginal.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         console.log('✅ Supabase inicializado com sucesso!');
+        prepararTelaNovaSenha();
         verificarSessao();
     } else {
         console.error('❌ Biblioteca Supabase não encontrada.');
@@ -62,6 +111,20 @@ function inicializarSupabase() {
 // ============================================
 
 async function verificarSessao() {
+    // Link de recuperação: mostra a tela de nova senha em vez de entrar no sistema
+    if (_modoRecuperacaoSenha) { _mostrarTelaNovaSenha(); return; }
+
+    if (_erroLinkRecuperacao) {
+        _limparUrlRecuperacao();
+        mostrarLogin();
+        const erroLogin = document.getElementById('loginErro');
+        if (erroLogin) {
+            erroLogin.style.color = '#f87171';
+            erroLogin.textContent = '⚠️ O link de recuperação expirou ou já foi usado. Peça um novo em "Esqueci minha senha".';
+        }
+        return;
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         usuarioAtual = session.user;
@@ -283,14 +346,19 @@ async function enviarRecuperacaoSenha() {
 
 // Quando a pessoa volta pelo link do e-mail, o Supabase dispara o evento
 // PASSWORD_RECOVERY — aí mostramos a tela de definir nova senha.
+var _telaNovaSenhaPreparada = false;
+
 function prepararTelaNovaSenha() {
     if (!supabase) return;
+    if (_telaNovaSenhaPreparada) return; // chamada 2x (init + DOMContentLoaded)
+    _telaNovaSenhaPreparada = true;
 
+    // Caminho principal é a detecção pela URL (acima). Este evento fica como
+    // reforço, caso o Supabase processe o token depois do carregamento.
     supabase.auth.onAuthStateChange((evento) => {
         if (evento === 'PASSWORD_RECOVERY') {
-            ocultarTodasTelas();
-            const tela = document.getElementById('telaNovaSenha');
-            if (tela) tela.style.display = 'flex';
+            _modoRecuperacaoSenha = true;
+            _mostrarTelaNovaSenha();
         }
     });
 
@@ -328,6 +396,8 @@ function prepararTelaNovaSenha() {
         }
 
         // Senha trocada: volta para o login limpo
+        _modoRecuperacaoSenha = false;
+        _limparUrlRecuperacao();
         await supabase.auth.signOut();
         document.getElementById('telaNovaSenha').style.display = 'none';
         mostrarLogin();
@@ -339,7 +409,12 @@ function prepararTelaNovaSenha() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', prepararTelaNovaSenha);
+document.addEventListener('DOMContentLoaded', function () {
+    if (supabase) prepararTelaNovaSenha();
+    // Se a página abriu por um link de recuperação, garante a tela certa
+    // mesmo que o boot tenha corrido antes do DOM ficar pronto.
+    if (_modoRecuperacaoSenha) _mostrarTelaNovaSenha();
+});
 
 function mostrarSemPermissao(mensagem) {
     ocultarTodasTelas();
