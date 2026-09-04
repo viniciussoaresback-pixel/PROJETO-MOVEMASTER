@@ -2129,7 +2129,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>&copy; 2026 <strong>MOVEMASTER</strong> — Controle Logístico e Comercial · MVP v3.0 + Supabase · <span style="opacity:.6">build v326</span></p>
+            <p>&copy; 2026 <strong>MOVEMASTER</strong> — Controle Logístico e Comercial · MVP v3.0 + Supabase · <span style="opacity:.6">build v330</span></p>
         </footer>
 
         <!-- Modal: Avançar Status -->
@@ -2419,11 +2419,11 @@
 
         // ============================================================
         // Detecção AUTOMÁTICA de novo deploy (não depende de mudar o SW)
-        // Compara a "assinatura" do script.js publicado; se mudou, avisa.
+        // Compara a "assinatura" dos módulos publicados; se mudou, avisa.
         // ============================================================
         (function () {
             var assinaturaInicial = null;
-            var ARQUIVOS = ['script.js', 'styles.css', 'index.html'];
+            var ARQUIVOS = ['modules/mod-01.js', 'modules/mod-12.js', 'styles.css', 'index.html'];
             function pegarAssinatura() {
                 return Promise.all(ARQUIVOS.map(function (a) {
                     return fetch(a, { method: 'HEAD', cache: 'no-store' })
