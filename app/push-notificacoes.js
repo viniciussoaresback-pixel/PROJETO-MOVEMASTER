@@ -15,7 +15,7 @@
    ========================================================================= */
 
 // COLE AQUI a chave pública VAPID gerada no passo 1 do guia.
-const VAPID_PUBLICA = 'BA3LfWTiP1JmLK8V-56YGVh4u1y0kp7Vk-uZyWNTYws1Vtq_blwvxpQ8ovSkT62oDueEbJWgkuBL9d6bQ2evcU4';
+const VAPID_PUBLICA = '';
 
 // Quem recebe push no celular. Para incluir outro setor depois, basta
 // acrescentar o perfil nesta lista — nada mais precisa mudar.
@@ -124,4 +124,48 @@ async function desativarPushNotificacoes() {
   } catch (e) {
     console.warn('Não foi possível desativar o push:', e);
   }
+}
+
+/* =========================================================================
+   DIAGNÓSTICO
+   Abra o console (F12) e rode: diagnosticarPush()
+   Diz exatamente qual condição está barrando a ativação.
+   ========================================================================= */
+async function diagnosticarPush() {
+  const L = (ok, txt) => console.log((ok ? '✅' : '❌') + ' ' + txt);
+
+  const perfil = (typeof perfilAtual !== 'undefined') ? perfilAtual : '(não definido)';
+  L(PERFIS_COM_PUSH.includes(perfil), `perfil atual: ${perfil} (precisa ser um de: ${PERFIS_COM_PUSH.join(', ')})`);
+  L('serviceWorker' in navigator, 'serviceWorker disponível');
+  L('PushManager' in window, 'PushManager disponível');
+  L('Notification' in window, 'API de notificação disponível');
+  L(!!VAPID_PUBLICA && !/COLE_AQUI/.test(VAPID_PUBLICA), 'chave VAPID pública preenchida');
+  L(typeof supabase !== 'undefined' && !!supabase, 'supabase inicializado');
+  L(location.protocol === 'https:' || location.hostname === 'localhost', `origem segura (${location.protocol})`);
+
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const instalado = window.navigator.standalone === true
+    || window.matchMedia('(display-mode: standalone)').matches;
+  if (ios) L(instalado, 'iPhone: app na Tela de Início (obrigatório no iOS)');
+
+  console.log('permissão atual:', Notification.permission,
+    '(default = ainda não perguntou, granted = já liberado, denied = bloqueado)');
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    L(!!reg, 'service worker ativo');
+    const s = await reg.pushManager.getSubscription();
+    console.log('assinatura neste aparelho:', s ? 'já existe' : 'nenhuma ainda');
+  } catch (e) { L(false, 'service worker: ' + e.message); }
+
+  console.log('---');
+  console.log('Para forçar o convite agora: forcarConvitePush()');
+}
+
+// Mostra o convite na hora, ignorando o estado da permissão.
+function forcarConvitePush() {
+  const p = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : PERFIS_COM_PUSH[0];
+  const antigo = document.getElementById('pushConvite');
+  if (antigo) antigo.remove();
+  _mostrarConvitePush(p);
 }
