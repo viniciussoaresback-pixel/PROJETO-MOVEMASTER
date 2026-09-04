@@ -24,7 +24,7 @@ if (window.__mmPushCarregado) {
 
 // COLE AQUI a chave pública VAPID gerada no passo 1 do guia.
 // Chave PÚBLICA VAPID. A privada fica só nos secrets do Supabase.
-var VAPID_PUBLICA = window.VAPID_PUBLICA || '';
+var VAPID_PUBLICA = window.VAPID_PUBLICA || ' BAAsqQ9zme6TCDHO-3C-0XOodALp2ivsabQKlkXyZra9vL-mlvsUdiOleRAf1ESppMSOllccrFgkxBFv_94dkvU';
 
 // Quem recebe push no celular. Para incluir outro setor depois, basta
 // acrescentar o perfil nesta lista — nada mais precisa mudar.
