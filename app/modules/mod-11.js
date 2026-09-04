@@ -234,6 +234,13 @@ function renderizarEnvioDocsFiscal(){
           ${r.motorista_1?`<span class="fisc-sum-mot">👤 ${r.motorista_1}</span>`:''}
         </div>
         <div class="fisc-sum-dir">
+          ${(() => {
+            const dt = r.created_at || r.criado_em || r.data_saida;
+            if (!dt) return '';
+            const d = new Date(dt);
+            if (isNaN(d)) return '';
+            return `<span class="fisc-sum-data" title="Viagem criada em ${d.toLocaleString('pt-BR')}">📅 ${d.toLocaleDateString('pt-BR')}</span>`;
+          })()}
           ${totalDocs?`<span class="fisc-sum-badge">📎 ${totalDocs}</span>`:''}
           <span class="fisc-status" style="background:${stCor}22;color:${stCor};border:1px solid ${stCor}55">${stLabel}</span>
         </div>
@@ -316,7 +323,18 @@ function _fiscalNumerosCteHTML(rotaId){
     if (!vistos[chave]){ vistos[chave] = { chave, itens:[], lider:p }; grupos.push(vistos[chave]); }
     vistos[chave].itens.push(p);
   });
+  // Guarda os grupos desta viagem para o leitor de DACTE casar as placas
+  _fiscalGruposPorRota[rotaId] = grupos.map(g => ({
+    chave: g.chave,
+    ids: g.itens.map(x => x.id),
+    placas: g.itens.map(x => _normPlaca(x.placa))
+  }));
+
   return `<div style="margin-top:10px;border-top:1px dashed var(--border,rgba(255,255,255,.12));padding-top:10px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-sm btn-secondary" onclick="_dacteAbrirLeitor(${rotaId})">📄 Ler DACTE e preencher</button>
+      <span style="font-size:.72rem;color:var(--text-secondary,#9ca3af)">anexe o PDF e confira antes de salvar</span>
+    </div>
     <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe (carros com a mesma requisição compartilham CTe; requisições diferentes = CTes separados):</div>
     ${grupos.map(g => {
       const lider = g.lider;
@@ -340,6 +358,12 @@ function _fiscalNumerosCteHTML(rotaId){
 // Salva o número da CTe para todos os carros do grupo, SEM re-renderizar o card inteiro
 async function _salvarNumeroCteGrupo(chave, ids){
   const val = document.getElementById(`cteNum_${chave}`)?.value.trim();
+  return _salvarNumeroCteGrupoValor(chave, ids, val);
+}
+
+// Mesma gravação, com o valor vindo de fora (usado pelo leitor de DACTE)
+async function _salvarNumeroCteGrupoValor(chave, ids, valor){
+  const val = (valor == null ? '' : String(valor)).trim();
   const okSpan = document.getElementById(`cteOk_${chave}`);
   try {
     for (const id of ids){
