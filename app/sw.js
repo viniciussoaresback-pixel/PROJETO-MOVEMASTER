@@ -8,7 +8,7 @@
    login e uploads precisam ser sempre ao vivo.
    ===================================================================== */
 
-const VERSAO = 'movemaster-v336';
+const VERSAO = 'movemaster-v337';
 
 // Arquivos do "esqueleto" do app, guardados para funcionar offline
 const ARQUIVOS_BASE = [
@@ -144,6 +144,11 @@ self.addEventListener('push', (evento) => {
       icon: './icon-192.png',
       badge: './icon-192.png',
       vibrate: [200, 100, 200],
+      // tag+renotify: várias cargas seguidas não empilham dezenas de avisos,
+      // mas cada uma ainda vibra e toca.
+      tag: dados.tag || 'movemaster-fiscal',
+      renotify: true,
+      requireInteraction: true,   // fica na tela até o fiscal ver
       data: { url: dados.url || './' }
     })
   );
