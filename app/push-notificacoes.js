@@ -15,7 +15,7 @@
    ========================================================================= */
 
 // COLE AQUI a chave pública VAPID gerada no passo 1 do guia.
-const VAPID_PUBLICA = '';
+const VAPID_PUBLICA = 'BA3LfWTiP1JmLK8V-56YGVh4u1y0kp7Vk-uZyWNTYws1Vtq_blwvxpQ8ovSkT62oDueEbJWgkuBL9d6bQ2evcU4';
 
 // Quem recebe push no celular. Para incluir outro setor depois, basta
 // acrescentar o perfil nesta lista — nada mais precisa mudar.
