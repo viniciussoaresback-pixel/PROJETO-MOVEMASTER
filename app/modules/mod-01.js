@@ -1641,3 +1641,19 @@ function bloquearSeNaoLogistica(acao) {
     return true;
 }
 // Ações da tela de Equipes: logística, admin ou o próprio pessoal da equipe
+
+// ============================================================
+// Ponto 3: feedback instantâneo ao clicar (engana a sensação de demora)
+// Ao clicar num botão, mostra o "afundar" (CSS) e, se a ação demorar,
+// um spinner leve no próprio botão — dando resposta imediata ao usuário.
+// ============================================================
+document.addEventListener('click', function(ev){
+  const btn = ev.target.closest('button, .btn, .nav-btn');
+  if (!btn || btn.disabled) return;
+  if (btn.classList.contains('mm-clicado')) return;
+  // marca "aguardando" só se a ação demorar (>220ms): aí aparece o spinner.
+  // Ações rápidas nem chegam a mostrar (o re-render remove antes).
+  const t = setTimeout(function(){ btn.classList.add('mm-clicado'); }, 220);
+  // remove o estado após um tempo curto (ou quando a tela re-renderiza o botão)
+  setTimeout(function(){ clearTimeout(t); btn.classList.remove('mm-clicado'); }, 1400);
+}, true);
