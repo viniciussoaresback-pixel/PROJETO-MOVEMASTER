@@ -305,6 +305,12 @@ function _selosPedidoHTML(p){
 }
 
 // Ponto 4 — número do CTe por pedido daquela viagem
+// Grupos de carros por viagem — lido pelo leitor de DACTE ao casar as placas.
+// Declarado aqui de propósito: mod-11 é quem preenche, então não pode depender
+// de o dacte-leitor.js ter carregado antes.
+var _fiscalGruposPorRota = window._fiscalGruposPorRota || {};
+window._fiscalGruposPorRota = _fiscalGruposPorRota;
+
 function _fiscalNumerosCteHTML(rotaId){
   const pedidos = _pedidosHistoricoDaViagem(rotaId).filter(p => p.status !== 'Cancelado');
   if (pedidos.length === 0) return '';
