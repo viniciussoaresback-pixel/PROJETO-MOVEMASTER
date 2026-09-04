@@ -131,3 +131,99 @@
   flex: 1 0 100%;
   width: 100%;
 }
+
+/* =========================================================================
+   ÁREA DO MOTORISTA — não acompanha o alargamento
+   O motorista usa no celular, mas quando abre no computador os cards não
+   devem esticar pela tela toda. Mantém a leitura confortável nos dois casos.
+   ========================================================================= */
+
+#motorista {
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- convite para ativar avisos no celular ---- */
+.push-convite {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 100080;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  max-width: min(560px, 94vw);
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface-1, #14141a);
+  border: 1px solid var(--border, rgba(255,255,255,.14));
+  box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  font-size: .88rem;
+}
+
+.push-convite-acoes { display: flex; gap: 8px; margin-left: auto; }
+
+@media (max-width: 520px) {
+  .push-convite { flex-direction: column; align-items: stretch; text-align: center; }
+  .push-convite-acoes { margin-left: 0; justify-content: center; }
+}
+
+/* Data de criação da viagem, na barra do card do fiscal */
+.fisc-sum-data {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary, #9ca3af);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+[data-tema="claro"] .fisc-sum-data {
+  background: rgba(15, 17, 21, 0.04);
+  border-color: rgba(15, 17, 21, 0.12);
+  color: #5b616b;
+}
+
+/* ---- Leitor de DACTE (tela de conferência do fiscal) ---- */
+.dacte-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .6); backdrop-filter: blur(3px); padding: 1rem;
+}
+.dacte-painel {
+  background: var(--surface, #14161b);
+  border: 1px solid var(--border, rgba(255,255,255,.14));
+  border-radius: 12px;
+  width: min(1000px, 96vw); max-height: 88vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.dacte-topo {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .85rem 1.1rem;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.12));
+}
+.dacte-fechar {
+  background: none; border: none; color: inherit;
+  font-size: 1.1rem; cursor: pointer; opacity: .7;
+}
+.dacte-corpo { padding: 1.1rem; overflow: auto; }
+.dacte-resumo {
+  font-size: .9rem; margin-bottom: .9rem; padding: .55rem .8rem;
+  border-radius: 8px; background: rgba(59,130,246,.12);
+  border: 1px solid rgba(59,130,246,.3);
+}
+.dacte-tabela { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.dacte-tabela th, .dacte-tabela td {
+  text-align: left; padding: .5rem .6rem; vertical-align: top;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
+}
+.dacte-tabela th { font-size: .72rem; text-transform: uppercase; opacity: .7; }
+.dacte-mini { font-size: .74rem; color: var(--text-secondary, #9ca3af); }
+.dacte-acoes {
+  display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1rem;
+}
+[data-tema="claro"] .dacte-painel { background: #fff; border-color: rgba(15,17,21,.12); }
