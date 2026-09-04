@@ -8,7 +8,7 @@
    login e uploads precisam ser sempre ao vivo.
    ===================================================================== */
 
-const VERSAO = 'movemaster-v335';
+const VERSAO = 'movemaster-v336';
 
 // Arquivos do "esqueleto" do app, guardados para funcionar offline
 const ARQUIVOS_BASE = [
@@ -40,11 +40,15 @@ const ARQUIVOS_BASE = [
 // Instalação: guarda o esqueleto do app
 self.addEventListener('install', (evento) => {
   evento.waitUntil(
-    caches.open(VERSAO)
-      .then((cache) => cache.addAll(ARQUIVOS_BASE).catch(() => {
-        // se algum arquivo falhar, não impede a instalação
-        return Promise.resolve();
-      }))
+    caches.open(VERSAO).then((cache) =>
+      // Um por um: com addAll, UM arquivo faltando (404) descarta o cache
+      // inteiro e o app fica sem funcionar offline sem avisar ninguém.
+      Promise.all(ARQUIVOS_BASE.map((url) =>
+        cache.add(url).catch((e) => {
+          console.warn('[SW] não cacheado:', url, e && e.message);
+        })
+      ))
+    )
   );
   // Não chamamos skipWaiting aqui: a página decide a hora de trocar,
   // para não recarregar em cima do motorista preenchendo algo.
