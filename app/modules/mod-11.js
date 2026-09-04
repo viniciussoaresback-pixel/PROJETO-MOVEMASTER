@@ -1243,12 +1243,33 @@ async function _viagemEnviarFiscal(rotaId){
   if (typeof gerarEspelhoCarga === 'function'){
     // gera o espelho da carga (mesmo PDF bonito), registrando para o fiscal
     await gerarEspelhoCarga(rota.placa_cegonha, { rotaId: rota.id });
-    // Notifica o fiscal que há uma carga para emitir documentos
+    // Notifica o fiscal que há uma carga para emitir documentos.
+    // A mensagem vai no celular, então precisa se bastar sozinha: quem é o
+    // motorista, qual a cegonha, quantos carros e para onde vai.
     if (typeof notificar === 'function'){
+      // O campo da rota é motorista_1 (e motorista_2 quando vai dupla)
+      const motorista = [rota.motorista_1, rota.motorista_2].filter(Boolean).join(' + ');
+      const origens  = [...new Set(carros.map(c => c.cidadeOrigem).filter(Boolean))];
+      const destinos = [...new Set(carros.map(c => c.cidadeDestino).filter(Boolean))];
+      const trecho = (origens.length && destinos.length)
+        ? `${origens[0]} → ${destinos.length > 1 ? destinos.length + ' destinos' : destinos[0]}`
+        : '';
+      const clientes = [...new Set(carros.map(c => c.cliente).filter(Boolean))];
+      const quemCliente = clientes.length === 1 ? clientes[0]
+                        : clientes.length > 1 ? `${clientes.length} clientes` : '';
+
+      const partes = [
+        motorista ? `👤 ${motorista}` : '',
+        `🚛 ${rota.placa_cegonha}`,
+        `${carros.length} carro(s)`,
+        trecho ? `📍 ${trecho}` : '',
+        quemCliente ? `🏢 ${quemCliente}` : ''
+      ].filter(Boolean);
+
       await notificar({
         perfil: 'fiscal', tipo: 'fiscal',
-        titulo: '📄 Carga enviada para o fiscal',
-        mensagem: `A carga ${rota.placa_cegonha}${rota.nome?(' · '+rota.nome):''} (${carros.length} carro(s)) está pronta para emissão de manifesto/CTe.`
+        titulo: '📄 Carga para emitir CT-e',
+        mensagem: partes.join(' · ')
       });
       // Confirma para a própria logística (fica no sininho)
       await notificar({
