@@ -911,6 +911,9 @@ async function notificar({ perfil, nome, pedidoId, tipo, titulo, mensagem }) {
     } catch (e) {
         console.warn('Notificação não registrada:', e.message);
     }
+
+    // O push para o celular sai sozinho: um Database Webhook no INSERT desta
+    // tabela chama a Edge Function 'notificar-push'. Nada a fazer aqui.
 }
 
 // Notificação que também vira push no celular (para o motorista)
@@ -1768,4 +1771,3 @@ function renderizarDiretoria() {
 // Registra folgas/ferias/atestados e avisa na alocacao
 // quando o motorista esta indisponivel.
 // ============================================
-
