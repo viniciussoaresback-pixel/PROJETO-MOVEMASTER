@@ -392,7 +392,10 @@ function trocarAba(event) {
     if (tabAlvo === 'conferencia' && typeof renderizarCentralConferencia === 'function') renderizarCentralConferencia();
     if (tabAlvo === 'tabelaFrete' && typeof renderizarTabelaFrete === 'function') renderizarTabelaFrete();
     if (tabAlvo === 'remunTrecho' && typeof renderizarTabelaPrecos === 'function') renderizarTabelaPrecos();
-    if (tabAlvo === 'relatoriosFin' && typeof renderizarRelatorioFaturamento === 'function') renderizarRelatorioFaturamento();
+    // A tela de Relatórios precisa que abrirRelatorioFaturamento() monte os
+    // filtros primeiro. renderizarRelatorioFaturamento() sozinha não encontra
+    // o #relatFatConteudo e sai calada — a aba ficava sempre em branco.
+    if (tabAlvo === 'relatoriosFin' && typeof abrirRelatorioFaturamento === 'function') abrirRelatorioFaturamento();
     if (tabAlvo === 'epiUniforme' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
     if (tabAlvo === 'meusPedidos') {
         renderizarPedidosComercial();
