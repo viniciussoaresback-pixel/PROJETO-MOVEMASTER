@@ -1209,6 +1209,12 @@ async function carregarRelatorioFaturamento(){
       });
     });
     _relatFatCache = linhas;
+    if (linhas.length === 0 && cont){
+      cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum CT-e emitido e entregue neste período.<br><span style="font-size:.85rem">O relatório considera apenas pedidos com CT-e emitido no período <strong>e</strong> status Entregue (cortesias ficam de fora).</span></p>';
+      const res = document.getElementById('relatFatResumo'); if (res) res.innerHTML = '';
+      if (typeof renderizarRemuneracaoMotorista === 'function') renderizarRemuneracaoMotorista();
+      return;
+    }
     renderizarRelatorioFaturamento();
     if (typeof renderizarRemuneracaoMotorista === 'function') renderizarRemuneracaoMotorista();
   } catch(e){
@@ -1225,7 +1231,12 @@ function _relSubaba(qual, btn){
   if (qual === 'faturamento'){
     if (fat) fat.style.display = '';
     if (rem) rem.style.display = 'none';
-    if (typeof renderizarRelatorioFaturamento === 'function') renderizarRelatorioFaturamento();
+    // se os filtros ainda não existem, monta a tela inteira
+    if (!document.getElementById('relatFatDe')){
+      if (typeof abrirRelatorioFaturamento === 'function') abrirRelatorioFaturamento();
+    } else if (typeof renderizarRelatorioFaturamento === 'function'){
+      renderizarRelatorioFaturamento();
+    }
   } else {
     if (fat) fat.style.display = 'none';
     if (rem) rem.style.display = '';
@@ -1317,7 +1328,7 @@ function renderizarRemuneracaoMotorista(){
   if (!cont) return;
   const linhas = _relatFatCache || [];
   if (linhas.length === 0){
-    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Gere o relatório de faturamento primeiro (mesmo período).</p>';
+    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum dado no período. Vá em <strong>Faturamento</strong>, ajuste o período e clique em <strong>Gerar</strong>.</p>';
     return;
   }
   // reusa os pedidos do período; recalcula o valor do motorista
