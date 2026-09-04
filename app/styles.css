@@ -331,17 +331,17 @@ body::after {
 
 .tab-content.active {
     display: block;
-    animation: mmTelaSurge 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: mmTelaSurge 0.28s ease-out;
 }
 
 @keyframes mmTelaSurge {
     from {
         opacity: 0;
-        transform: translateY(14px) scale(0.995);
+        transform: translateY(6px);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 }
 
@@ -9640,5 +9640,12 @@ html span.log-passo-bolinha {
 .hist-datas-grupo .hist-data input { flex:1; margin-left:6px; }
 
 /* Animação de "surgir" reutilizável (sub-views, painéis) */
-.mm-surge { animation: mmTelaSurge 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
+.mm-surge { animation: mmTelaSurge 0.28s ease-out; }
 @media (prefers-reduced-motion: reduce) { .mm-surge { animation: none; } }
+
+/* Ponto 3: feedback instantâneo ao clicar (sensação de resposta imediata) */
+button:active, .btn:active, .nav-btn:active { transform: scale(0.97); transition: transform .05s; }
+.mm-clicado { opacity: .75; position: relative; }
+.mm-clicado::after { content: ''; position: absolute; right: 10px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: mmSpin .6s linear infinite; opacity: .8; }
+@keyframes mmSpin { to { transform: rotate(360deg); } }
+body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
