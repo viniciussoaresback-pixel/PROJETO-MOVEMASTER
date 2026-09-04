@@ -99,6 +99,23 @@ async function _assinarEsteDispositivo(perfil) {
   const registro = await navigator.serviceWorker.ready;
 
   let assinatura = await registro.pushManager.getSubscription();
+
+  // Uma assinatura antiga fica amarrada à chave VAPID usada quando foi
+  // criada. Se a chave mudou (ou foi regerada), reaproveitar essa assinatura
+  // faz todo envio falhar com 403 — e sem nenhum sinal aqui no navegador.
+  // Por isso conferimos a chave e reassinamos quando não bate.
+  if (assinatura) {
+    const atual = assinatura.options?.applicationServerKey;
+    const esperada = _base64ParaUint8(VAPID_PUBLICA);
+    const bate = atual && new Uint8Array(atual).length === esperada.length
+      && new Uint8Array(atual).every((b, i) => b === esperada[i]);
+    if (!bate) {
+      console.info('Push: chave VAPID mudou — refazendo a assinatura deste aparelho.');
+      try { await assinatura.unsubscribe(); } catch (e) {}
+      assinatura = null;
+    }
+  }
+
   if (!assinatura) {
     assinatura = await registro.pushManager.subscribe({
       userVisibleOnly: true,
@@ -169,6 +186,39 @@ async function diagnosticarPush() {
 
   console.log('---');
   console.log('Para forçar o convite agora: forcarConvitePush()');
+}
+
+/**
+ * Refaz a assinatura deste aparelho do zero.
+ * Use quando a permissão já foi concedida antes (aí o convite não aparece,
+ * porque não há o que perguntar) ou quando a chave VAPID mudou.
+ * Rode no console: reativarPush()
+ */
+async function reativarPush() {
+  try {
+    if (!VAPID_PUBLICA || /COLE_AQUI/.test(VAPID_PUBLICA)) {
+      console.error('Falta preencher VAPID_PUBLICA em push-notificacoes.js'); return;
+    }
+    const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : PERFIS_COM_PUSH[0];
+    const registro = await navigator.serviceWorker.ready;
+
+    const antiga = await registro.pushManager.getSubscription();
+    if (antiga) {
+      try { await supabase.from('push_assinaturas').delete().eq('endpoint', antiga.endpoint); } catch (e) {}
+      await antiga.unsubscribe();
+      console.info('assinatura anterior removida');
+    }
+
+    if (Notification.permission !== 'granted') {
+      const r = await Notification.requestPermission();
+      if (r !== 'granted') { console.warn('permissão negada'); return; }
+    }
+
+    await _assinarEsteDispositivo(perfil);
+    console.info('✅ pronto — confira a tabela push_assinaturas');
+  } catch (e) {
+    console.error('reativarPush falhou:', e);
+  }
 }
 
 // Mostra o convite na hora, ignorando o estado da permissão.
