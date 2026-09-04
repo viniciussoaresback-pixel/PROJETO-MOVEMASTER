@@ -108,7 +108,6 @@ function lerDacteDeTexto(texto) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { lerDacteDeTexto };
 
 /* =========================================================================
    PDF com VÁRIOS CT-es
@@ -182,8 +181,8 @@ async function lerDactePdf(arquivo) {
   return lerDactesDePaginas(paginas);
 }
 
-if (typeof module !== 'undefined') {
-  module.exports.lerDactesDePaginas = lerDactesDePaginas;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { lerDacteDeTexto, lerDactesDePaginas };  // usado só nos testes
 }
 
 /* =========================================================================
@@ -192,7 +191,8 @@ if (typeof module !== 'undefined') {
    resultado para o fiscal conferir. Só grava depois da confirmação.
    ========================================================================= */
 
-var _fiscalGruposPorRota = {};   // preenchido por _fiscalNumerosCteHTML
+// _fiscalGruposPorRota é declarado em mod-11.js (quem preenche).
+window._fiscalGruposPorRota = window._fiscalGruposPorRota || {};
 var _dacteResultado = null;
 
 function _normPlaca(v) {
@@ -200,7 +200,7 @@ function _normPlaca(v) {
 }
 
 function _dacteAbrirLeitor(rotaId) {
-  const grupos = _fiscalGruposPorRota[rotaId] || [];
+  const grupos = window._fiscalGruposPorRota[rotaId] || [];
   if (!grupos.length) { alert('Nenhum carro nesta viagem para casar com o CT-e.'); return; }
 
   const div = document.createElement('div');
@@ -256,7 +256,7 @@ async function _dacteProcessar(rotaId) {
     return;
   }
 
-  const grupos = _fiscalGruposPorRota[rotaId] || [];
+  const grupos = window._fiscalGruposPorRota[rotaId] || [];
   const linhas = [];
 
   ctes.forEach(cte => {
