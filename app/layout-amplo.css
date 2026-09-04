@@ -1,0 +1,108 @@
+/* =========================================================================
+   LAYOUT AMPLO ("modo paisagem") — Movemaster
+   Aproveita a largura real da tela em vez de travar tudo em 1200px.
+   Arquivo separado de propósito: para desfazer, basta remover a linha
+   <link> deste arquivo no index.html. Nada mais precisa mudar.
+   ========================================================================= */
+
+:root {
+  /* largura máxima do conteúdo: acompanha a tela, com um teto confortável */
+  --mm-largura-conteudo: 1800px;
+  --mm-padding-lateral: 2rem;
+}
+
+/* ---- cabeçalho e conteúdo principal ---- */
+.header-content,
+.main-content {
+  max-width: var(--mm-largura-conteudo);
+  padding-left: var(--mm-padding-lateral);
+  padding-right: var(--mm-padding-lateral);
+}
+
+.main-content {
+  padding-top: 1.75rem;
+  padding-bottom: 2rem;
+}
+
+/* Em telas muito largas (ultrawide), não deixa a linha ficar longa demais */
+@media (min-width: 2100px) {
+  :root { --mm-largura-conteudo: 2000px; }
+}
+
+/* ---- painel lateral de detalhes da viagem (Central de Conferência) ---- */
+/* Era 560px fixo — apertado para tabelas com 5+ colunas. */
+.conf-painel {
+  width: min(1100px, 92vw);
+}
+
+/* ---- modais em geral: mais espaço horizontal ---- */
+.histrelat-painel { max-width: 1500px; }
+.ep-content       { max-width: 1200px; }
+
+/* ---- KPIs: mais colunas quando há espaço ---- */
+@media (min-width: 1500px) {
+  .conf-kpis { grid-template-columns: repeat(5, 1fr); }
+  .cg-kpis   { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ---- tabelas largas: aproveitam a área toda e rolam sozinhas se faltar ---- */
+.conf-tabela-wrap,
+.conf-det-tabela-wrap {
+  overflow-x: auto;
+}
+
+.conf-tabela,
+.conf-det-tabela {
+  min-width: 100%;
+}
+
+/* ---- filtros em linha única enquanto couber ---- */
+@media (min-width: 1400px) {
+  .conf-filtros { flex-wrap: nowrap; }
+  .conf-filtro  { flex: 1 1 auto; min-width: 0; }
+}
+
+/* ---- layouts de duas colunas ganham a segunda coluna mais cedo ---- */
+@media (min-width: 1400px) {
+  .plan-layout,
+  .central-colunas,
+  .histv-layout { gap: 1.5rem; }
+}
+
+/* ---- telas menores: volta ao comportamento anterior ---- */
+@media (max-width: 1024px) {
+  :root { --mm-padding-lateral: 1rem; }
+  .conf-painel { width: 94vw; }
+}
+
+/* ---- botões de atalho do campo "Valor esperado" (Central de Conferência) ---- */
+.conf-esp-botoes {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+
+.conf-esp-btn {
+  font-size: .68rem;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border, rgba(255,255,255,.18));
+  background: rgba(255,255,255,.04);
+  color: inherit;
+  cursor: pointer;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.conf-esp-btn:hover:not(:disabled) {
+  background: rgba(59,130,246,.15);
+  border-color: rgba(59,130,246,.5);
+}
+
+.conf-esp-btn-off,
+.conf-esp-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
