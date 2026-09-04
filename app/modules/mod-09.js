@@ -1062,13 +1062,12 @@ function renderizarCentralConferencia(){
       ${viagens.length === 0 ? '<p class="text-muted" style="padding:1.5rem;text-align:center">Nenhuma viagem realizada no período selecionado.</p>' : `
       <table class="conf-tabela">
         <thead><tr>
-          <th>Viagem</th><th>Data</th><th>Motorista</th><th>Cegonha</th><th>Rota</th><th>Cliente</th>
+          <th>Viagem</th><th>Data</th><th>Motorista</th><th>Cegonha</th><th>Rota</th>
           <th>Veíc.</th><th>Frete lançado</th><th>CT-e</th><th>Status</th><th></th>
         </tr></thead>
         <tbody>
           ${viagens.map(v => {
             const st = _confStatusViagem(v);
-            const cli = v.pedidos[0]?.cliente || '—';
             const rota = `${v.pedidos[0]?.cidadeOrigem||'—'} → ${v.pedidos[v.pedidos.length-1]?.cidadeDestino||'—'}`;
             return `<tr>
               <td><strong>#${v.id}</strong></td>
@@ -1076,7 +1075,6 @@ function renderizarCentralConferencia(){
               <td>${v.motorista}</td>
               <td>${v.cegonha}</td>
               <td style="font-size:.82rem">${rota}</td>
-              <td>${cli}</td>
               <td class="center">${v.pedidos.length}</td>
               <td class="right">${fmt(v.total)}</td>
               <td class="center">${v.comCte}/${v.pedidos.length}</td>
@@ -1188,7 +1186,10 @@ function _confLinhasRelatorio(){
   const viagens = _confViagensFiltradas();
   return viagens.map(v => {
     const st = _confStatusViagem(v);
-    const cli = v.pedidos[0]?.cliente || '—';
+    const clientesUnicos = [...new Set(v.pedidos.map(p => (p.cliente||'').trim()).filter(Boolean))];
+  const cli = clientesUnicos.length === 0 ? '—'
+            : clientesUnicos.length === 1 ? clientesUnicos[0]
+            : `${clientesUnicos.length} clientes`;
     const rota = `${v.pedidos[0]?.cidadeOrigem||'—'} → ${v.pedidos[v.pedidos.length-1]?.cidadeDestino||'—'}`;
     const esperado = v.pedidos.reduce((s,p)=> s + (p.freteEsperado!=null?Number(p.freteEsperado):0), 0);
     const temEsperado = v.pedidos.some(p => p.freteEsperado != null);
@@ -1463,17 +1464,18 @@ function _confAbaConteudo(v){
 
   if (_confAbaDetalhe === 'veiculos'){
     return `<table class="conf-det-tabela">
-      <thead><tr><th>#</th><th>Placa</th><th>Modelo</th><th>Origem</th><th>Destino</th><th>Frete</th><th>CT-e</th></tr></thead>
+      <thead><tr><th>#</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem</th><th>Destino</th><th>Frete</th><th>CT-e</th></tr></thead>
       <tbody>${v.pedidos.map((p,i)=>`<tr>
         <td>${i+1}</td>
         <td><strong>${p.placa||'—'}</strong></td>
         <td>${p.modelo||'—'}</td>
+        <td style="font-size:.82rem">${p.cliente||'—'}</td>
         <td>${p.cidadeOrigem||'—'}</td>
         <td>${p.cidadeDestino||'—'}</td>
         <td class="right">${fmt(p.valorFrete)}</td>
         <td class="center">${(p.numeroCte||cteInfoDoPedido(p.id))?'🟢':'🔴'}</td>
       </tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="5"><strong>Total da viagem</strong></td><td class="right"><strong>${fmt(v.total)}</strong></td><td class="center">${v.comCte}/${v.pedidos.length}</td></tr></tfoot>
+      <tfoot><tr><td colspan="6"><strong>Total da viagem</strong></td><td class="right"><strong>${fmt(v.total)}</strong></td><td class="center">${v.comCte}/${v.pedidos.length}</td></tr></tfoot>
     </table>`;
   }
 
@@ -1494,7 +1496,15 @@ function _confAbaConteudo(v){
       return `<tr>
         <td><strong>${p.placa||'—'}</strong><br><span class="text-muted" style="font-size:.75rem">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span></td>
         <td class="right">${fmt(lancado)}</td>
-        <td><input type="number" step="0.01" class="conf-esperado-input" value="${esperado!=null?esperado:''}" placeholder="valor tabela" oninput="_confSetEsperado(${p.id}, this.value)">${fonteAuto?'<br><span style="font-size:.68rem;color:#3b82f6">🔵 da tabela</span>':''}</td>
+        <td>
+          <input type="number" step="0.01" id="confEsp_${p.id}" class="conf-esperado-input" value="${esperado!=null?esperado:''}" placeholder="digite o valor" oninput="_confSetEsperado(${p.id}, this.value)">
+          <div class="conf-esp-botoes">
+            <button type="button" class="conf-esp-btn" onclick="_confUsarValor(${p.id},'lancado')" title="Copia o frete que foi lançado — zera a diferença">= Frete lançado</button>
+            <button type="button" class="conf-esp-btn ${daTabela?'':'conf-esp-btn-off'}" ${daTabela?'':'disabled'} onclick="_confUsarValor(${p.id},'tabela')" title="${daTabela?'Usa o valor cadastrado na Tabela de Frete':'Sem valor cadastrado na Tabela de Frete para este trecho/cliente'}">📋 Tabela${daTabela?' ('+fmt(daTabela.valor)+')':''}</button>
+            <button type="button" class="conf-esp-btn" onclick="_confUsarValor(${p.id},'limpar')" title="Limpa o campo">✕</button>
+          </div>
+          ${fonteAuto?'<span style="font-size:.68rem;color:#3b82f6">🔵 veio da tabela</span>':''}
+        </td>
         <td class="right" id="confDif_${p.id}" style="color:${difCor};font-weight:700">${difTxt}</td>
       </tr>`;
     }).join('');
@@ -1602,6 +1612,30 @@ function _confEsperadoDoPedido(p){
   return daTabela ? daTabela.valor : null;
 }
 
+// Botões de atalho do campo "valor esperado": copia o frete lançado,
+// puxa o valor da Tabela de Frete, ou limpa pra digitar à mão.
+function _confUsarValor(pedidoId, tipo){
+  const r = (rotasGlobais||[]).find(x => String(x.id)===String(_confViagemSel));
+  if (!r) return;
+  const v = _histDadosViagem(r);
+  const p = v.pedidos.find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+
+  let novoValor = null;
+  if (tipo === 'lancado'){
+    novoValor = Number(p.valorFrete||0);
+  } else if (tipo === 'tabela'){
+    const t = (typeof valorTabelaFretePedido==='function') ? valorTabelaFretePedido(p) : null;
+    if (!t){ if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('⚠️ Sem valor cadastrado na Tabela de Frete para este trecho.'); return; }
+    novoValor = Number(t.valor);
+  } // 'limpar' mantém null
+
+  _confValoresEsperados[pedidoId] = novoValor;
+  const inp = document.getElementById('confEsp_' + pedidoId);
+  if (inp) inp.value = (novoValor == null ? '' : novoValor);
+  _confAtualizarDiferencasFrete();
+}
+
 // Digitar NÃO redesenha mais o painel: só recalcula a coluna "Diferença"
 // e os totais do rodapé. Assim o campo não perde o foco nem o cursor.
 function _confSetEsperado(pedidoId, valor){
@@ -1634,4 +1668,3 @@ function _confAtualizarDiferencasFrete(){
   const tD = document.getElementById('confTotDif');
   if (tD) tD.textContent = temEsperado ? fmt(totalLancado - totalEsperado) : '—';
 }
-
