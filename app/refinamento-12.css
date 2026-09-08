@@ -1,0 +1,199 @@
+/* MoveMaster — Etapa 12: polimento final de detalhes visuais.
+   100% aditivo: apenas CSS, sem tocar em script.js nem no HTML. */
+
+/* ---------- 1. Tipografia de números e valores ---------- */
+table td,
+table th,
+.cg-kpi-num,
+[class*="valor"],
+[class*="total"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---------- 2. Hierarquia dos botões ---------- */
+button,
+.btn,
+input[type="submit"] {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 10px;
+}
+
+button:disabled,
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: saturate(0.5);
+}
+
+/* Botão principal ganha um leve gradiente e sombra de cor */
+button.primario,
+.btn-primary,
+button[type="submit"],
+input[type="submit"] {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.06));
+  box-shadow: 0 2px 8px rgba(255, 122, 0, 0.22);
+}
+
+button.primario:hover,
+.btn-primary:hover,
+button[type="submit"]:hover,
+input[type="submit"]:hover {
+  box-shadow: 0 4px 14px rgba(255, 122, 0, 0.3);
+}
+
+/* Botões secundários ficam discretos, para não competir */
+button.secundario,
+.btn-secondary,
+button.cancelar {
+  background-image: none;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+/* ---------- 3. Cabeçalho de cartões ---------- */
+.card > h2,
+.card > h3,
+.painel > h2,
+.painel > h3,
+section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.card > h2::before,
+.card > h3::before,
+.painel > h2::before,
+.painel > h3::before {
+  content: "";
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: #ff7a00;
+  flex: 0 0 auto;
+}
+
+/* ---------- 4. Modais mais elegantes ---------- */
+.modal,
+[class*="modal"] > .conteudo,
+.modal-content {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.modal h2,
+.modal h3,
+.modal-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+}
+
+[data-tema="claro"] .modal h2,
+[data-tema="claro"] .modal h3,
+[data-tema="claro"] .modal-header {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+/* ---------- 5. Campos de formulário: foco claro e rótulos legíveis ---------- */
+label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
+}
+
+input,
+select,
+textarea {
+  border-radius: 10px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #ff7a00;
+  box-shadow: 0 0 0 3px rgba(255, 122, 0, 0.16);
+  outline: none;
+}
+
+input:invalid:not(:placeholder-shown) {
+  border-color: #e5484d;
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.14);
+}
+
+/* ---------- 6. Barra de rolagem consistente ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 122, 0, 0.45) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 122, 0, 0.35);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 122, 0, 0.6);
+  background-clip: content-box;
+}
+
+/* ---------- 7. Separadores e respiro entre blocos ---------- */
+hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 122, 0, 0.35), rgba(255, 255, 255, 0.06) 60%, transparent);
+  margin: 20px 0;
+}
+
+[data-tema="claro"] hr {
+  background: linear-gradient(90deg, rgba(255, 122, 0, 0.4), rgba(15, 23, 42, 0.08) 60%, transparent);
+}
+
+/* ---------- 8. Seleção de texto e detalhes finais ---------- */
+::selection {
+  background: rgba(255, 122, 0, 0.28);
+}
+
+a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* Não deixa o texto "colar" nas bordas em telas pequenas */
+@media (max-width: 640px) {
+  .card,
+  .painel,
+  section {
+    border-radius: 12px;
+  }
+}
+
+/* ---------- 9. Respeita quem prefere menos movimento ---------- */
+@media (prefers-reduced-motion: reduce) {
+  input,
+  select,
+  textarea,
+  button,
+  .btn {
+    transition: none !important;
+  }
+}
