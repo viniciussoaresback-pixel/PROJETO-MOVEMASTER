@@ -8,7 +8,7 @@
    login e uploads precisam ser sempre ao vivo.
    ===================================================================== */
 
-const VERSAO = 'movemaster-v339';
+const VERSAO = 'movemaster-v340';
 
 // Arquivos do "esqueleto" do app, guardados para funcionar offline
 const ARQUIVOS_BASE = [
@@ -31,6 +31,7 @@ const ARQUIVOS_BASE = [
   './carregador.js',
   './push-notificacoes.js',
   './dacte-leitor.js',
+  './busca-historico.js',
   './layout-amplo.css',
   './manifest.json',
   './icon-192.png',
