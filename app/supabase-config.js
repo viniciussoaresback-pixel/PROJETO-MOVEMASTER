@@ -47,74 +47,10 @@ const CORES_PERFIL = {
     manutencao: 'badge-manutencao'
 };
 
-// ============================================
-// RECUPERAÇÃO DE SENHA — detecção do link do e-mail
-// ============================================
-// Quando a pessoa clica no link do e-mail, o Supabase devolve a URL com
-// "type=recovery" (no hash ou na query) e JÁ CRIA UMA SESSÃO VÁLIDA.
-// Sem esta checagem, verificarSessao() encontra essa sessão e joga a pessoa
-// direto pra dentro do sistema — a tela de nova senha nunca aparece.
-// Por isso a detecção precisa acontecer ANTES de qualquer redirecionamento.
-var _modoRecuperacaoSenha = false;
-var _erroLinkRecuperacao = null;
-
-function _detectarRecuperacaoSenha() {
-    try {
-        const hash  = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
-        const query = new URLSearchParams(window.location.search || '');
-        const tipo  = hash.get('type') || query.get('type');
-        const erro  = hash.get('error_description') || query.get('error_description')
-                   || hash.get('error') || query.get('error');
-
-        if (erro) {
-            // link expirado ou já usado
-            _erroLinkRecuperacao = decodeURIComponent(String(erro).replace(/\+/g, ' '));
-            return;
-        }
-        if (tipo === 'recovery') _modoRecuperacaoSenha = true;
-    } catch (e) {
-        console.warn('Não foi possível ler os parâmetros da URL:', e);
-    }
-}
-
-_detectarRecuperacaoSenha();
-
-// Limpa o token da barra de endereços (evita reenvio ao recarregar a página)
-function _limparUrlRecuperacao() {
-    try {
-        window.history.replaceState({}, document.title,
-            window.location.origin + window.location.pathname);
-    } catch (e) { /* navegador antigo: segue sem limpar */ }
-}
-
-// O Supabase processa o token da URL de forma assíncrona: quando a tela de
-// nova senha aparece, a sessão pode ainda não existir. Sem esta espera, o
-// updateUser() falha com "Auth session missing".
-async function _aguardarSessaoRecuperacao(msTimeout) {
-    const limite = Date.now() + (msTimeout || 8000);
-    while (Date.now() < limite) {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) return true;
-        } catch (e) { /* segue tentando */ }
-        await new Promise(r => setTimeout(r, 250));
-    }
-    return false;
-}
-
-function _mostrarTelaNovaSenha() {
-    ocultarTodasTelas();
-    const boot = document.getElementById('bootLoading');
-    if (boot) boot.style.display = 'none';
-    const tela = document.getElementById('telaNovaSenha');
-    if (tela) tela.style.display = 'flex';
-}
-
 function inicializarSupabase() {
     if (bibliotecaOriginal && typeof bibliotecaOriginal.createClient === 'function') {
         supabase = bibliotecaOriginal.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         console.log('✅ Supabase inicializado com sucesso!');
-        prepararTelaNovaSenha();
         verificarSessao();
     } else {
         console.error('❌ Biblioteca Supabase não encontrada.');
@@ -126,20 +62,6 @@ function inicializarSupabase() {
 // ============================================
 
 async function verificarSessao() {
-    // Link de recuperação: mostra a tela de nova senha em vez de entrar no sistema
-    if (_modoRecuperacaoSenha) { _mostrarTelaNovaSenha(); return; }
-
-    if (_erroLinkRecuperacao) {
-        _limparUrlRecuperacao();
-        mostrarLogin();
-        const erroLogin = document.getElementById('loginErro');
-        if (erroLogin) {
-            erroLogin.style.color = '#f87171';
-            erroLogin.textContent = '⚠️ O link de recuperação expirou ou já foi usado. Peça um novo em "Esqueci minha senha".';
-        }
-        return;
-    }
-
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         usuarioAtual = session.user;
@@ -197,7 +119,7 @@ function direcionarPorPerfil(perfil, email) {
 // ============================================
 
 function ocultarTodasTelas() {
-    ['telaLogin','telaSemPermissao','telaAdmin','appPrincipal','telaNovaSenha'].forEach(id => {
+    ['telaLogin','telaSemPermissao','telaAdmin','appPrincipal'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -361,19 +283,14 @@ async function enviarRecuperacaoSenha() {
 
 // Quando a pessoa volta pelo link do e-mail, o Supabase dispara o evento
 // PASSWORD_RECOVERY — aí mostramos a tela de definir nova senha.
-var _telaNovaSenhaPreparada = false;
-
 function prepararTelaNovaSenha() {
     if (!supabase) return;
-    if (_telaNovaSenhaPreparada) return; // chamada 2x (init + DOMContentLoaded)
-    _telaNovaSenhaPreparada = true;
 
-    // Caminho principal é a detecção pela URL (acima). Este evento fica como
-    // reforço, caso o Supabase processe o token depois do carregamento.
     supabase.auth.onAuthStateChange((evento) => {
         if (evento === 'PASSWORD_RECOVERY') {
-            _modoRecuperacaoSenha = true;
-            _mostrarTelaNovaSenha();
+            ocultarTodasTelas();
+            const tela = document.getElementById('telaNovaSenha');
+            if (tela) tela.style.display = 'flex';
         }
     });
 
@@ -401,14 +318,6 @@ function prepararTelaNovaSenha() {
         btn.disabled = true;
         btn.textContent = 'Salvando...';
 
-        const temSessao = await _aguardarSessaoRecuperacao(8000);
-        if (!temSessao) {
-            erroEl.textContent = 'Sessão de recuperação não encontrada. O link pode ter expirado — peça um novo em "Esqueci minha senha".';
-            btn.disabled = false;
-            btn.textContent = 'Salvar nova senha';
-            return;
-        }
-
         const { error } = await supabase.auth.updateUser({ password: s1 });
 
         if (error) {
@@ -419,8 +328,6 @@ function prepararTelaNovaSenha() {
         }
 
         // Senha trocada: volta para o login limpo
-        _modoRecuperacaoSenha = false;
-        _limparUrlRecuperacao();
         await supabase.auth.signOut();
         document.getElementById('telaNovaSenha').style.display = 'none';
         mostrarLogin();
@@ -432,12 +339,7 @@ function prepararTelaNovaSenha() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', function () {
-    if (supabase) prepararTelaNovaSenha();
-    // Se a página abriu por um link de recuperação, garante a tela certa
-    // mesmo que o boot tenha corrido antes do DOM ficar pronto.
-    if (_modoRecuperacaoSenha) _mostrarTelaNovaSenha();
-});
+document.addEventListener('DOMContentLoaded', prepararTelaNovaSenha);
 
 function mostrarSemPermissao(mensagem) {
     ocultarTodasTelas();
@@ -516,11 +418,6 @@ function mostrarAppComPerfil(email, perfilData) {
 
     // Registrar último acesso (nunca pode travar o login)
     if (usuarioAtual?.id) registrarUltimoAcesso(usuarioAtual.id);
-
-    // Avisos no celular (hoje só para o fiscal). Nunca trava o login.
-    if (typeof prepararPushNotificacoes === 'function') {
-        try { prepararPushNotificacoes(perfilData?.perfil); } catch (e) { console.warn(e); }
-    }
 
     // Badge de perfil
     const badge = document.getElementById('badgePerfil');
@@ -1022,8 +919,13 @@ function regerarEspelhoCarga(placaCegonha, espelhoId) {
 // No iPhone só funciona com o app adicionado à Tela de Início.
 // ============================================
 
-// Chave pública VAPID (pode ficar no código — é pública por natureza)
-const VAPID_PUBLICA = 'BCH1mbE0c4enN4ONTEnY93LTD9PbMzscfUMLx0Jw9JyxqMn8Ae1a0SpP1XjjEY44GPhJJVfs_Mc3gOFMQWsRqyg';
+// A chave pública VAPID é declarada UMA VEZ, em push-notificacoes.js.
+// Antes existia uma cópia aqui, com `const` e com uma chave de OUTRO par:
+//   - `const` aqui + `var` lá = SyntaxError, e o push-notificacoes.js inteiro
+//     deixava de rodar;
+//   - chaves de pares diferentes nunca casariam com a privada dos secrets.
+// Este arquivo usa a mesma variável global (as funções abaixo só rodam
+// depois que todos os scripts carregaram, então ela já existe).
 
 function base64ParaUint8(base64) {
     const padding = '='.repeat((4 - (base64.length % 4)) % 4);
