@@ -57,9 +57,11 @@ tbody tr:hover {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
+/* Fade de entrada da aba desligado: fazia a tela inteira "entrar" a cada
+   troca. Modais e overlays mantêm a animação deles. */
 .tab-content.active, .tab-content[style*="block"],
 .subtab-content.active {
-  animation: mi-fade-in var(--mi-base) var(--mi-ease) both;
+  animation: none;
 }
 
 /* Modais */
