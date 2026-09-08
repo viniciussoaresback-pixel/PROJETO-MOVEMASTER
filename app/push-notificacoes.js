@@ -1,11 +1,3 @@
-/* Protege contra o arquivo ser carregado duas vezes: com `const` no escopo
-   global, a segunda carga estoura "already been declared" e derruba o
-   arquivo inteiro — nada dentro dele chega a rodar. */
-if (window.__mmPushCarregado) {
-  console.info('push-notificacoes.js já estava carregado; ignorando 2ª carga.');
-} else {
-  window.__mmPushCarregado = true;
-
 /* =========================================================================
    MOVEMASTER — Notificações push no celular
    Avisa o fiscal quando existe carga aguardando emissão de CT-e, mesmo com
@@ -229,4 +221,14 @@ function forcarConvitePush() {
   _mostrarConvitePush(p);
 }
 
-}
+/* Tudo acima fica no escopo de topo do arquivo — sem envolver em bloco.
+   Declaração de função dentro de { } não vira global de forma confiável,
+   e era por isso que diagnosticarPush() não existia mesmo com o arquivo
+   certo no ar. Aqui publicamos o que precisa ser chamado de fora. */
+window.__mmPushCarregado = true;
+window.prepararPushNotificacoes = prepararPushNotificacoes;
+window.desativarPushNotificacoes = desativarPushNotificacoes;
+window.diagnosticarPush = diagnosticarPush;
+window.reativarPush = reativarPush;
+window.forcarConvitePush = forcarConvitePush;
+console.info('push-notificacoes.js carregado — use diagnosticarPush() ou reativarPush()');
