@@ -361,20 +361,10 @@ function trocarAba(event) {
     event.currentTarget.classList.add('active');
     const secao = document.getElementById(tabAlvo);
     if (secao) {
-        const jaEstava = (window.__mmAbaAtual === tabAlvo);
         secao.classList.add('active');
-
-        // A animação de entrada roda só quando a aba MUDA. Clicar de novo na
-        // aba em que já se está (ou um redesenho interno) não reanima a tela.
-        if (jaEstava) {
-            secao.classList.add('mm-sem-anim');
-        } else {
-            secao.classList.remove('mm-sem-anim');
-            secao.style.animation = 'none';
-            void secao.offsetWidth; // reflow: reinicia o fade
-            secao.style.animation = '';
-        }
         window.__mmAbaAtual = tabAlvo;
+        // Sem reinício de animação: a troca de aba é instantânea.
+        // O fade estava poluindo a tela e foi desligado no layout-amplo.css.
     }
     if (tabAlvo === 'diretoria') renderizarDiretoria();
     if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
