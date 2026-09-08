@@ -2476,6 +2476,29 @@
                         // Já existe uma versão nova esperando?
                         if (reg.waiting) avisarNovaVersao(reg.waiting);
 
+                        // O SW entrega do cache na hora e busca a versão nova
+                        // por trás. Quando ele avisa que um arquivo mudou,
+                        // oferecemos recarregar — sem interromper quem está
+                        // no meio de um preenchimento.
+                        navigator.serviceWorker.addEventListener('message', function (ev) {
+                            if (!ev.data || ev.data.tipo !== 'nova-versao') return;
+                            if (window.__mmAvisouVersao) return;
+                            window.__mmAvisouVersao = true;
+                            var faixa = document.createElement('div');
+                            faixa.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:99999;background:#111826;color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:.85rem;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+                            faixa.innerHTML = '<span>🔄 Nova versão disponível</span>';
+                            var b = document.createElement('button');
+                            b.textContent = 'Atualizar';
+                            b.style.cssText = 'background:#f97316;border:0;border-radius:6px;padding:5px 12px;color:#111;font-weight:700;cursor:pointer';
+                            b.onclick = function () { location.reload(); };
+                            var x = document.createElement('button');
+                            x.textContent = 'Depois';
+                            x.style.cssText = 'background:transparent;border:0;color:#9ca3af;cursor:pointer';
+                            x.onclick = function () { faixa.remove(); };
+                            faixa.appendChild(b); faixa.appendChild(x);
+                            document.body.appendChild(faixa);
+                        });
+
                         // Nova versão chegou enquanto o app estava aberto
                         reg.addEventListener('updatefound', function () {
                             var novo = reg.installing;
