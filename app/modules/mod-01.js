@@ -361,11 +361,20 @@ function trocarAba(event) {
     event.currentTarget.classList.add('active');
     const secao = document.getElementById(tabAlvo);
     if (secao) {
+        const jaEstava = (window.__mmAbaAtual === tabAlvo);
         secao.classList.add('active');
-        // força a animação de "surgir" reiniciar a cada troca de tela
-        secao.style.animation = 'none';
-        void secao.offsetWidth; // reflow
-        secao.style.animation = '';
+
+        // A animação de entrada roda só quando a aba MUDA. Clicar de novo na
+        // aba em que já se está (ou um redesenho interno) não reanima a tela.
+        if (jaEstava) {
+            secao.classList.add('mm-sem-anim');
+        } else {
+            secao.classList.remove('mm-sem-anim');
+            secao.style.animation = 'none';
+            void secao.offsetWidth; // reflow: reinicia o fade
+            secao.style.animation = '';
+        }
+        window.__mmAbaAtual = tabAlvo;
     }
     if (tabAlvo === 'diretoria') renderizarDiretoria();
     if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
@@ -478,6 +487,103 @@ function preencherSelectCidades(cidades, selectID) {
 // DADOS DO SUPABASE
 // ============================================
 
+// Converte a linha do banco (snake_case) no formato usado pelo sistema.
+// Extraído do carregamento para poder ser reusado pela busca sob demanda —
+// assim um pedido buscado no servidor tem exatamente o mesmo formato dos
+// que já estão em memória.
+function mapearPedidoDoBanco(p) {
+  return {
+    id: p.id,
+    cliente: p.cliente,
+    clienteId: p.cliente_id || null,
+    dataSolicitacao: p.data_solicitacao,
+    prazoEntregaEstimado: p.prazo_entrega_estimado || null,
+    modelo: p.modelo,
+    placa: p.placa,
+    cidadeOrigem: p.cidade_origem,
+    categoriaVeiculo: p.categoria_veiculo || null,
+    ufOrigem: p.uf_origem,
+    cidadeDestino: p.cidade_destino,
+    ufDestino: p.uf_destino,
+    enderecoColeta: p.endereco_coleta,
+    cnpjColeta: p.cnpj_coleta || null,
+    cnpjEntrega: p.cnpj_entrega || null,
+    enderecoEntrega: p.endereco_entrega,
+    valorFrete: p.valor_frete,
+    freteTipo: p.frete_tipo || 'cheio',
+    responsavelComercial: p.responsavel_comercial,
+    referencia: p.referencia || null,
+    observacaoPedido: p.observacao_pedido || null,
+    status: p.status || 'Pendente',
+    rota: p.rota,
+    placaCegonha: p.placa_cegonha,
+    motorista1: p.motorista_1,
+    percentMotorista1: p.percent_motorista_1,
+    motorista2: p.motorista_2,
+    percentMotorista2: p.percent_motorista_2,
+    dataPrevColeta: p.data_prev_coleta,
+    dataPrevEntrega: p.data_prev_entrega,
+    cidadeTransbordo: p.cidade_transbordo || null,
+    transbordoPrevisto: p.transbordo_previsto || null,
+    statusPlanilha: p.status_planilha || null,
+    transbordoEm: p.transbordo_em || null,
+    patioAtual: p.patio_atual || null,
+    corredorManualId: p.corredor_manual_id || null,
+    cobrancaStatus: p.cobranca_status || 'a_cobrar',
+    pagoEm: p.pago_em || null,
+    freteEsperado: p.frete_esperado != null ? p.frete_esperado : null,
+    cobrancaForma: p.cobranca_forma || null,
+    cobradoEm: p.cobrado_em || null,
+    pagoEm: p.pago_em || null,
+    freteEsperado: p.frete_esperado != null ? p.frete_esperado : null,
+    pagtoConfirmadoEm: p.pagto_confirmado_em || null,
+    patioDesde: p.patio_desde || null,
+    grupoId: p.grupo_id || null,
+    rotaId: p.rota_id || null,
+    tipoEntrega: p.tipo_entrega || 'patio',
+    aguardandoRetirada: p.aguardando_retirada || false,
+    qtdTransbordos: p.qtd_transbordos || 0,
+    aguardandoTransbordo: p.aguardando_transbordo || false,
+    precisaEquipeEntrega: p.precisa_equipe_entrega || false,
+    numeroCte: p.numero_cte || null,
+    cteEmitidoEm: p.cte_emitido_em || null,
+    aprovado: p.aprovado !== false,
+    aprovadoEm: p.aprovado_em || null,
+    fluxoEntrega: p.fluxo_entrega || null,
+    equipeEntregaId: p.equipe_entrega_id || null,
+    coletaEquipeEm: p.coleta_equipe_em || null,
+    coletaEquipePor: p.coleta_equipe_por || null,
+    formaColeta: p.forma_coleta || null,
+    localCarro: p.local_carro || null,
+    valorMotoristaTerceiro: p.valor_motorista_terceiro != null ? p.valor_motorista_terceiro : null,
+    guiaIcmsValor: p.guia_icms_valor != null ? p.guia_icms_valor : null,
+    romaneioEnderecoColeta: p.romaneio_endereco_coleta || null,
+    romaneioEnderecoEntrega: p.romaneio_endereco_entrega || null,
+    patioColeta: p.patio_coleta || null,
+    equipeColetaId: p.equipe_coleta_id || null,
+    entregaEquipeId: p.entrega_equipe_id || null,
+    obsColeta: p.obs_coleta || null,
+    entregaEquipeEm: p.entrega_equipe_em || null,
+    entregaEquipePor: p.entrega_equipe_por || null,
+    origemLancamento: p.origem_lancamento || null,
+    criadoPorNome: p.criado_por_nome || null,
+    isReserva: p.is_reserva === true,
+    reservaStatus: p.reserva_status || null,
+    reservaExpiraEm: p.reserva_expira_em || null,
+    statusReprogramacao: p.status_reprogramacao || null,
+    etaReprogramado: p.eta_reprogramado || null,
+    confLogisticaEm: p.confirmacao_logistica_em || null,
+    confLogisticaPor: p.confirmacao_logistica_por || null,
+    confComercialEm: p.confirmacao_comercial_em || null,
+    confComercialPor: p.confirmacao_comercial_por || null,
+    receitaConfirmada: p.receita_confirmada === true,
+    receitaConfirmadaEm: p.receita_confirmada_em || null,
+    receitaConfirmadaPor: p.receita_confirmada_por || null,
+    receitaObservacao: p.receita_observacao || null,
+    createdAt: p.created_at
+  };
+}
+
 async function carregarDadosDoSupabase(opts) {
     if (!supabase) return;
     const somentePedidos = !!(opts && opts.somentePedidos);
@@ -544,96 +650,7 @@ async function carregarDadosDoSupabase(opts) {
         if (resMotoristas.data) motoristasGlobais = resMotoristas.data;
         if (resVeiculos.data)   veiculosGlobais   = resVeiculos.data;
         if (resPedidos.data) {
-            pedidosGlobais = resPedidos.data.map(p => ({
-                id: p.id,
-                cliente: p.cliente,
-                clienteId: p.cliente_id || null,
-                dataSolicitacao: p.data_solicitacao,
-                prazoEntregaEstimado: p.prazo_entrega_estimado || null,
-                modelo: p.modelo,
-                placa: p.placa,
-                cidadeOrigem: p.cidade_origem,
-                categoriaVeiculo: p.categoria_veiculo || null,
-                ufOrigem: p.uf_origem,
-                cidadeDestino: p.cidade_destino,
-                ufDestino: p.uf_destino,
-                enderecoColeta: p.endereco_coleta,
-                cnpjColeta: p.cnpj_coleta || null,
-                cnpjEntrega: p.cnpj_entrega || null,
-                enderecoEntrega: p.endereco_entrega,
-                valorFrete: p.valor_frete,
-                freteTipo: p.frete_tipo || 'cheio',
-                responsavelComercial: p.responsavel_comercial,
-                referencia: p.referencia || null,
-                observacaoPedido: p.observacao_pedido || null,
-                status: p.status || 'Pendente',
-                rota: p.rota,
-                placaCegonha: p.placa_cegonha,
-                motorista1: p.motorista_1,
-                percentMotorista1: p.percent_motorista_1,
-                motorista2: p.motorista_2,
-                percentMotorista2: p.percent_motorista_2,
-                dataPrevColeta: p.data_prev_coleta,
-                dataPrevEntrega: p.data_prev_entrega,
-                cidadeTransbordo: p.cidade_transbordo || null,
-                transbordoPrevisto: p.transbordo_previsto || null,
-                statusPlanilha: p.status_planilha || null,
-                transbordoEm: p.transbordo_em || null,
-                patioAtual: p.patio_atual || null,
-                corredorManualId: p.corredor_manual_id || null,
-                cobrancaStatus: p.cobranca_status || 'a_cobrar',
-                pagoEm: p.pago_em || null,
-                freteEsperado: p.frete_esperado != null ? p.frete_esperado : null,
-                cobrancaForma: p.cobranca_forma || null,
-                cobradoEm: p.cobrado_em || null,
-                pagoEm: p.pago_em || null,
-                freteEsperado: p.frete_esperado != null ? p.frete_esperado : null,
-                pagtoConfirmadoEm: p.pagto_confirmado_em || null,
-                patioDesde: p.patio_desde || null,
-                grupoId: p.grupo_id || null,
-                rotaId: p.rota_id || null,
-                tipoEntrega: p.tipo_entrega || 'patio',
-                aguardandoRetirada: p.aguardando_retirada || false,
-                qtdTransbordos: p.qtd_transbordos || 0,
-                aguardandoTransbordo: p.aguardando_transbordo || false,
-                precisaEquipeEntrega: p.precisa_equipe_entrega || false,
-                numeroCte: p.numero_cte || null,
-                cteEmitidoEm: p.cte_emitido_em || null,
-                aprovado: p.aprovado !== false,
-                aprovadoEm: p.aprovado_em || null,
-                fluxoEntrega: p.fluxo_entrega || null,
-                equipeEntregaId: p.equipe_entrega_id || null,
-                coletaEquipeEm: p.coleta_equipe_em || null,
-                coletaEquipePor: p.coleta_equipe_por || null,
-                formaColeta: p.forma_coleta || null,
-                localCarro: p.local_carro || null,
-                valorMotoristaTerceiro: p.valor_motorista_terceiro != null ? p.valor_motorista_terceiro : null,
-                guiaIcmsValor: p.guia_icms_valor != null ? p.guia_icms_valor : null,
-                romaneioEnderecoColeta: p.romaneio_endereco_coleta || null,
-                romaneioEnderecoEntrega: p.romaneio_endereco_entrega || null,
-                patioColeta: p.patio_coleta || null,
-                equipeColetaId: p.equipe_coleta_id || null,
-                entregaEquipeId: p.entrega_equipe_id || null,
-                obsColeta: p.obs_coleta || null,
-                entregaEquipeEm: p.entrega_equipe_em || null,
-                entregaEquipePor: p.entrega_equipe_por || null,
-                origemLancamento: p.origem_lancamento || null,
-                criadoPorNome: p.criado_por_nome || null,
-                isReserva: p.is_reserva === true,
-                reservaStatus: p.reserva_status || null,
-                reservaExpiraEm: p.reserva_expira_em || null,
-                statusReprogramacao: p.status_reprogramacao || null,
-                etaReprogramado: p.eta_reprogramado || null,
-                confLogisticaEm: p.confirmacao_logistica_em || null,
-                confLogisticaPor: p.confirmacao_logistica_por || null,
-                confComercialEm: p.confirmacao_comercial_em || null,
-                confComercialPor: p.confirmacao_comercial_por || null,
-                receitaConfirmada: p.receita_confirmada === true,
-                receitaConfirmadaEm: p.receita_confirmada_em || null,
-                receitaConfirmadaPor: p.receita_confirmada_por || null,
-                receitaObservacao: p.receita_observacao || null,
-                createdAt: p.created_at
-            }));
+            pedidosGlobais = resPedidos.data.map(mapearPedidoDoBanco);
         }
         preencherSelects();
         // Se a Visão Geral estiver aberta, atualiza com os dados novos
