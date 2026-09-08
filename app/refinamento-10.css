@@ -77,7 +77,8 @@
   }
 }
 tr.mm-row-in {
-  animation: mmRowIn 260ms ease both;
+  /* linhas da tabela não "entram" mais uma a uma — poluía listas longas */
+  animation: none;
   animation-delay: var(--mm-row-delay, 0ms);
 }
 
@@ -137,7 +138,7 @@ tr.mm-row-in {
   box-shadow:
     0 24px 60px -22px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset !important;
-  animation: mmRowIn 420ms ease both;
+  animation: none;
 }
 [data-tema='claro'] .mm-login-card {
   box-shadow:
