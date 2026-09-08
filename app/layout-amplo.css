@@ -229,21 +229,18 @@
 [data-tema="claro"] .dacte-painel { background: #fff; border-color: rgba(15,17,21,.12); }
 
 /* =========================================================================
-   ANIMAÇÃO DE ABA — só ao entrar na aba principal
-   O refinamento-3 aplica o fade em .tab-content E em .log-tab-content.
-   Resultado: além de entrar numa aba, cada troca de sub-aba e cada
-   redesenho interno reanimava a tela inteira. Aqui o fade fica só na
-   entrada da aba principal; o resto troca direto.
+   ANIMAÇÃO DE ABA — desligada
+   O refinamento-3 aplica um fade (mm5-fade) em .tab-content E em
+   .log-tab-content. Na prática isso fazia a tela inteira "piscar" a cada
+   troca de aba, de sub-aba e a cada redesenho interno. Poluía mais do que
+   ajudava, então está desligada.
+   Para voltar: remova este bloco.
    ========================================================================= */
 
+.tab-content,
+.tab-content.active,
 .log-tab-content,
 .cad-subtab-content,
 .painel-view {
-  animation: none !important;
-}
-
-/* Redesenho da mesma aba (filtro, busca, salvar) não reanima:
-   a classe .mm-sem-anim é posta pelo JS ao re-renderizar. */
-.tab-content.mm-sem-anim {
   animation: none !important;
 }
