@@ -1512,6 +1512,7 @@ function _confAbaConteudo(v){
           <div class="conf-esp-botoes">
             <button type="button" class="conf-esp-btn" onclick="_confUsarValor(${p.id},'lancado')" title="Copia o frete que foi lançado — zera a diferença">= Frete lançado</button>
             <button type="button" class="conf-esp-btn ${daTabela?'':'conf-esp-btn-off'}" ${daTabela?'':'disabled'} onclick="_confUsarValor(${p.id},'tabela')" title="${daTabela?'Usa o valor cadastrado na Tabela de Frete':'Sem valor cadastrado na Tabela de Frete para este trecho/cliente'}">📋 Tabela${daTabela?' ('+fmt(daTabela.valor)+')':''}</button>
+            ${daTabela?'':`<button type="button" class="conf-esp-btn" onclick="_irCadastrarTabelaFrete(${p.id})" title="Abre a Tabela de Frete já com cliente, origem e destino preenchidos">➕ Cadastrar na tabela</button>`}
             <button type="button" class="conf-esp-btn" onclick="_confUsarValor(${p.id},'limpar')" title="Limpa o campo">✕</button>
           </div>
           ${fonteAuto?'<span style="font-size:.68rem;color:#3b82f6">🔵 veio da tabela</span>':''}
@@ -1576,6 +1577,9 @@ function _confAbaConteudo(v){
           <td>${podeDefinir
             ? `<input type="number" step="0.01" class="conf-perna-input" value="${vp.origem==='definido'?vp.valor:''}" placeholder="definir R$" oninput="_confSetValorPerna('${chaveManual.replace(/'/g,"\\'")}', this.value)" style="width:110px;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.04);color:inherit;font-size:.82rem">`
             : `<span style="font-size:.74rem;color:#22c55e">${origemLabel[vp.origem]}</span>`}
+            ${vp.origem === 'pendente'
+              ? `<br><button type="button" class="conf-esp-btn" style="margin-top:4px" onclick="_irCadastrarTabelaTrecho('${String(perna.trechoOrigem).replace(/'/g,"\\'")}','${String(perna.trechoDestino).replace(/'/g,"\\'")}','','')" title="Abre a Remuneração por Trecho já com o trecho preenchido">➕ Cadastrar trecho</button>`
+              : ''}
           </td>
           <td class="right"><strong>${vp.valor!=null?fmt(vp.valor):'—'}</strong></td>
         </tr>`;
@@ -1621,6 +1625,50 @@ function _confEsperadoDoPedido(p){
   if (p.freteEsperado != null) return p.freteEsperado;
   const daTabela = (typeof valorTabelaFretePedido==='function') ? valorTabelaFretePedido(p) : null;
   return daTabela ? daTabela.valor : null;
+}
+
+// Atalhos para cadastrar o valor que está faltando, sem precisar sair da
+// conferência, procurar a aba certa e redigitar cliente/origem/destino.
+function _irCadastrarTabelaFrete(pedidoId){
+  const r = (rotasGlobais||[]).find(x => String(x.id)===String(_confViagemSel));
+  const p = r ? _histDadosViagem(r).pedidos.find(x => String(x.id)===String(pedidoId)) : null;
+  if (!p) return;
+
+  if (typeof _confFecharPainel === 'function') _confFecharPainel();
+
+  const btn = document.querySelector('.nav-btn[data-tab="tabelaFrete"]');
+  if (!btn){ alert('Aba "Frete do Cliente" indisponível para o seu perfil.'); return; }
+  btn.click();
+
+  // Espera a aba montar antes de abrir o formulário e preencher
+  setTimeout(() => {
+    if (typeof _tabFreteNovo !== 'function') return;
+    _tabFreteNovo();
+    setTimeout(() => {
+      const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+      set('tfCliente',  p.cliente);
+      set('tfOrigem',   p.cidadeOrigem);
+      set('tfDestino',  p.cidadeDestino);
+      set('tfCategoria', p.categoriaVeiculo);
+      const val = document.getElementById('tfValor');
+      if (val) val.focus();
+    }, 120);
+  }, 350);
+}
+
+function _irCadastrarTabelaTrecho(origem, destino, ufO, ufD){
+  const btn = document.querySelector('.nav-btn[data-tab="remunTrecho"]');
+  if (!btn){ alert('Aba "Remuneração por Trecho" indisponível para o seu perfil.'); return; }
+  btn.click();
+  setTimeout(() => {
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    set('tpOrigem', origem);
+    set('tpUfOrigem', ufO);
+    set('tpDestino', destino);
+    set('tpUfDestino', ufD);
+    const el = document.getElementById('tpComum');
+    if (el){ el.focus(); el.scrollIntoView({ behavior:'smooth', block:'center' }); }
+  }, 350);
 }
 
 // Botões de atalho do campo "valor esperado": copia o frete lançado,
