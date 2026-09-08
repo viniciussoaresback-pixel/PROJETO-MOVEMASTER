@@ -8,7 +8,7 @@
    login e uploads precisam ser sempre ao vivo.
    ===================================================================== */
 
-const VERSAO = 'movemaster-v338';
+const VERSAO = 'movemaster-v339';
 
 // Arquivos do "esqueleto" do app, guardados para funcionar offline
 const ARQUIVOS_BASE = [
@@ -91,44 +91,67 @@ self.addEventListener('fetch', (evento) => {
   }
 
   const mesmaOrigem = url.origin === self.location.origin;
-  // "Esqueleto" do app: HTML, JS e CSS (o que muda a cada deploy)
   const ehAppShell = mesmaOrigem && (
     /\.(html|js|css)$/i.test(url.pathname) ||
     url.pathname === '/' || url.pathname.endsWith('/')
   );
 
   if (ehAppShell) {
-    // SEMPRE rede fresca (ignora o cache HTTP do navegador). Assim, o que você
-    // publica aparece na hora. O cache serve só de reserva quando está offline.
+    // ---- Cache primeiro, atualiza por trás (stale-while-revalidate) ----
+    // Antes era "sempre rede, ignorando cache". Isso deixava o deploy
+    // instantâneo, mas cobrava ~1 MB de download em TODA abertura do
+    // sistema, para todo mundo, inclusive no 4G do motorista. Era essa a
+    // demora ao entrar.
+    // Agora: entrega o que está em cache na hora (abre instantâneo) e busca
+    // a versão nova em paralelo. Quando ela chega e é diferente, avisa a
+    // página, que oferece recarregar. O deploy continua chegando — só não
+    // custa a espera de todo mundo.
     evento.respondWith(
-      fetch(req, { cache: 'no-store' })
-        .then((resposta) => {
-          if (resposta && resposta.status === 200) {
-            const copia = resposta.clone();
-            caches.open(VERSAO).then((cache) => cache.put(req, copia));
-          }
-          return resposta;
+      caches.open(VERSAO).then((cache) =>
+        cache.match(req).then((cacheado) => {
+          const daRede = fetch(req, { cache: 'no-cache' })
+            .then((resposta) => {
+              if (resposta && resposta.status === 200) {
+                cache.put(req, resposta.clone());
+                if (cacheado) avisarSeMudou(cacheado.clone(), resposta.clone(), url.pathname);
+              }
+              return resposta;
+            })
+            .catch(() => cacheado || caches.match('./index.html'));
+
+          // Se tem cache, responde na hora; a rede segue por trás.
+          return cacheado || daRede;
         })
-        .catch(() =>
-          caches.match(req).then((cacheado) => cacheado || caches.match('./index.html'))
-        )
+      )
     );
     return;
   }
 
-  // Demais arquivos do app (ícones, manifest): rede primeiro, com cache de reserva
+  // Demais arquivos do app (ícones, manifest): cache primeiro também
   evento.respondWith(
-    fetch(req)
-      .then((resposta) => {
+    caches.match(req).then((cacheado) => {
+      const daRede = fetch(req).then((resposta) => {
         if (resposta && resposta.status === 200 && mesmaOrigem) {
           const copia = resposta.clone();
           caches.open(VERSAO).then((cache) => cache.put(req, copia));
         }
         return resposta;
-      })
-      .catch(() => caches.match(req))
+      }).catch(() => cacheado);
+      return cacheado || daRede;
+    })
   );
 });
+
+// Compara o que estava em cache com o que veio da rede. Se mudou, avisa as
+// abas abertas para que a página ofereça recarregar.
+async function avisarSeMudou(antiga, nova, caminho) {
+  try {
+    const [a, b] = await Promise.all([antiga.text(), nova.text()]);
+    if (a === b) return;
+    const clientes = await self.clients.matchAll({ type: 'window' });
+    clientes.forEach((c) => c.postMessage({ tipo: 'nova-versao', caminho }));
+  } catch (e) { /* comparação é best-effort */ }
+}
 
 /* ---------------------------------------------------------------------
    NOTIFICAÇÕES PUSH (preparado para uso futuro)
