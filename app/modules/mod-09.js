@@ -961,7 +961,7 @@ async function _tabFreteExcluir(id){
 // CENTRAL DE CONFERÊNCIA (perfil financeiro) — Fase 1: estrutura base
 // Reusa a base de viagens do Histórico de Cargas, adicionando a camada de conferência.
 // ============================================================
-let _confFiltros = { de:null, ate:null, motorista:'', cliente:'', status:'' };
+let _confFiltros = { de:null, ate:null, motorista:'', cliente:'', placa:'', status:'' };
 let _confViagemSel = null;
 
 // Viagens candidatas à conferência: concluídas (viagens realizadas)
@@ -978,6 +978,15 @@ function _confViagensFiltradas(){
   if (f.ate){ const d = new Date(f.ate+'T23:59:59'); lista = lista.filter(v => v.data && new Date(v.data) <= d); }
   if (f.motorista) lista = lista.filter(v => _norm(v.motorista).includes(_norm(f.motorista)));
   if (f.cliente) lista = lista.filter(v => v.pedidos.some(p => _norm(p.cliente||'').includes(_norm(f.cliente))));
+  // Placa: procura tanto na cegonha (por onde o motorista passou) quanto nos
+  // carros transportados (por onde aquele veículo passou).
+  if (f.placa){
+    const alvo = _norm(f.placa).replace(/[^A-Z0-9]/gi,'');
+    lista = lista.filter(v =>
+      _norm(v.rota?.placa_cegonha||'').replace(/[^A-Z0-9]/gi,'').includes(alvo)
+      || v.pedidos.some(p => _norm(p.placa||'').replace(/[^A-Z0-9]/gi,'').includes(alvo))
+    );
+  }
   if (f.status) lista = lista.filter(v => _confStatusViagem(v).chave === f.status);
   // ordena por data desc
   return lista.sort((a,b) => new Date(b.data||0) - new Date(a.data||0));
@@ -1046,6 +1055,7 @@ function renderizarCentralConferencia(){
       <div class="conf-filtro"><label>Período final</label><input type="date" id="confAte" value="${_confFiltros.ate||''}" onchange="_confSetFiltro('ate', this.value)"></div>
       <div class="conf-filtro"><label>Motorista</label><input type="text" id="confMot" value="${_confFiltros.motorista||''}" placeholder="todos" oninput="var _v=this.value; _mmDeb('confFiltro_motorista', function(){ _confSetFiltro('motorista', _v); })"></div>
       <div class="conf-filtro"><label>Cliente</label><input type="text" id="confCli" value="${_confFiltros.cliente||''}" placeholder="todos" oninput="var _v=this.value; _mmDeb('confFiltro_cliente', function(){ _confSetFiltro('cliente', _v); })"></div>
+      <div class="conf-filtro"><label>Placa (cegonha ou carro)</label><input type="text" id="confPlaca" value="${_confFiltros.placa||''}" placeholder="todas" oninput="var _v=this.value; _mmDeb('confFiltro_placa', function(){ _confSetFiltro('placa', _v); })"></div>
       <div class="conf-filtro"><label>Status</label>
         <select id="confStatus" onchange="_confSetFiltro('status', this.value)">
           <option value="">Todos</option>
@@ -1495,6 +1505,7 @@ function _confAbaConteudo(v){
       const difTxt = dif === null ? '—' : (Math.abs(dif) < 0.01 ? 'R$ 0,00 🟢' : fmt(dif)+' 🟠');
       return `<tr>
         <td><strong>${p.placa||'—'}</strong><br><span class="text-muted" style="font-size:.75rem">${p.cidadeOrigem||''}→${p.cidadeDestino||''}</span></td>
+        <td style="font-size:.82rem">${p.cliente||'—'}</td>
         <td class="right">${fmt(lancado)}</td>
         <td>
           <input type="number" step="0.01" id="confEsp_${p.id}" class="conf-esperado-input" value="${esperado!=null?esperado:''}" placeholder="digite o valor" oninput="_confSetEsperado(${p.id}, this.value)">
@@ -1512,9 +1523,9 @@ function _confAbaConteudo(v){
     return `
       <div class="conf-frete-aviso">💡 Valores marcados <span style="color:#3b82f6">🔵 da tabela</span> vieram do cadastro automático. Onde não há cadastro, digite o <strong>valor esperado</strong> manualmente — ou cadastre na aba <strong>Tabela de Frete</strong> para automatizar.</div>
       <table class="conf-det-tabela">
-        <thead><tr><th>Carro</th><th>Frete lançado</th><th>Valor esperado (tabela)</th><th>Diferença</th></tr></thead>
+        <thead><tr><th>Carro</th><th>Cliente</th><th>Frete lançado</th><th>Valor esperado (tabela)</th><th>Diferença</th></tr></thead>
         <tbody>${linhas}</tbody>
-        <tfoot><tr><td><strong>Total</strong></td><td class="right"><strong>${fmt(totalLancado)}</strong></td><td class="right"><strong id="confTotEsperado">${temEsperado?fmt(totalEsperado):'—'}</strong></td><td class="right"><strong id="confTotDif">${difTotal!==null?fmt(difTotal):'—'}</strong></td></tr></tfoot>
+        <tfoot><tr><td colspan="2"><strong>Total</strong></td><td class="right"><strong>${fmt(totalLancado)}</strong></td><td class="right"><strong id="confTotEsperado">${temEsperado?fmt(totalEsperado):'—'}</strong></td><td class="right"><strong id="confTotDif">${difTotal!==null?fmt(difTotal):'—'}</strong></td></tr></tfoot>
       </table>
       <div class="conf-frete-acoes">
         <label style="font-size:.8rem;color:var(--text-secondary,#9ca3af)">Justificativa do ajuste (opcional)</label>
