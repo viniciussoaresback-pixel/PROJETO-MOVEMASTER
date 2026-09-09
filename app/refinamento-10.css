@@ -68,8 +68,8 @@
 /* ---------- 2. Entrada escalonada das linhas da tabela ---------- */
 @keyframes mmRowIn {
   from {
-    opacity: 0;
-    transform: translateY(6px);
+    opacity: 0.45;
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -77,8 +77,9 @@
   }
 }
 tr.mm-row-in {
-  /* linhas da tabela não "entram" mais uma a uma — poluía listas longas */
-  animation: none;
+  /* Queda suave: 3px em vez de 6px e sem partir do zero de opacidade.
+     Percebe-se o movimento sem a tela parecer que está se montando. */
+  animation: mmRowIn 180ms ease both;
   animation-delay: var(--mm-row-delay, 0ms);
 }
 
