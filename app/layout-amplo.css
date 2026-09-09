@@ -244,3 +244,46 @@
 .painel-view {
   animation: none !important;
 }
+
+/* =========================================================================
+   FILTROS DOS PEDIDOS — grupo de botões
+   .cg-filtros é um grid de colunas iguais e .cg-filtro é flex-column. Com
+   os 4 botões dentro de uma célula, eles empilhavam e a caixa toda ficava
+   alta e vazia. Aqui o grupo vira uma faixa própria, alinhada à direita.
+   ========================================================================= */
+
+.cg-filtro-btns {
+  grid-column: 1 / -1;          /* ocupa a linha inteira, abaixo dos campos */
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 4px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.cg-filtro-btns .btn {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+/* "Limpar" separado dos atalhos de período, que são um conjunto */
+.cg-filtro-btns .btn:last-child {
+  margin-left: 8px;
+}
+
+/* Os dois campos de data ficam lado a lado e um pouco mais largos,
+   senão o dd/mm/aaaa fica espremido. */
+.cg-filtros .cg-filtro input[type="date"] {
+  min-width: 140px;
+}
+
+@media (max-width: 640px) {
+  .cg-filtro-btns { justify-content: stretch; }
+  .cg-filtro-btns .btn { flex: 1 1 auto; }
+  .cg-filtro-btns .btn:last-child { margin-left: 0; }
+}
