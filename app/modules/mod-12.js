@@ -1212,6 +1212,13 @@ function _cgAgrupar(lista){
 function renderizarComercialPedidos(){
   const cont = document.getElementById('comercialPedidosConteudo');
   if (!cont) return;
+
+  // Contorno enquanto os pedidos não chegam
+  if (!window.__mmDadosCarregados && typeof mmSkeletonTabela === 'function'){
+    mmSkeletonTabela(cont, { linhas: 8, colunas: 8 });
+    if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => renderizarComercialPedidos());
+    return;
+  }
   const todosPedidos = _cgPedidosFiltrados();
   const itens = _cgAgrupar(todosPedidos);           // grupos + avulsos
   const totalPag = Math.max(1, Math.ceil(itens.length / _CG_POR_PAGINA));
