@@ -1,0 +1,103 @@
+/* MoveMaster — Refinamento 13
+   Acabamento aditivo: respiro do conteúdo, hierarquia de títulos,
+   cartões com topo marcado, listas e rodapés de tabela mais legíveis.
+   Não altera script.js nem o HTML original. */
+
+/* 1. Respiro geral do conteúdo ------------------------------------------- */
+.tab-content,
+.conteudo,
+main {
+  scroll-behavior: smooth;
+}
+
+/* 2. Títulos com hierarquia clara ---------------------------------------- */
+h1, h2, h3 {
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+h2 {
+  line-height: 1.25;
+}
+h3 {
+  font-size: 1rem;
+  opacity: 0.95;
+}
+
+/* 3. Cartões com topo marcado -------------------------------------------- */
+.card,
+.painel,
+.box,
+.secao-card {
+  position: relative;
+  overflow: hidden;
+}
+.card::before,
+.painel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.9), rgba(251, 146, 60, 0));
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.card:hover::before,
+.painel:hover::before {
+  opacity: 1;
+}
+
+/* 4. Listas mais legíveis ------------------------------------------------- */
+ul:not([class]) li,
+ol:not([class]) li {
+  margin-bottom: 0.35rem;
+  line-height: 1.55;
+}
+
+/* 5. Rodapé/totais de tabela --------------------------------------------- */
+table tfoot td,
+table tr.total td,
+table tr.totais td {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border-top: 2px solid rgba(251, 146, 60, 0.35);
+}
+
+/* 6. Legendas e textos auxiliares ---------------------------------------- */
+small,
+.legenda,
+.ajuda,
+.hint {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 0.75;
+}
+
+/* 7. Divisores suaves ----------------------------------------------------- */
+hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.28), transparent);
+  margin: 1.25rem 0;
+}
+
+/* 8. Tema claro: ajustes equivalentes ------------------------------------ */
+[data-tema="claro"] table tfoot td,
+[data-tema="claro"] table tr.total td,
+[data-tema="claro"] table tr.totais td {
+  border-top-color: rgba(234, 88, 12, 0.35);
+}
+[data-tema="claro"] hr {
+  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.14), transparent);
+}
+
+/* 9. Impressão ------------------------------------------------------------ */
+@media print {
+  .card::before,
+  .painel::before { display: none; }
+}
+
+/* 10. Movimento reduzido -------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .card::before,
+  .painel::before { transition: none; }
+}
