@@ -1341,6 +1341,16 @@ function rotaComTransbordoHTML(p) {
 }
 
 async function carregarPainel() {
+    // Enquanto os dados não chegam, contorno em vez de tela vazia.
+    if (!window.__mmDadosCarregados && typeof mmSkeletonCards === 'function') {
+        const tab = document.getElementById('ocupTabelaCorpo');
+        if (tab && typeof mmSkeletonTabela === 'function') mmSkeletonTabela(tab, { linhas: 6, colunas: 7 });
+        const kd = document.getElementById('kanbanDemandaWrap');
+        if (kd) mmSkeletonCards(kd, { quantidade: 4 });
+        if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => carregarPainel());
+        return;
+    }
+
     // Usa dados em memória — evita reload completo a cada abertura da aba
     renderizarKanban();
     verificarNotificacoesColeta();
@@ -1527,6 +1537,15 @@ let pedidoArrastando = null;
 let veiculoAlvoDrop = null;
 
 async function carregarLogistica() {
+    if (!window.__mmDadosCarregados && typeof mmSkeletonCards === 'function') {
+        ['listaPedidosDrag','listaVeiculosDrop'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) mmSkeletonCards(el, { quantidade: 3 });
+        });
+        if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => carregarLogistica());
+        return;
+    }
+
     // Usa dados em memória — evita reload completo a cada abertura da aba
     renderizarPedidosDrag();
     renderizarVeiculosDrop();
