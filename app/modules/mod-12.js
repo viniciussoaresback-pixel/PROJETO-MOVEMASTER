@@ -1246,7 +1246,14 @@ function renderizarComercialPedidos(){
         <option value="entregue" ${_cgPedidoFiltros.status==='entregue'?'selected':''}>Chegou ao destino</option>
       </select></div>
       <div class="cg-filtro"><label>Rota</label><select onchange="_cgSetFiltro('rota',this.value)"><option value="">Todas</option>${rotas.map(r=>`<option value="${r.id}" ${_cgPedidoFiltros.rota===String(r.id)?'selected':''}>${r.nome||('R-'+r.id)}</option>`).join('')}</select></div>
-      <div class="cg-filtro cg-filtro-btns"><button class="btn btn-secondary btn-sm" onclick="_cgLimparFiltros()">Limpar</button></div>
+      <div class="cg-filtro"><label>Período (de)</label><input type="date" value="${_cgPedidoFiltros.dataIni||''}" onchange="_cgSetFiltro('dataIni', this.value)"></div>
+      <div class="cg-filtro"><label>Período (até)</label><input type="date" value="${_cgPedidoFiltros.dataFim||''}" onchange="_cgSetFiltro('dataFim', this.value)"></div>
+      <div class="cg-filtro cg-filtro-btns">
+        <button class="btn btn-secondary btn-sm" onclick="_cgPeriodoRapido(0)" title="Somente hoje">Hoje</button>
+        <button class="btn btn-secondary btn-sm" onclick="_cgPeriodoRapido(7)">7 dias</button>
+        <button class="btn btn-secondary btn-sm" onclick="_cgPeriodoRapido(30)">30 dias</button>
+        <button class="btn btn-secondary btn-sm" onclick="_cgLimparFiltros()">Limpar</button>
+      </div>
     </div>
 
     <div class="cg-tabela-wrap">
@@ -1352,6 +1359,18 @@ function _cgSetFiltro(campo, valor){
     }
   }
 }
+// Atalhos de período. dias=0 significa só hoje.
+function _cgPeriodoRapido(dias){
+  const hoje = new Date();
+  const ini = new Date(hoje);
+  ini.setDate(ini.getDate() - (Number(dias)||0));
+  const iso = (d) => d.toISOString().slice(0,10);
+  _cgPedidoFiltros.dataIni = iso(ini);
+  _cgPedidoFiltros.dataFim = iso(hoje);
+  _cgPedidoPagina = 1;
+  renderizarComercialPedidos();
+}
+
 function _cgLimparFiltros(){ _cgPedidoFiltros = { pedido:'', cliente:'', placa:'', origem:'', destino:'', corredor:'', status:'', dataIni:'', dataFim:'', rota:'' }; _cgPedidoPagina = 1; renderizarComercialPedidos(); }
 function _cgPagina(n){ _cgPedidoPagina = n; renderizarComercialPedidos(); }
 function _cgFmtData(d){ if(!d) return '—'; try { return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e){ return d; } }
