@@ -1005,6 +1005,20 @@ function _confStatusViagem(v){
 }
 
 function renderizarCentralConferencia(){
+  // Se os dados ainda não chegaram, mostra o contorno da tela em vez de
+  // deixá-la em branco. O render real roda de novo quando os dados vierem.
+  if (typeof rotasGlobais === 'undefined' || !Array.isArray(rotasGlobais) || rotasGlobais.length === 0){
+    const alvo = document.getElementById('conferenciaConteudo');
+    if (alvo && typeof mmSkeletonTabela === 'function' && !window.__mmDadosCarregados){
+      mmSkeletonKpis('#conferenciaConteudo', { quantidade: 5 });
+      const extra = document.createElement('div');
+      alvo.appendChild(extra);
+      mmSkeletonTabela(extra, { linhas: 6, colunas: 9 });
+      if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => renderizarCentralConferencia());
+      return;
+    }
+  }
+
   const cont = document.getElementById('conferenciaConteudo');
   if (!cont) return;
   // carrega fechamentos uma vez
