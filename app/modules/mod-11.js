@@ -49,6 +49,14 @@ function _gerarPdfRomaneio(rotaId){
 function renderizarRomaneiosMotorista(){
   const cont = document.getElementById('romaneiosMotoristaWrap');
   if (!cont) return;
+  // Dados ainda não chegaram: mostra o contorno em vez de tela vazia.
+  // No 4G da estrada essa espera é a mais longa do sistema — é aqui que o
+  // skeleton mais rende.
+  if (!window.__mmDadosCarregados && typeof mmSkeletonCards === 'function'){
+    mmSkeletonCards(cont, { quantidade: 3 });
+    if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => renderizarRomaneiosMotorista());
+    return;
+  }
   let minhas = [];
   if (typeof nomesDoMotoristaLogado === 'function'){
     const { nomes } = nomesDoMotoristaLogado();
@@ -80,6 +88,14 @@ function _renderRotaVeiculosEditor(rotaId){
 async function renderizarDocsMotorista(){
   const cont = document.getElementById('docsMotoristaWrap');
   if (!cont) return;
+  // Dados ainda não chegaram: mostra o contorno em vez de tela vazia.
+  // No 4G da estrada essa espera é a mais longa do sistema — é aqui que o
+  // skeleton mais rende.
+  if (!window.__mmDadosCarregados && typeof mmSkeletonCards === 'function'){
+    mmSkeletonCards(cont, { quantidade: 2 });
+    if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => renderizarDocsMotorista());
+    return;
+  }
   try { const { data } = await supabase.from('documentos_rota').select('*').order('enviado_em', { ascending:false }); if (data) documentosRotaGlobais = data; } catch(e){}
   let rotasAtivas = [];
   if (typeof nomesDoMotoristaLogado === 'function'){
@@ -109,6 +125,14 @@ async function renderizarDocsMotorista(){
 function renderizarViagensMotorista(){
   const cont = document.getElementById('viagensMotoristaWrap');
   if (!cont) return;
+  // Dados ainda não chegaram: mostra o contorno em vez de tela vazia.
+  // No 4G da estrada essa espera é a mais longa do sistema — é aqui que o
+  // skeleton mais rende.
+  if (!window.__mmDadosCarregados && typeof mmSkeletonCards === 'function'){
+    mmSkeletonCards(cont, { quantidade: 4 });
+    if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => renderizarViagensMotorista());
+    return;
+  }
   let viagens = [];
   if (typeof nomesDoMotoristaLogado === 'function'){
     const { nomes } = nomesDoMotoristaLogado();
