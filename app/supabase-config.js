@@ -2220,6 +2220,11 @@ async function carregarPedidosMotorista() {
     const lista = document.getElementById('pedidosMotoristaLista');
     if (!lista) return;
 
+    // Contorno enquanto a carga não chega. Esta função ainda recarrega tudo
+    // do Supabase antes de desenhar, então é a espera mais visível do app
+    // do motorista.
+    if (typeof mmSkeletonCards === 'function') mmSkeletonCards(lista, { quantidade: 3 });
+
     // Recarregar dados
     if (supabase && carregarDadosDoSupabase) await carregarDadosDoSupabase();
 
