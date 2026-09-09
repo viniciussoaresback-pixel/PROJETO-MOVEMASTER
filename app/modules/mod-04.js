@@ -715,6 +715,13 @@ function renderizarPedidosComercial() {
     const corpo = document.getElementById('corpoTabelaPedidosComercial');
     if (!corpo) return;
 
+    // Contorno enquanto os pedidos não chegam
+    if (!window.__mmDadosCarregados && typeof mmSkeletonTabela === 'function') {
+        mmSkeletonTabela(corpo, { linhas: 7, colunas: 8 });
+        if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => renderizarPedidosComercial());
+        return;
+    }
+
     const filtroStatus = document.getElementById('filtroPedidosComercial')?.value || '';
     const filtroRota   = document.getElementById('filtroPedidosRota')?.value || '';
     const filtroTexto  = (document.getElementById('filtroPedidosTexto')?.value || '').toLowerCase();
