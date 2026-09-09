@@ -672,6 +672,7 @@ async function carregarDadosDoSupabase(opts) {
         // Avisa quem está esperando os dados (ver __mmDadosProntos acima).
         // Fica no finally de propósito: mesmo se algo falhar, ninguém pode
         // ficar preso esperando para sempre.
+        window.__mmDadosCarregados = true;
         if (typeof window.__mmSinalizarDados === 'function') {
             window.__mmSinalizarDados();
             window.__mmSinalizarDados = null;
