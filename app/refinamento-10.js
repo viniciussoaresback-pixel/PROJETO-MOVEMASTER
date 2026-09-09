@@ -44,12 +44,14 @@
   /* ---------- 2. Entrada escalonada das linhas ---------- */
   function animarLinhas(tbody) {
     var linhas = tbody.querySelectorAll(':scope > tr');
-    var limite = Math.min(linhas.length, 18);
+    var limite = Math.min(linhas.length, 10);   // era 18
     for (var i = 0; i < limite; i++) {
       var tr = linhas[i];
       if (tr.dataset.mmAnim === '1') continue;
       tr.dataset.mmAnim = '1';
-      tr.style.setProperty('--mm-row-delay', i * 28 + 'ms');
+      // 12ms de defasagem (era 28): dá o efeito de queda sem a lista
+      // parecer que está se montando peça por peça.
+      tr.style.setProperty('--mm-row-delay', i * 12 + 'ms');
       tr.classList.add('mm-row-in');
     }
   }
