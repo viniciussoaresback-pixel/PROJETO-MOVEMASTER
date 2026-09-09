@@ -574,6 +574,14 @@ function mapearPedidoDoBanco(p) {
   };
 }
 
+// Promessa que resolve quando o primeiro carregamento termina.
+// Antes, cada tela chutava um setTimeout (600ms, 750ms, 950ms...) torcendo
+// para os dados já terem chegado: curto demais mostrava tela vazia, longo
+// demais era espera artificial. Agora quem precisa dos dados espera o sinal.
+window.__mmDadosProntos = window.__mmDadosProntos || new Promise((resolve) => {
+  window.__mmSinalizarDados = resolve;
+});
+
 async function carregarDadosDoSupabase(opts) {
     if (!supabase) return;
     const somentePedidos = !!(opts && opts.somentePedidos);
@@ -661,6 +669,13 @@ async function carregarDadosDoSupabase(opts) {
         console.error('Erro ao carregar dados:', error);
     } finally {
         if (typeof ocultarProcessando === 'function') ocultarProcessando();
+        // Avisa quem está esperando os dados (ver __mmDadosProntos acima).
+        // Fica no finally de propósito: mesmo se algo falhar, ninguém pode
+        // ficar preso esperando para sempre.
+        if (typeof window.__mmSinalizarDados === 'function') {
+            window.__mmSinalizarDados();
+            window.__mmSinalizarDados = null;
+        }
     }
 }
 
