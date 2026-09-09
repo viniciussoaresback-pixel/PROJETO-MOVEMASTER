@@ -506,16 +506,40 @@ function aplicarPermissoes(perfil) {
         const btn = document.querySelector(`.nav-btn[data-tab="${primeiraAba}"]`);
         if (btn) btn.classList.add('active');
 
-        // Renderiza o conteúdo da aba inicial (os dados podem ainda estar
-        // carregando, por isso a pequena espera).
-        setTimeout(() => {
-            if (primeiraAba === 'diretoria' && typeof renderizarDiretoria === 'function') renderizarDiretoria();
-            if (primeiraAba === 'painel'    && typeof carregarPainel === 'function')      carregarPainel();
-            if (primeiraAba === 'logistica' && typeof carregarLogistica === 'function')   carregarLogistica();
-            if (primeiraAba === 'manutencao' && typeof carregarManutencao === 'function') carregarManutencao();
-            if (primeiraAba === 'faturamento' && typeof renderizarSolicitacoesEPI === 'function') renderizarSolicitacoesEPI();
-            if (typeof popularResponsaveisComercial === 'function') popularResponsaveisComercial();
-        }, 600);
+        // Renderiza a aba inicial assim que os dados chegam — nem antes
+        // (tela vazia), nem depois de um tempo fixo (espera à toa).
+        const pintarAbaInicial = () => {
+            const chamar = (fn) => { if (typeof window[fn] === 'function') { try { window[fn](); } catch(e){ console.warn(fn, e); } } };
+            const porAba = {
+                diretoria:    'renderizarDiretoria',
+                painel:       'carregarPainel',
+                logistica:    'carregarLogistica',
+                manutencao:   'carregarManutencao',
+                faturamento:  'renderizarSolicitacoesEPI',
+                // faltavam: o financeiro caía numa tela vazia até clicar em algo
+                conferencia:  'renderizarCentralConferencia',
+                cobranca:     'renderizarCobranca',
+                tabelaFrete:  'renderizarTabelaFrete',
+                remunTrecho:  'renderizarTabelaPrecos',
+                relatoriosFin:'abrirRelatorioFaturamento',
+                comercialPedidos:  'renderizarComercialPedidos',
+                comercialViagens:  'renderizarComercialViagens',
+                visaoGlobal:  'renderizarVisaoGlobal'
+            };
+            if (porAba[primeiraAba]) chamar(porAba[primeiraAba]);
+            chamar('popularResponsaveisComercial');
+        };
+
+        if (window.__mmDadosProntos && typeof window.__mmDadosProntos.then === 'function') {
+            // Teto de 4s: se o carregamento travar, a tela pinta assim mesmo
+            // em vez de ficar em branco para sempre.
+            Promise.race([
+                window.__mmDadosProntos,
+                new Promise(r => setTimeout(r, 4000))
+            ]).then(pintarAbaInicial);
+        } else {
+            setTimeout(pintarAbaInicial, 600);
+        }
     }
 
     // Mostrar telas especiais para motorista e fiscal
@@ -640,10 +664,18 @@ function mostrarTelaMotorista() {
                 <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Suas viagens concluídas e o que você recebe por elas (pela tabela). Clique numa viagem para ver os carros. (Somente visualização.)</p>
                 <div id="viagensMotoristaWrap"><p class="text-muted">Carregando...</p></div>
             </div>`;
-        setTimeout(() => { if (typeof renderizarRomaneiosMotorista === 'function') renderizarRomaneiosMotorista(); }, 750);
-        setTimeout(() => { if (typeof renderizarDocsMotorista === 'function') renderizarDocsMotorista(); }, 800);
-        setTimeout(() => { if (typeof renderizarViagensMotorista === 'function') renderizarViagensMotorista(); }, 850);
-        setTimeout(() => { if (typeof _initCardsMinimizaveis === 'function') _initCardsMinimizaveis(); }, 950);
+        // Espera os dados em vez de chutar 750/800/850ms
+        const pintarMotorista = () => {
+            ['renderizarRomaneiosMotorista','renderizarDocsMotorista',
+             'renderizarViagensMotorista','_initCardsMinimizaveis'].forEach(fn => {
+                if (typeof window[fn] === 'function') { try { window[fn](); } catch(e){ console.warn(fn, e); } }
+            });
+        };
+        if (window.__mmDadosProntos) {
+            Promise.race([window.__mmDadosProntos, new Promise(r => setTimeout(r, 4000))]).then(pintarMotorista);
+        } else {
+            setTimeout(pintarMotorista, 800);
+        }
         // Importante: existem 2 ".main-content" (telaAdmin e appPrincipal).
         // A tela do motorista precisa ir no main do appPrincipal, que é o visível.
         document.querySelector('#appPrincipal .main-content')?.appendChild(sec);
