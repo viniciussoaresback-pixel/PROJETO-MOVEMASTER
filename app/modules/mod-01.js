@@ -248,12 +248,22 @@ async function aposMutacaoPedidos(opts) {
     opts = opts || {};
     try {
         if (opts.forceFull) {
-            // Recarga COMPLETA de verdade: clientes, motoristas, veículos, pedidos, etc.
-            // (antes recarregava só pedidos, por isso cadastros novos de cliente/motorista/
-            //  veículo não apareciam sem sair e voltar da página.)
-            try { await carregarDadosDoSupabase(); }
-            catch(e){ try { await carregarDadosDoSupabase({ somentePedidos: true }); } catch(_){} }
+            // Recarga COMPLETA: clientes, motoristas, veículos, pedidos, etc.
+            // Usada quando um cadastro novo precisa aparecer.
+            //
+            // Aqui vale o mesmo princípio do fallback abaixo: a tela é
+            // redesenhada JÁ, com o que está em memória, e a recarga corre
+            // por trás. São 15 pontos do sistema chamando isto — registrar
+            // coleta, iniciar viagem, criar corredor... e cada um travava
+            // vários segundos esperando as 25 consultas terminarem.
             refrescarTelaAtual();
+
+            clearTimeout(window.__mmSincTimer);
+            window.__mmSincTimer = setTimeout(async () => {
+                try { await carregarDadosDoSupabase(); }
+                catch(e){ try { await carregarDadosDoSupabase({ somentePedidos: true }); } catch(_){} }
+                refrescarTelaAtual();
+            }, 400);
             return;
         }
         if (opts.pedidosDoBanco) {
@@ -268,9 +278,27 @@ async function aposMutacaoPedidos(opts) {
             refrescarTelaAtual();
             return;
         }
-        // fallback: só pedidos + rotas (muito mais rápido que reload completo)
-        await carregarDadosDoSupabase({ somentePedidos: true });
+        // Fallback (23 chamadas do sistema caem aqui, sem ids/patch).
+        //
+        // Antes: esperava o recarregamento de pedidos + rotas ANTES de
+        // redesenhar. Como a consulta de pedidos leva ~1,2 s, cada clique
+        // de botão na Logística travava esse tempo todo, mesmo o dado já
+        // tendo sido alterado na memória pelo próprio chamador.
+        //
+        // Agora: redesenha NA HORA com o que está em memória (resposta
+        // imediata) e sincroniza com o banco por trás. Se algo divergir,
+        // a tela se corrige sozinha quando a resposta chega.
         refrescarTelaAtual();
+
+        // Junta rajadas: vários cliques seguidos viram uma única ida ao
+        // banco, em vez de uma por clique.
+        clearTimeout(window.__mmSincTimer);
+        window.__mmSincTimer = setTimeout(async () => {
+            try {
+                await carregarDadosDoSupabase({ somentePedidos: true });
+                refrescarTelaAtual();
+            } catch (e) { console.warn('sincronização em segundo plano:', e); }
+        }, 400);
     } catch (e) {
         console.error('aposMutacaoPedidos:', e);
         try { await carregarDadosDoSupabase({ somentePedidos: true }); } catch (e2) {}
@@ -484,6 +512,8 @@ function preencherSelectCidades(cidades, selectID) {
 function mapearPedidoDoBanco(p) {
   return {
     coletaMotorista: p.coleta_motorista,
+    comOcorrencia: p.com_ocorrencia,
+    ocorrenciaMotivo: p.ocorrencia_motivo,
     entregaMotorista: p.entrega_motorista,
     entregaDirecionadaEm: p.entrega_direcionada_em,
     coletaDirecionadaEm: p.coleta_direcionada_em,
