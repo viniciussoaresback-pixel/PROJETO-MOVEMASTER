@@ -1109,6 +1109,22 @@ function _recarregarRealtime() {
         try { if (typeof renderizarPainelCegonhas === 'function') renderizarPainelCegonhas(); } catch (e) {}
         try { if (typeof renderizarKanban === 'function') renderizarKanban(); } catch (e) {}
         try { if (typeof renderizarRotas === 'function') renderizarRotas(); } catch (e) {}
+
+        // Faltavam aqui — e era por isso que:
+        //   • as viagens em andamento não mudavam quando a equipe entregava;
+        //   • o espelho demorava a aparecer para o fiscal (o dado chegava no
+        //     banco na hora, mas a tabela dele só era montada ao abrir a aba).
+        // Cada função checa o próprio container, então chamar todas é barato:
+        // quem não está na tela sai no primeiro if.
+        try { if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento(); } catch (e) {}
+        try { if (typeof carregarDadosFiscal === 'function') carregarDadosFiscal(); } catch (e) {}
+        try { if (typeof renderizarEnvioDocsFiscal === 'function') renderizarEnvioDocsFiscal(); } catch (e) {}
+        try { if (typeof renderizarCentralOperacoes === 'function') renderizarCentralOperacoes(); } catch (e) {}
+        try { if (typeof renderizarCentralConferencia === 'function') renderizarCentralConferencia(); } catch (e) {}
+        try { if (typeof renderizarColetasDirecionadas === 'function') renderizarColetasDirecionadas(); } catch (e) {}
+        try { if (typeof renderizarRomaneiosMotorista === 'function') renderizarRomaneiosMotorista(); } catch (e) {}
+        try { if (typeof renderizarDocsMotorista === 'function') renderizarDocsMotorista(); } catch (e) {}
+
         // Notificações no sino, instantâneas:
         try { if (typeof carregarNotificacoes === 'function') await carregarNotificacoes(); } catch (e) {}
     }, 400); // agrupa mudanças em rajada num só refresh
