@@ -1526,6 +1526,11 @@ async function _cgAbrirRastreio(pedidoId){
         <div><span class="cg-rd-lbl">👤 Motorista</span><span class="cg-rd-val">${p.motorista1||'—'}</span></div>
         <div><span class="cg-rd-lbl">Origem</span><span class="cg-rd-val">${p.cidadeOrigem||'—'}/${p.ufOrigem||''}</span></div>
         <div><span class="cg-rd-lbl">Destino</span><span class="cg-rd-val">${p.cidadeDestino||'—'}/${p.ufDestino||''}</span></div>
+        <div><span class="cg-rd-lbl">💰 Valor do frete</span><span class="cg-rd-val" style="color:#4ade80;font-weight:700">${
+          (p.valorFrete != null && p.valorFrete !== '')
+            ? 'R$ ' + Number(p.valorFrete).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+            : '—'
+        }</span></div>
       </div>
 
       ${p.observacaoPedido ? `<div style="margin:12px 0;padding:12px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:10px;font-size:.88rem;color:#f59e0b"><strong>📝 Observação:</strong> <span style="color:inherit">${p.observacaoPedido}</span></div>` : ''}
