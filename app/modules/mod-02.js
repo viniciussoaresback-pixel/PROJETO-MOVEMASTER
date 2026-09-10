@@ -94,7 +94,9 @@ function montarBlocoCargaFechada(grupoId, itens) {
         <div class="cf-topo" onclick="alternarCargaFechada('${grupoId}')">
             <span class="cf-chevron">${aberto ? '▾' : '▸'}</span>
             <div class="cf-info">
-                <span class="cf-titulo">📦 ${nomenclaturaCarga(itens.length)} · ${itens.length} carros</span>
+                <span class="cf-titulo">📦 ${nomenclaturaCarga(itens.length)} · ${itens.length} carros
+                    <span class="cf-id" title="Identificador da solicitação — todos os carros deste bloco vieram do mesmo pedido">🔖 ${p0.referencia || ('SOL-' + String(grupoId).slice(-6))}</span>
+                </span>
                 <span class="cf-cliente">${p0.cliente || '—'}</span>
                 <span class="cf-rota">${rota}</span>
             </div>
@@ -102,17 +104,40 @@ function montarBlocoCargaFechada(grupoId, itens) {
         </div>
         <div class="cf-itens" style="display:${aberto ? '' : 'none'}">
             ${itens.map(p => `
-                <div class="cf-item">
+                <div class="cf-item" draggable="true" data-pedido-id="${p.id}" title="Arraste só este carro">
+                    <span class="cf-item-alca">⠿</span>
                     <span>#${p.id}</span>
                     <span>🚗 ${p.modelo || ''} <strong>${p.placa || ''}</strong></span>
                     <span class="cf-item-valor">R$ ${Number(p.valorFrete || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 </div>`).join('')}
         </div>
         <div class="cf-rodape">
-            <span class="cf-dica">Arraste o bloco para alocar a carga inteira</span>
+            <span class="cf-dica">Arraste o bloco para levar a carga inteira · abra e arraste um item para levar só ele</span>
         </div>`;
 
+    // Cada carro do bloco pode ser arrastado sozinho. Sem isto, a única
+    // saída era levar os 11 de uma vez — e nem sempre a cegonha comporta
+    // a solicitação inteira.
+    bloco.querySelectorAll('.cf-item').forEach((el) => {
+        el.addEventListener('dragstart', (ev) => {
+            ev.stopPropagation();          // não deixa o bloco assumir o arrasto
+            const id = el.dataset.pedidoId;
+            pedidoArrastando = itens.find(x => String(x.id) === String(id)) || null;
+            cargaArrastando = null;
+            el.classList.add('dragging');
+            ev.dataTransfer.effectAllowed = 'move';
+            const lv = document.getElementById('listaVeiculosDrop');
+            if (lv) lv.classList.add('drop-ativo');
+        });
+        el.addEventListener('dragend', () => {
+            el.classList.remove('dragging');
+            const lv = document.getElementById('listaVeiculosDrop');
+            if (lv) lv.classList.remove('drop-ativo');
+        });
+    });
+
     bloco.addEventListener('dragstart', (e) => {
+        if (e.target.closest('.cf-item')) return;   // o item cuida do próprio arrasto
         if (e.target.closest('.cf-topo') && e.target.tagName === 'BUTTON') { e.preventDefault(); return; }
         cargaArrastando = itens;
         pedidoArrastando = null;
@@ -1661,4 +1686,3 @@ async function salvarCadastroCliente(event) {
 // LISTAS RECOLHÍVEIS (Cadastros)
 // Cabeçalho clicável abre/fecha a tabela e seus controles.
 // ============================================
-
