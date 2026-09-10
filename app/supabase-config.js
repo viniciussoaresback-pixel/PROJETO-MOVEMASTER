@@ -1725,6 +1725,24 @@ async function salvarOcorrencia(pedidoId) {
         if (typeof exibirMensagem === 'function')
             exibirMensagem('mensagemLogistica', '⚠️ Ocorrência registrada e fiscal notificado.', 'success');
 
+        // Se o carro está numa carga, oferece tirá-lo dali na mesma hora.
+        // A ocorrência quase sempre significa que ele não segue viagem, e a
+        // vaga na cegonha precisa ser reaproveitada antes da saída.
+        const _ped = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : [])
+            .find(x => String(x.id) === String(pedidoId));
+        if (_ped && (_ped.rotaId || _ped.rota_id)) {
+            const _tirar = confirm(
+                `Este carro está numa carga.\n\n` +
+                `Deseja TIRÁ-LO da carga agora?\n\n` +
+                `• a vaga na cegonha é liberada para outro carro\n` +
+                `• o pedido volta para a fila, marcado como Ocorrência\n` +
+                `• dá para colocá-lo em outra carga depois, quando resolver`
+            );
+            if (_tirar && typeof tirarCarroDaCargaPorOcorrencia === 'function') {
+                await tirarCarroDaCargaPorOcorrencia(pedidoId, _ped.rotaId || _ped.rota_id, `[${tipo}] ${descricao}`);
+            }
+        }
+
     } catch(err) {
         msgEl.textContent = 'Erro: ' + err.message;
         msgEl.className = 'message show error';
@@ -2261,31 +2279,38 @@ async function criarNovoUsuario(e) {
     msgEl.textContent = 'Criando usuário...';
     msgEl.className = 'message show';
 
+    const vinculoEquipe = (perfil === 'equipe') ? (parseInt(document.getElementById('novoEquipeId')?.value) || null) : null;
+    if (perfil === 'equipe' && !vinculoEquipe){
+        msgEl.textContent = 'Selecione a equipe que este usuário atende.';
+        msgEl.className = 'message show error';
+        return;
+    }
+
     try {
-        // 1. Criar usuário no Supabase Auth via Admin API (via Edge Function ou service role)
-        // Como estamos no frontend, criamos o perfil e o usuário usa "Forgot Password" para definir senha
-        // Alternativa: usar signUp e enviar e-mail de confirmação
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-            email,
-            password: senha,
-            options: { data: { nome } }
+        // A criação acontece no SERVIDOR, pela Edge Function 'criar-usuario'.
+        //
+        // Antes era feita aqui no navegador com supabase.auth.signUp(), e isso
+        // tinha dois problemas graves:
+        //   1. signUp() TROCA A SESSÃO para o usuário recém-criado. O admin
+        //      era deslogado no meio da operação, sem perceber.
+        //   2. o insert em "perfis" acontecia já como esse usuário novo — que
+        //      não é admin. Com o RLS correto, a inserção passa a ser negada.
+        // A Edge Function roda com privilégio de servidor e não mexe na sessão
+        // de quem está usando o sistema.
+        const { data, error } = await supabase.functions.invoke('criar-usuario', {
+            body: { nome, email, senha, perfil, equipe_id: vinculoEquipe }
         });
 
-        if (authError) throw authError;
+        if (error) {
+            const d = (error.message || '').toLowerCase();
+            if (d.includes('not found') || d.includes('failed to send')) {
+                throw new Error('A função "criar-usuario" não está publicada no Supabase. Peça o deploy dela.');
+            }
+            throw error;
+        }
+        if (data?.error) throw new Error(data.error);
 
-        const userId = authData.user?.id;
-        if (!userId) throw new Error('Usuário não criado.');
-
-        // 2. Criar perfil na tabela perfis
-        const vinculoEquipe = (perfil === 'equipe') ? (parseInt(document.getElementById('novoEquipeId')?.value) || null) : null;
-        if (perfil === 'equipe' && !vinculoEquipe){ msgEl.textContent = 'Selecione a equipe que este usuário atende.'; msgEl.className = 'message show error'; return; }
-        const { error: perfilError } = await supabase
-            .from('perfis')
-            .insert({ user_id: userId, perfil, nome, email, ativo: true, equipe_id: vinculoEquipe });
-
-        if (perfilError) throw perfilError;
-
-        msgEl.textContent = '✅ Usuário criado! Ele receberá um e-mail de confirmação.';
+        msgEl.textContent = '✅ Usuário criado!';
         msgEl.className = 'message show success';
         document.getElementById('formNovoUsuario').reset();
         setTimeout(() => {
