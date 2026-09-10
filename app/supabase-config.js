@@ -536,12 +536,18 @@ function registrarUltimoAcesso(userId) {
 
 // Mostrar/ocultar senha (botão próprio — o nativo do navegador
 // não aparece em todos, e some no app instalado em tela cheia)
+const _ICONE_OLHO_ABERTO = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 12S5.5 5 12 5s10.4 7 10.4 7-3.9 7-10.4 7S1.6 12 1.6 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const _ICONE_OLHO_FECHADO = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10.4 7 10.4 7a18 18 0 0 1-2.8 3.6M6.3 6.8A18 18 0 0 0 1.6 12s3.9 7 10.4 7a9.8 9.8 0 0 0 4.2-.9"/><path d="m2 2 20 20"/></svg>';
+
 function alternarVerSenha(campoId, botao) {
     const campo = document.getElementById(campoId);
     if (!campo) return;
     const oculto = campo.type === 'password';
     campo.type = oculto ? 'text' : 'password';
-    botao.textContent = oculto ? '🙈' : '👁';
+    // SVG em vez de emoji: 🙈 e 👁 mudam de tamanho e desenho conforme o
+    // sistema (no Windows o macaquinho sai borrado e desalinhado). O ícone
+    // vetorial fica idêntico em todo lugar e acompanha a cor do texto.
+    botao.innerHTML = oculto ? _ICONE_OLHO_FECHADO : _ICONE_OLHO_ABERTO;
     botao.setAttribute('aria-label', oculto ? 'Ocultar senha' : 'Mostrar senha');
     botao.setAttribute('title', oculto ? 'Ocultar senha' : 'Mostrar senha');
     botao.classList.toggle('ativo', oculto);
@@ -752,6 +758,14 @@ function mostrarTelaMotorista() {
                 </div>
                 <div class="message" id="mensagemMotorista"></div>
             </div>
+            <div class="card" id="cardColetasDirecionadas" style="display:none">
+                <div class="painel-header-bar">
+                    <h2>📍 Coletas e entregas direcionadas</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="renderizarColetasDirecionadas()">↻ Atualizar</button>
+                </div>
+                <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Serviços que a logística direcionou para você. <strong>Não fazem parte da carga da cegonha</strong> — são avulsos.</p>
+                <div id="coletasDirecionadasWrap"></div>
+            </div>
             <div class="card" id="cardRomaneiosMotorista">
                 <div class="painel-header-bar">
                     <h2>📋 Minha carga (romaneio de carregamento)</h2>
@@ -805,7 +819,7 @@ function mostrarTelaMotorista() {
             </div>`;
         // Espera os dados em vez de chutar 750/800/850ms
         const pintarMotorista = () => {
-            ['renderizarRomaneiosMotorista','renderizarDocsMotorista',
+            ['renderizarColetasDirecionadas','renderizarRomaneiosMotorista','renderizarDocsMotorista',
              'renderizarViagensMotorista','_initCardsMinimizaveis'].forEach(fn => {
                 if (typeof window[fn] === 'function') { try { window[fn](); } catch(e){ console.warn(fn, e); } }
             });
