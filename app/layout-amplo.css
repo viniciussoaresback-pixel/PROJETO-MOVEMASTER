@@ -287,3 +287,16 @@
   .cg-filtro-btns .btn { flex: 1 1 auto; }
   .cg-filtro-btns .btn:last-child { margin-left: 0; }
 }
+
+/* =========================================================================
+   MODAL SOBRE A TELA DE LOGIN
+   .login-overlay tem z-index 9999 e .modal tem 1000 — então o modal de
+   "Esqueci minha senha" era criado ATRÁS da tela de login. A pessoa
+   clicava e não via nada; o modal só aparecia depois de entrar no
+   sistema, quando a tela de login sumia.
+   ========================================================================= */
+
+#modalRecuperarSenha,
+.modal.modal-sobre-login {
+  z-index: 10050;   /* acima do .login-overlay (9999) */
+}
