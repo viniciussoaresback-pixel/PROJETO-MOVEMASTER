@@ -341,3 +341,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Identificador da solicitação e arrasto individual dentro do bloco */
+.cf-id {
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  margin-left: 6px;
+  border-radius: 20px;
+  background: rgba(59, 130, 246, .16);
+  color: #60a5fa;
+  white-space: nowrap;
+}
+.cf-item { cursor: grab; }
+.cf-item:hover { background: rgba(255, 255, 255, .04); }
+.cf-item.dragging { opacity: .5; }
+.cf-item-alca { opacity: .35; font-size: .8rem; margin-right: 2px; }
