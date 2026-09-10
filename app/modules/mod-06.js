@@ -534,7 +534,7 @@ function _abrirModalRota(rota) {
             <div class="form-row">
                 <div class="form-group">
                     <label>Cegonha *</label>
-                    <input type="text" id="rotaCegonhaBusca" placeholder="🔎 Buscar por placa, modelo ou transportador..." oninput="_mmDeb('filtrarCegonhasRota', filtrarCegonhasRota)">
+                    <input type="text" id="rotaCegonhaBusca" placeholder="🔎 Buscar por placa, modelo ou transportador..." oninput="filtrarCegonhasRota()" autocomplete="off">
                     <select id="rotaCegonha" size="5" style="margin-top:0.5rem" onchange="_rotaCegonhaSel = this.value; _rotaEditPreencheMotorista()"></select>
                     <div id="rotaCegonhaSelecionada" style="font-size:.82rem;color:#4ade80;margin-top:6px">${rota?.placa_cegonha ? '✅ Cegonha selecionada: <strong>'+rota.placa_cegonha+'</strong>' : ''}</div>
                 </div>
@@ -597,14 +597,19 @@ function filtrarCegonhasRota(tipo) {
         document.getElementById('rotaCegonha')?.setAttribute('data-tipo', tipo);
     }
     const tipoAtual = document.getElementById('rotaCegonha')?.getAttribute('data-tipo') || 'frota';
-    const termo = (document.getElementById('rotaCegonhaBusca')?.value || '').trim().toLowerCase();
+    // Normaliza para a busca funcionar do jeito que a pessoa digita:
+    // "sfd" acha SFD7F50, "sfd-7f50" também, e acentos não atrapalham.
+    const _limpar = (t) => String(t || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+    const termo = _limpar(document.getElementById('rotaCegonhaBusca')?.value);
 
     const lista = (veiculosGlobais || []).filter(v => {
         const eTerceiro = v.propriedade === 'terceiro';
         if (tipoAtual === 'frota' && eTerceiro) return false;
         if (tipoAtual === 'terceiro' && !eTerceiro) return false;
         if (!termo) return true;
-        return `${v.placa || ''} ${v.modelo || ''} ${v.tipo || ''} ${v.transportador_nome || ''}`.toLowerCase().includes(termo);
+        return _limpar(`${v.placa||''}${v.modelo||''}${v.tipo||''}${v.transportador_nome||''}`).includes(termo);
     });
 
     const sel = document.getElementById('rotaCegonha');
@@ -617,6 +622,14 @@ function filtrarCegonhasRota(tipo) {
         const info = tipoAtual === 'terceiro' && v.transportador_nome ? ` · 🏢 ${v.transportador_nome}` : '';
         return `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}">${v.placa} — ${v.tipo || 'Cegonha'} · ${v.capacidade || '?'} vagas${info}${v.motorista_padrao ? ' · 👤 '+v.motorista_padrao : ''}</option>`;
     }).join('');
+
+    // Sobrou uma só: seleciona sozinho. Digitar "sfd" e já ter a cegonha
+    // escolhida evita o clique extra na lista.
+    if (lista.length === 1 && termo) {
+        sel.selectedIndex = 0;
+        _rotaCegonhaSel = lista[0].placa;
+        if (typeof _rotaEditPreencheMotorista === 'function') _rotaEditPreencheMotorista();
+    }
 }
 
 // Preenche o motorista padrão da cegonha ao escolher, na edição de rota
@@ -860,7 +873,9 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
                 const rotuloAntes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
                 // Cancelou a rota = como se o planejamento nunca tivesse existido.
                 // Volta ao estado inicial: "Aguardando coleta" e SEM nenhum vínculo de motorista/cegonha/rota/pátio.
-                const novoRotulo = 'Aguardando coleta';
+                // Status próprio: o carro não é um pendente comum, está parado por um
+    // problema. Assim ele se destaca na fila e ninguém o puxa por engano.
+    const novoRotulo = 'Ocorrência';
                 const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo]) ? STATUS_PLANILHA[novoRotulo].interno : 'Aguardando Confirmação';
                 try {
                     await supabase.from('pedidos').update({
@@ -1524,3 +1539,105 @@ function abrirMoverPedido(pedidoId) {
     document.getElementById('modalMoverPedido').classList.add('show');
 }
 
+
+/* =========================================================================
+   TIRAR UM CARRO DA CARGA POR OCORRÊNCIA
+
+   Imprevisto na rua é rotina: o carro não pode seguir, mas a cegonha vai
+   sair do mesmo jeito e a vaga precisa ser reaproveitada.
+
+   Antes só existia cancelar a rota inteira. Aqui é um carro só:
+     • sai da carga (libera a vaga na cegonha)
+     • volta para os pedidos pendentes, para ser puxado de novo depois
+     • fica MARCADO com a ocorrência, para não parecer um pedido comum
+     • a ocorrência entra no histórico e no registro de ocorrências
+
+   O processo é refazível: o carro volta para a fila e pode entrar em
+   qualquer outra carga, sem nada travado.
+   ========================================================================= */
+
+async function tirarCarroDaCargaPorOcorrencia(pedidoId, rotaId, motivoPronto){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+
+  // Quando vem do registro de ocorrência, o motivo já foi digitado lá —
+  // não faz sentido pedir de novo.
+  let texto = (motivoPronto || '').trim();
+  if (!texto){
+    const motivo = prompt(
+      `Tirar o carro ${p.placa||'#'+p.id} da carga.\n\n` +
+      `Ele volta para os pedidos pendentes e a vaga na cegonha é liberada.\n` +
+      `Descreva a ocorrência:`
+    );
+    if (motivo === null) return;
+    texto = motivo.trim();
+    if (!texto){ alert('Descreva a ocorrência para manter o registro.'); return; }
+  }
+
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const perfil  = (typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica');
+  const rotuloAntes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
+
+  try {
+    const novoRotulo = 'Aguardando coleta';
+    const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo])
+      ? STATUS_PLANILHA[novoRotulo].interno : 'Aguardando Confirmação';
+
+    const { error } = await supabase.from('pedidos').update({
+      status: interno,
+      status_planilha: novoRotulo,
+      rota_id: null,                 // libera a vaga
+      placa_cegonha: null,
+      motorista_1: null, motorista_2: null,
+      percent_motorista_1: null, percent_motorista_2: null,
+      patio_atual: null, patio_desde: null,
+      com_ocorrencia: true,          // marca para destacar na lista
+      ocorrencia_motivo: texto
+    }).eq('id', pedidoId);
+    if (error) throw error;
+
+    Object.assign(p, {
+      status: interno, statusPlanilha: novoRotulo,
+      rotaId: null, rota_id: null, placaCegonha: null,
+      motorista1: null, motorista2: null, patioAtual: null,
+      comOcorrencia: true, ocorrenciaMotivo: texto
+    });
+
+    // Registro da ocorrência (aparece para o fiscal e no histórico do pedido)
+    try {
+      await supabase.from('ocorrencias').insert({
+        pedido_id: parseInt(pedidoId), tipo: 'ocorrencia',
+        descricao: `[RETIRADO DA CARGA] ${texto}`,
+        usuario_nome: usuario, usuario_perfil: perfil
+      });
+    } catch(_){}
+
+    try {
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId),
+        status_anterior: rotuloAntes, status_novo: novoRotulo,
+        usuario_nome: usuario, usuario_perfil: perfil,
+        observacao: `⚠️ Retirado da carga por ocorrência: ${texto} — vaga liberada, pedido voltou para a fila.`
+      });
+    } catch(_){}
+
+    // Avisa o comercial responsável, que precisa retornar ao cliente
+    if (typeof notificar === 'function'){
+      notificar({
+        perfil: 'comercial', nome: p.responsavelComercial, pedidoId: parseInt(pedidoId), tipo: 'acao',
+        titulo: '⚠️ Carro retirado da carga',
+        mensagem: `${p.placa||''} ${p.modelo||''} — ${texto}. Voltou para a fila de planejamento.`
+      });
+    }
+
+    if (typeof mmToast === 'function')
+      mmToast(`⚠️ ${p.placa||'Carro'} saiu da carga. Vaga liberada.`);
+
+    if (typeof refrescarTelaAtual === 'function') refrescarTelaAtual();
+
+  } catch(e){
+    alert('Não foi possível tirar o carro da carga: ' + (e.message||e));
+  }
+}
+
+window.tirarCarroDaCargaPorOcorrencia = tirarCarroDaCargaPorOcorrencia;
