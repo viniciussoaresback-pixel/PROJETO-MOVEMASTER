@@ -105,7 +105,7 @@
                     <div class="campo-senha">
                         <input type="password" id="recSenha1" minlength="6" placeholder="••••••••" autocomplete="new-password" required>
                         <button type="button" class="btn-olho-senha" onclick="alternarVerSenha('recSenha1', this)"
-                            aria-label="Mostrar senha" title="Mostrar senha">👁</button>
+                            aria-label="Mostrar senha" title="Mostrar senha"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 12S5.5 5 12 5s10.4 7 10.4 7-3.9 7-10.4 7S1.6 12 1.6 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
                     </div>
                 </div>
                 <div class="login-group">
@@ -113,7 +113,7 @@
                     <div class="campo-senha">
                         <input type="password" id="recSenha2" minlength="6" placeholder="••••••••" autocomplete="new-password" required>
                         <button type="button" class="btn-olho-senha" onclick="alternarVerSenha('recSenha2', this)"
-                            aria-label="Mostrar senha" title="Mostrar senha">👁</button>
+                            aria-label="Mostrar senha" title="Mostrar senha"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 12S5.5 5 12 5s10.4 7 10.4 7-3.9 7-10.4 7S1.6 12 1.6 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
                     </div>
                 </div>
                 <div id="recErro" class="login-erro"></div>
@@ -260,7 +260,7 @@
                             <div class="campo-senha">
                                 <input type="password" id="novaSenha" required minlength="6" placeholder="Mínimo 6 caracteres">
                                 <button type="button" class="btn-olho-senha" onclick="alternarVerSenha('novaSenha', this)"
-                                    aria-label="Mostrar senha" title="Mostrar senha">👁</button>
+                                    aria-label="Mostrar senha" title="Mostrar senha"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 12S5.5 5 12 5s10.4 7 10.4 7-3.9 7-10.4 7S1.6 12 1.6 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
                             </div>
                         </div>
                     </div>
@@ -287,6 +287,10 @@
                     </span>
                 </h1>
                 <div class="header-right">
+                    <button class="btn-atualizar-tudo" id="btnAtualizarTudo" onclick="atualizarTudo()"
+                            title="Buscar dados novos do servidor" aria-label="Atualizar dados">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+                    </button>
                     <button class="btn-tema" id="btnTema" onclick="alternarTema()" title="Alternar tema claro/escuro" aria-label="Alternar tema">🌙</button>
                     <div class="sino-wrap">
                         <button class="btn-sino" onclick="alternarPainelNotificacoes()" title="Notificações" aria-label="Notificações">
@@ -2365,6 +2369,7 @@
     <!-- OCR de placas (Tesseract.js) — roda no navegador/celular do motorista -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
+    <script src="dedupe-consultas.js"></script>
     <script src="supabase-config.js"></script>
 
     <!-- SheetJS: leitura de planilhas Excel (importação do Evo) -->
