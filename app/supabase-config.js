@@ -169,6 +169,7 @@ async function verificarSessao() {
 }
 
 async function carregarPerfilUsuario(user) {
+    if (_modoRecuperacaoSenha) { _mostrarTelaNovaSenha(); return; }
     try {
         const { data, error } = await supabase
             .from('perfis')
@@ -201,6 +202,12 @@ async function carregarPerfilUsuario(user) {
 }
 
 function direcionarPorPerfil(perfil, email) {
+    // Trava de segurança: durante a recuperação de senha ninguém entra no
+    // sistema, venha a chamada de onde vier. A tela de nova senha chegava a
+    // aparecer e era substituída pela tela de usuários logo em seguida —
+    // era esta função sendo chamada por outro caminho.
+    if (_modoRecuperacaoSenha) { _mostrarTelaNovaSenha(); return; }
+
     ocultarTodasTelas();
     const boot = document.getElementById('bootLoading'); if (boot) boot.style.display = 'none';
 
@@ -399,6 +406,13 @@ function prepararTelaNovaSenha() {
     supabase.auth.onAuthStateChange((evento) => {
         if (evento === 'PASSWORD_RECOVERY') {
             _modoRecuperacaoSenha = true;
+            _mostrarTelaNovaSenha();
+            return;
+        }
+        // No fluxo PKCE o Supabase dispara SIGNED_IN ao trocar o code pela
+        // sessão. Se estivermos recuperando a senha, isso NÃO é um login:
+        // reafirmamos a tela certa em vez de deixar o app seguir.
+        if ((evento === 'SIGNED_IN' || evento === 'TOKEN_REFRESHED') && _modoRecuperacaoSenha) {
             _mostrarTelaNovaSenha();
         }
     });
