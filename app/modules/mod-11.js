@@ -818,6 +818,23 @@ function renderizarViagensAndamento(){
           return `<div class="viagem-item ${sel?'sel':''}" onclick="_selecionarViagem(${r.id})">
             <div class="viagem-item-nome">${r.nome || ('Rota #'+r.id)}</div>
             <div class="viagem-item-sub">🚛 ${r.placa_cegonha||'a definir'} · ${cs.length} carro(s)</div>
+            ${(() => {
+              // Rota real do caminhão: origem → destino, abreviado para caber
+              // na lista. Com destinos diferentes, mostra o primeiro e conta.
+              const orig = [...new Set(cs.map(c => c.cidadeOrigem).filter(Boolean))];
+              const dest = [...new Set(cs.map(c => c.cidadeDestino).filter(Boolean))];
+              if (!orig.length && !dest.length) return '';
+              const curto = (t) => String(t||'').length > 14 ? String(t).slice(0,13) + '.' : (t || '?');
+              const fim = dest.length > 1 ? `${curto(dest[0])} +${dest.length-1}` : curto(dest[0]);
+              return `<div class="viagem-item-rota">🛣️ ${curto(orig[0])} → ${fim}</div>`;
+            })()}
+            ${(() => {
+              const dt = r.data_saida || r.created_at;
+              if (!dt) return '';
+              const d = new Date(dt);
+              if (isNaN(d)) return '';
+              return `<div class="viagem-item-data">📅 ${d.toLocaleDateString('pt-BR')}</div>`;
+            })()}
             <div class="viagem-item-etapa">${VIAGEM_ETAPAS[et].icone} ${VIAGEM_ETAPAS[et].label}</div>
           </div>`;
         }).join('')}
