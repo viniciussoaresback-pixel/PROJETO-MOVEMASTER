@@ -300,3 +300,33 @@
 .modal.modal-sobre-login {
   z-index: 10050;   /* acima do .login-overlay (9999) */
 }
+
+/* Olho da senha: ícone estático, sem o "pulo" ao clicar.
+   O :active fazia translateY(-50%) scale(0.9) — o botão saltava a cada
+   clique, e o emoji ainda mudava de tamanho junto. */
+.btn-olho-senha:active { transform: translateY(-50%); }
+.btn-olho-senha svg { display: block; pointer-events: none; }
+
+/* ---- Botão de atualizar no cabeçalho (discreto de propósito) ---- */
+.btn-atualizar-tudo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-secondary, #9ca3af);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity .15s ease, background .15s ease, color .15s ease;
+}
+.btn-atualizar-tudo:hover { opacity: 1; background: rgba(255,255,255,.06); color: inherit; }
+.btn-atualizar-tudo svg { display: block; }
+.btn-atualizar-tudo.girando { opacity: 1; color: var(--orange, #f97316); cursor: default; }
+.btn-atualizar-tudo.girando svg { animation: mmGira 900ms linear infinite; }
+@keyframes mmGira { to { transform: rotate(360deg); } }
+
+[data-tema="claro"] .btn-atualizar-tudo { border-color: rgba(15,17,21,.12); color: #6b7280; }
+[data-tema="claro"] .btn-atualizar-tudo:hover { background: rgba(15,17,21,.05); }
