@@ -205,7 +205,10 @@ function abrirRecuperarSenha() {
 
     const modal = document.createElement('div');
     modal.id = 'modalRecuperarSenha';
-    modal.className = 'modal show';
+    // modal-sobre-login: sobe a camada acima da .login-overlay (z-index 9999),
+    // senão o modal nasce atrás da tela de login e ninguém o vê.
+    modal.className = 'modal show modal-sobre-login';
+    modal.style.zIndex = '10050';
     modal.innerHTML = `
         <div class="modal-content" style="max-width:440px">
             <span class="close" onclick="document.getElementById('modalRecuperarSenha').remove()">&times;</span>
