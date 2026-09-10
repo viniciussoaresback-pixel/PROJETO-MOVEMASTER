@@ -1088,11 +1088,69 @@ async function _viagemMudarStatusCarros(ids, statusInterno, statusPlanilha, obs)
 async function _viagemRegistrarColeta(rota, carros){
   const elegiveis = carros.filter(c => !['Em Transporte','Transbordo','Entregue','Cancelado'].includes(c.status));
   if (elegiveis.length === 0){ alert('Nenhum carro pendente de coleta nesta viagem.'); return; }
-  _viagemModalCarros('🚚 Registrar Coleta', 'Selecione os carros que foram coletados. O evento fica registrado na jornada.', elegiveis, '#16a34a', '✅ Confirmar coleta', async (ids) => {
-    await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado', '🚚 Coleta registrada (evento na viagem)');
-    document.getElementById('modalViagemAcao').remove();
-    renderizarViagensAndamento();
+  _viagemModalCarros('🚚 Registrar Coleta', 'Selecione os carros e informe como a coleta foi feita.', elegiveis, '#16a34a', '➡️ Continuar', async (ids) => {
+    document.getElementById('modalViagemAcao')?.remove();
+    _viagemModalFormaColeta(rota, ids);
   });
+}
+
+/* -------------------------------------------------------------------------
+   COMO FOI A COLETA
+   Espelha o "Como foi a entrega?", que já existia. A logística é quem faz o
+   direcionamento no dia a dia, então faz sentido poder resolver aqui, na
+   viagem, sem voltar ao lançamento do pedido.
+   As três saídas são possibilidades a mais — o registro direto continua
+   sendo a primeira opção, com um clique.
+   ------------------------------------------------------------------------- */
+function _viagemModalFormaColeta(rota, ids){
+  const old = document.getElementById('modalFormaColeta'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalFormaColeta';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:470px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">🚚 Como foi a coleta?</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} veículo(s).</p>
+
+      <button class="forma-entrega-opt" onclick="_viagemColetaFeita([${ids.join(',')}])">
+        <div class="feo-ic">✅</div>
+        <div><div class="feo-tit">Já coletado</div><div class="feo-sub">O carro já está com a cegonha. Registra a coleta agora.</div></div>
+      </button>
+
+      <button class="forma-entrega-opt" onclick="_viagemColetaParaEquipe(${rota.id},[${ids.join(',')}])">
+        <div class="feo-ic">👥</div>
+        <div><div class="feo-tit">Direcionar para equipe de coleta</div><div class="feo-sub">Uma equipe busca o carro e leva até o pátio/base.</div></div>
+      </button>
+
+      <button class="forma-entrega-opt" onclick="_viagemColetaParaMotorista([${ids.join(',')}])">
+        <div class="feo-ic">👤</div>
+        <div><div class="feo-tit">Direcionar para um motorista</div><div class="feo-sub">Aparece no app dele, separado da carga da cegonha.</div></div>
+      </button>
+
+      <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalFormaColeta').remove()">Cancelar</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+// (a) já coletado — comportamento que existia antes
+async function _viagemColetaFeita(ids){
+  await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado', '🚚 Coleta registrada (evento na viagem)');
+  document.getElementById('modalFormaColeta')?.remove();
+  renderizarViagensAndamento();
+}
+
+// (b) equipe de coleta — reaproveita o modal da Central de Operações
+function _viagemColetaParaEquipe(rotaId, ids){
+  document.getElementById('modalFormaColeta')?.remove();
+  if (typeof _centralModalEquipe === 'function'){ _centralModalEquipe(ids); return; }
+  alert('Direcionamento para equipe indisponível nesta tela.');
+}
+
+// (c) motorista — grava em coleta_motorista, fora da carga
+function _viagemColetaParaMotorista(ids){
+  document.getElementById('modalFormaColeta')?.remove();
+  if (typeof _centralModalMotoristaColeta === 'function'){ _centralModalMotoristaColeta(ids); return; }
+  alert('Direcionamento para motorista indisponível nesta tela.');
 }
 
 async function _viagemIniciar(rota, carros){
