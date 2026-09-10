@@ -483,6 +483,10 @@ function preencherSelectCidades(cidades, selectID) {
 // que já estão em memória.
 function mapearPedidoDoBanco(p) {
   return {
+    coletaMotorista: p.coleta_motorista,
+    entregaMotorista: p.entrega_motorista,
+    entregaDirecionadaEm: p.entrega_direcionada_em,
+    coletaDirecionadaEm: p.coleta_direcionada_em,
     id: p.id,
     cliente: p.cliente,
     clienteId: p.cliente_id || null,
@@ -1160,6 +1164,32 @@ async function salvarPedidoComercial(event) {
     // Item 1 — modo Reserva (fluxo leve, sem veículos, com timer)
     if (document.getElementById('pedidoReserva')?.checked) {
         return salvarReservaComercial();
+    }
+
+    // ---- Aviso de placa já em transporte ----
+    // Só pedidos ATIVOS: uma placa que já rodou com a gente antes voltaria
+    // a alertar sempre, e o aviso perderia a força.
+    const _placaNova = (document.getElementById('placa')?.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // salvarPedidoComercial() só faz INSERT (nunca update), então todo
+    // lançamento que passa aqui é pedido novo.
+    if (_placaNova.length >= 6) {
+        const _repetidos = (pedidosGlobais || []).filter(x =>
+            String(x.placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === _placaNova
+            && !['Entregue', 'Cancelado'].includes(x.status)
+        );
+        if (_repetidos.length > 0) {
+            const _lista = _repetidos.slice(0, 5).map(x =>
+                `  • #${x.id} — ${x.cliente || 'sem cliente'} · ${x.status}` +
+                `\n    ${x.cidadeOrigem || '?'} → ${x.cidadeDestino || '?'}`
+            ).join('\n');
+            const _seguir = confirm(
+                `⚠️ A placa ${_placaNova} já está em ${_repetidos.length} pedido(s) em andamento:\n\n` +
+                _lista +
+                (_repetidos.length > 5 ? `\n  ...e mais ${_repetidos.length - 5}` : '') +
+                `\n\nIsso costuma ser lançamento em duplicidade. Deseja cadastrar mesmo assim?`
+            );
+            if (!_seguir) return;
+        }
     }
 
     const pedido = {
