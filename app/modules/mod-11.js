@@ -880,6 +880,10 @@ function _viagemDetalheHTML(rota, carros){
       <div><span class="jv-dl">Motorista</span><span class="jv-dv">${rota.motorista_1||'a definir'}</span></div>
       <div><span class="jv-dl">Caminhão / Carreta</span><span class="jv-dv">${rota.placa_cegonha||'a definir'}</span></div>
       <div><span class="jv-dl">Carros na carga</span><span class="jv-dv">${carros.length}</span></div>
+      <div><span class="jv-dl">Frete da carga</span><span class="jv-dv" style="color:#4ade80;font-weight:700">${
+        'R$ ' + carros.reduce((soma, c) => soma + (Number(c.valorFrete) || 0), 0)
+                     .toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+      }</span></div>
       <div><span class="jv-dl">Status</span><span class="jv-dv">${VIAGEM_ETAPAS[etapaAtual].label}</span></div>
     </div>
   </div>`;
@@ -1671,3 +1675,65 @@ function _planDragStartGrupo(ev, ids){
 }
 
 // Datas do pedido: criação e entrega prevista (para priorização no planejamento)
+
+/* =========================================================================
+   COLETAS DIRECIONADAS (motorista)
+   Coletas avulsas que a logística mandou para este motorista pela Central
+   de Operações. Ficam SEPARADAS da carga da cegonha de propósito: são
+   serviços fora da carga, e misturar as duas coisas confunde quem está na
+   rua. Por enquanto é informativo — não há ação a confirmar aqui.
+   ========================================================================= */
+function renderizarColetasDirecionadas(){
+  const card = document.getElementById('cardColetasDirecionadas');
+  const cont = document.getElementById('coletasDirecionadasWrap');
+  if (!card || !cont) return;
+
+  if (!window.__mmDadosCarregados && typeof mmSkeletonCards === 'function'){
+    card.style.display = '';
+    mmSkeletonCards(cont, { quantidade: 2 });
+    if (window.__mmDadosProntos) window.__mmDadosProntos.then(() => renderizarColetasDirecionadas());
+    return;
+  }
+
+  const { nomes } = (typeof nomesDoMotoristaLogado === 'function')
+    ? nomesDoMotoristaLogado() : { nomes: new Set() };
+
+  // Coletas E entregas direcionadas — as duas são serviços avulsos, fora
+  // da carga da cegonha, e fazem sentido juntas na mesma lista.
+  const minhas = [];
+  (pedidosGlobais || []).forEach(p => {
+    if (['Entregue','Cancelado'].includes(p.status)) return;
+    if (p.coletaMotorista && nomes.has(normNomeMotorista(p.coletaMotorista))) {
+      minhas.push({ p, tipo: 'coleta' });
+    }
+    if (p.entregaMotorista && nomes.has(normNomeMotorista(p.entregaMotorista))) {
+      minhas.push({ p, tipo: 'entrega' });
+    }
+  });
+
+  // Card só aparece quando há coleta direcionada — não ocupa espaço à toa
+  if (minhas.length === 0){ card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  cont.innerHTML = minhas.map(({ p, tipo }) => {
+    const ehColeta = tipo === 'coleta';
+    const cor      = ehColeta ? '#38bdf8' : '#a855f7';
+    const rotulo   = ehColeta ? '📍 Coleta avulsa' : '🏁 Entrega avulsa';
+    const endereco = ehColeta ? p.enderecoColeta : p.enderecoEntrega;
+    const quando   = ehColeta ? p.coletaDirecionadaEm : p.entregaDirecionadaEm;
+    return `
+    <div class="motorista-pedido-card" style="--mp-cor:${cor}">
+      <div class="mpedido-header">
+        <span class="mpedido-id">#${p.id}</span>
+        <span class="mpedido-status" style="color:${cor};background:${cor}20;border:1px solid ${cor}40">${rotulo}</span>
+      </div>
+      <div class="mpedido-cliente">${p.cliente || '—'}</div>
+      <div class="mpedido-rota">📍 ${p.cidadeOrigem || ''}/${p.ufOrigem || ''} → 🏁 ${p.cidadeDestino || ''}/${p.ufDestino || ''}</div>
+      <div class="mpedido-veiculo">🚗 ${p.modelo || ''} · <strong>${p.placa || ''}</strong></div>
+      ${endereco ? `<div class="mpedido-data">🏠 ${endereco}</div>` : ''}
+      ${quando ? `<div class="mpedido-data">📅 Direcionada em ${new Date(quando).toLocaleString('pt-BR')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+window.renderizarColetasDirecionadas = renderizarColetasDirecionadas;
