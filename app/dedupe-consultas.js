@@ -127,3 +127,88 @@ async function atualizarTudo() {
 }
 
 window.atualizarTudo = atualizarTudo;
+
+/* =========================================================================
+   ESPELHO LOCAL DAS ALTERAÇÕES
+
+   O problema: ao registrar coleta ou iniciar viagem em vários carros, a
+   tela redesenhava com o que estava na memória — mas quem fez a alteração
+   nem sempre atualizava a memória. Resultado: alguns itens ficavam para
+   trás, mostrando o estado antigo, até a recarga do banco chegar segundos
+   depois.
+
+   São 38 pontos do sistema alterando pedidos, cada um de um jeito.
+   Em vez de corrigir os 38 (e ainda esquecer algum, e quebrar de novo no
+   próximo que for escrito), interceptamos a própria gravação: quando um
+   UPDATE em "pedidos" volta com sucesso, aplicamos a mesma alteração no
+   objeto em memória e redesenhamos.
+
+   Assim vale para todos os botões, inclusive os que ainda não existem.
+   ========================================================================= */
+
+(() => {
+  const fetchAtual = window.fetch;
+
+  // id=eq.123  ou  id=in.(1,2,3)
+  function idsDaUrl(url) {
+    try {
+      const q = new URL(url, location.origin).searchParams.get('id') || '';
+      if (q.startsWith('eq.')) return [q.slice(3)];
+      if (q.startsWith('in.')) return q.slice(3).replace(/[()]/g, '').split(',').map(s => s.trim());
+    } catch (e) {}
+    return [];
+  }
+
+  // snake_case do banco -> camelCase usado nas telas
+  const PARA_TELA = {
+    status: 'status', valor_frete: 'valorFrete', placa: 'placa', modelo: 'modelo',
+    cliente: 'cliente', rota_id: 'rotaId', motorista_1: 'motorista1', motorista_2: 'motorista2',
+    placa_cegonha: 'placaCegonha', cidade_origem: 'cidadeOrigem', cidade_destino: 'cidadeDestino',
+    uf_origem: 'ufOrigem', uf_destino: 'ufDestino', aprovado: 'aprovado',
+    aguardando_retirada: 'aguardandoRetirada', status_planilha: 'statusPlanilha',
+    coleta_motorista: 'coletaMotorista', entrega_motorista: 'entregaMotorista',
+    equipe_id: 'equipeId', observacao_pedido: 'observacaoPedido'
+  };
+
+  window.fetch = async function (entrada, opcoes) {
+    const resposta = await fetchAtual.apply(this, arguments);
+
+    try {
+      const url = typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '';
+      const metodo = ((opcoes && opcoes.method) || (entrada && entrada.method) || 'GET').toUpperCase();
+
+      if (metodo !== 'PATCH' || !url.includes('/rest/v1/pedidos')) return resposta;
+      if (!resposta.ok) return resposta;
+      if (typeof pedidosGlobais === 'undefined') return resposta;
+
+      const ids = idsDaUrl(url);
+      if (!ids.length) return resposta;
+
+      const corpo = JSON.parse((opcoes && opcoes.body) || '{}');
+
+      let mudou = 0;
+      ids.forEach(id => {
+        const p = pedidosGlobais.find(x => String(x.id) === String(id));
+        if (!p) return;
+        Object.keys(corpo).forEach(campo => {
+          const destino = PARA_TELA[campo];
+          if (destino) p[destino] = corpo[campo];
+          p[campo] = corpo[campo];   // guarda também no nome original
+        });
+        mudou++;
+      });
+
+      // Redesenha uma vez só, mesmo com vários UPDATEs em sequência
+      if (mudou && typeof refrescarTelaAtual === 'function') {
+        clearTimeout(window.__mmEspelhoTimer);
+        window.__mmEspelhoTimer = setTimeout(() => {
+          try { refrescarTelaAtual(); } catch (e) { console.warn('refrescarTelaAtual:', e); }
+        }, 60);
+      }
+    } catch (e) {
+      console.warn('espelho local:', e);   // nunca derruba a requisição
+    }
+
+    return resposta;
+  };
+})();
