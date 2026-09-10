@@ -592,7 +592,10 @@ function _centralColunaColetas(coletas){
     </div>
     <div class="central-col-rodape">
       <span class="text-muted">${coletas.length} pedido(s)</span>
-      <button class="central-btn central-btn-laranja" onclick="_centralDirecionarEquipe()">👥 Direcionar para equipe</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="central-btn central-btn-azul" onclick="_centralDirecionarMotoristaColeta()">👤 Motorista</button>
+        <button class="central-btn central-btn-laranja" onclick="_centralDirecionarEquipe()">👥 Direcionar para equipe</button>
+      </div>
     </div>`}
   </div>`;
 }
@@ -661,6 +664,71 @@ function _centralDirecionarMotorista(){
   const ids = [...document.querySelectorAll('.central-chk-entrega:checked')].map(c => parseInt(c.value));
   if (ids.length === 0){ alert('Selecione ao menos uma entrega.'); return; }
   _centralModalMotorista(ids);
+}
+
+// ---- Direcionar COLETAS para um motorista ----
+// Grava em coleta_motorista, e NÃO em motorista_1. O motorista_1 é o
+// motorista da cegonha; se usássemos ele, a coleta avulsa entraria na
+// carga e se misturaria com os carros que já estão sendo transportados.
+function _centralDirecionarMotoristaColeta(){
+  const ids = [...document.querySelectorAll('.central-chk-coleta:checked')].map(c => parseInt(c.value));
+  if (ids.length === 0){ alert('Selecione ao menos uma coleta.'); return; }
+  _centralModalMotoristaColeta(ids);
+}
+
+function _centralModalMotoristaColeta(ids){
+  const old = document.getElementById('modalCentralMotColeta'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalCentralMotColeta';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">👤 Direcionar coleta para motorista</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">
+        ${ids.length} coleta(s) selecionada(s). Elas aparecem no app do motorista
+        em <strong>Coletas direcionadas</strong>, separadas da carga da cegonha.
+      </p>
+      <div class="form-group">
+        <label>Motorista</label>
+        <input type="text" id="centralMotColetaSel" placeholder="Nome do motorista" list="listaMotColeta">
+        <datalist id="listaMotColeta">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#2563eb" onclick="_centralConfirmarMotoristaColeta([${ids.join(',')}])">✅ Direcionar</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalCentralMotColeta').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _centralConfirmarMotoristaColeta(ids){
+  const mot = document.getElementById('centralMotColetaSel')?.value.trim();
+  if (!mot){ alert('Informe o motorista.'); return; }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  let ok = 0;
+
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    try {
+      const { error } = await supabase.from('pedidos').update({
+        coleta_motorista: mot,
+        coleta_direcionada_em: new Date().toISOString(),
+        coleta_direcionada_por: usuario
+      }).eq('id', id);
+      if (error) throw error;
+      if (p){
+        p.coletaMotorista = mot;
+        p.coletaDirecionadaEm = new Date().toISOString();
+      }
+      ok++;
+    } catch(e){
+      console.error('Erro ao direcionar coleta', id, e);
+    }
+  }
+
+  document.getElementById('modalCentralMotColeta')?.remove();
+  if (typeof mmToast === 'function') mmToast(`✅ ${ok} coleta(s) direcionada(s) para ${mot}`);
+  if (typeof renderizarCentralOperacoes === 'function') renderizarCentralOperacoes();
 }
 
 // Modal: direcionar coletas para uma EQUIPE
@@ -790,12 +858,23 @@ function _centralModalMotorista(ids){
 async function _centralConfirmarMotorista(ids){
   const mot = document.getElementById('centralMotoristaSel')?.value.trim();
   if (!mot){ alert('Informe o motorista.'); return; }
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+
+  // Grava em entrega_motorista, e NÃO em motorista_1. Antes escrevia no
+  // motorista_1 — o campo do motorista da cegonha —, e por isso a entrega
+  // avulsa entrava na carga e se misturava com os carros transportados.
   for (const id of ids){
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
     if (!p) continue;
     try {
-      await supabase.from('pedidos').update({ motorista_1: mot }).eq('id', id);
-      p.motorista1 = mot;
+      const { error } = await supabase.from('pedidos').update({
+        entrega_motorista: mot,
+        entrega_direcionada_em: new Date().toISOString(),
+        entrega_direcionada_por: usuario
+      }).eq('id', id);
+      if (error) throw error;
+      p.entregaMotorista = mot;
+      p.entregaDirecionadaEm = new Date().toISOString();
     } catch(e){ console.error('Erro ao direcionar entrega', id, e); }
   }
   document.getElementById('modalCentralMotorista')?.remove();
@@ -1161,8 +1240,23 @@ function _cgPedidosFiltrados(){
       if (f.status === 'aguardando' && !['Aguardando coleta','Não liberado','Enviado coleta','Coletado'].includes(st)) return false;
     }
     if (f.rota && String(p.rotaId||p.rota_id||'') !== f.rota) return false;
-    if (f.dataIni && (p.dataSolicitacao||'') < f.dataIni) return false;
-    if (f.dataFim && (p.dataSolicitacao||'') > f.dataFim + 'T23:59') return false;
+    // ---- Filtro de período ----
+    // Antes: `(p.dataSolicitacao||'') < f.dataIni`. Um pedido SEM data de
+    // solicitação virava string vazia, que é menor que qualquer data — e
+    // sumia da lista sem explicação assim que alguém preenchia o "de".
+    // Agora usamos a data de criação como reserva e normalizamos para
+    // AAAA-MM-DD, para a comparação não depender do formato (com T, com
+    // espaço, com ou sem hora).
+    if (f.dataIni || f.dataFim) {
+      const bruto = p.dataSolicitacao || p.createdAt || p.created_at || '';
+      const dia = String(bruto).slice(0, 10);   // AAAA-MM-DD
+      // Sem data alguma: não escondemos o pedido — melhor aparecer a mais
+      // do que sumir sem o usuário entender por quê.
+      if (dia.length === 10) {
+        if (f.dataIni && dia < f.dataIni) return false;
+        if (f.dataFim && dia > f.dataFim) return false;
+      }
+    }
     return true;
   });
 }
