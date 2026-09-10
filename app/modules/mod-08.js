@@ -38,10 +38,132 @@ function _renderCorredores(){
       </div>
       <div class="corredor-acoes">
         <button class="btn btn-sm btn-secondary" onclick="_editarNomeCorredor(${c.id})">✏️ Nome</button>
+        <button class="btn btn-sm btn-secondary" onclick="_editarCidadesCorredor(${c.id})">🏙️ Cidades</button>
         <button class="btn btn-sm btn-secondary" onclick="excluirCorredor(${c.id})">🗑️ Excluir</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// ---- Editar as CIDADES de um corredor ----
+// A ordem importa: ela define a sequência da rota no planejamento. Por isso
+// a edição tem setas para mover, e não só adicionar/remover.
+let _corrCidades = [];
+let _corrEditId = null;
+
+function _editarCidadesCorredor(id){
+  const c = (corredoresGlobais||[]).find(x => String(x.id)===String(id));
+  if (!c) return;
+  _corrEditId = id;
+  _corrCidades = (c._paradas||[])
+    .slice().sort((a,b) => (a.ordem||0)-(b.ordem||0))
+    .map(p => p.cidade)
+    .filter(Boolean);
+  if (_corrCidades.length === 0) _corrCidades = [c.origem, c.destino].filter(Boolean);
+
+  const old = document.getElementById('modalCorrCidades'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalCorrCidades';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000';
+  div.innerHTML = `
+    <div style="background:var(--surface-1,#1a1c20);max-width:520px;width:92%;border-radius:14px;padding:22px;max-height:88vh;overflow:auto">
+      <h2 style="margin:0 0 4px">🏙️ Cidades do corredor</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">
+        <strong>${c.nome||''}</strong> — a ordem define a sequência da rota.
+        A primeira é a origem; a última, o destino.
+      </p>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input type="text" id="corrNovaCidade" placeholder="Nova cidade" style="flex:1"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();_corrAddCidade();}">
+        <button class="btn btn-secondary btn-sm" onclick="_corrAddCidade()">➕ Adicionar</button>
+      </div>
+      <div id="corrListaCidades"></div>
+      <div id="msgCorrCidades" class="message"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="_corrSalvarCidades()">💾 Salvar</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalCorrCidades').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  _corrRenderCidades();
+}
+
+function _corrRenderCidades(){
+  const el = document.getElementById('corrListaCidades');
+  if (!el) return;
+  if (_corrCidades.length === 0){
+    el.innerHTML = '<p class="text-muted" style="font-size:.85rem">Nenhuma cidade. Adicione ao menos duas.</p>';
+    return;
+  }
+  el.innerHTML = _corrCidades.map((cid, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:8px;margin-bottom:6px">
+      <span style="min-width:22px;opacity:.6;font-size:.78rem">${i+1}</span>
+      <span style="flex:1">${cid}${i===0?' <span class="text-muted" style="font-size:.72rem">(origem)</span>':''}${i===_corrCidades.length-1?' <span class="text-muted" style="font-size:.72rem">(destino)</span>':''}</span>
+      <button class="btn btn-sm btn-secondary" onclick="_corrMover(${i},-1)" ${i===0?'disabled':''}>▲</button>
+      <button class="btn btn-sm btn-secondary" onclick="_corrMover(${i},1)" ${i===_corrCidades.length-1?'disabled':''}>▼</button>
+      <button class="btn btn-sm btn-danger" onclick="_corrRemover(${i})">✕</button>
+    </div>`).join('');
+}
+
+function _corrAddCidade(){
+  const inp = document.getElementById('corrNovaCidade');
+  const v = (inp?.value || '').trim();
+  if (!v) return;
+  if (_corrCidades.some(c => c.toLowerCase() === v.toLowerCase())){
+    alert('Essa cidade já está no corredor.'); return;
+  }
+  _corrCidades.push(v);
+  if (inp){ inp.value = ''; inp.focus(); }
+  _corrRenderCidades();
+}
+
+function _corrMover(i, dir){
+  const j = i + dir;
+  if (j < 0 || j >= _corrCidades.length) return;
+  [_corrCidades[i], _corrCidades[j]] = [_corrCidades[j], _corrCidades[i]];
+  _corrRenderCidades();
+}
+
+function _corrRemover(i){
+  _corrCidades.splice(i, 1);
+  _corrRenderCidades();
+}
+
+async function _corrSalvarCidades(){
+  const msg = document.getElementById('msgCorrCidades');
+  if (_corrCidades.length < 2){
+    if (msg){ msg.textContent = 'O corredor precisa de ao menos 2 cidades (origem e destino).'; msg.className = 'message show error'; }
+    return;
+  }
+  const id = _corrEditId;
+  const origem  = _corrCidades[0];
+  const destino = _corrCidades[_corrCidades.length - 1];
+
+  try {
+    // Regrava a lista inteira: é mais simples e seguro que tentar casar
+    // quais paradas mudaram, e a tabela é pequena.
+    await supabase.from('corredor_paradas').delete().eq('corredor_id', id);
+    const linhas = _corrCidades.map((cidade, i) => ({ corredor_id: id, ordem: i+1, cidade }));
+    const { error: e1 } = await supabase.from('corredor_paradas').insert(linhas);
+    if (e1) throw e1;
+
+    const { error: e2 } = await supabase.from('corredores').update({ origem, destino }).eq('id', id);
+    if (e2) throw e2;
+
+    const c = (corredoresGlobais||[]).find(x => String(x.id)===String(id));
+    if (c){
+      c.origem = origem; c.destino = destino;
+      c._paradas = linhas.map(l => ({ cidade: l.cidade, ordem: l.ordem }));
+    }
+
+    document.getElementById('modalCorrCidades')?.remove();
+    _renderCorredores();
+    if (typeof renderizarPainelCorredores === 'function') renderizarPainelCorredores();
+    if (typeof exibirMensagem === 'function')
+      exibirMensagem('mensagemCorredor', `✅ Corredor atualizado: ${_corrCidades.join(' → ')}`, 'success');
+  } catch(e){
+    if (msg){ msg.textContent = 'Erro ao salvar: ' + (e.message||e); msg.className = 'message show error'; }
+  }
 }
 
 // Editar o nome de um corredor (caso tenha digitado errado)
