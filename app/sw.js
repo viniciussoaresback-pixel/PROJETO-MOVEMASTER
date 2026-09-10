@@ -8,7 +8,7 @@
    login e uploads precisam ser sempre ao vivo.
    ===================================================================== */
 
-const VERSAO = 'movemaster-v351';
+const VERSAO = 'movemaster-v359';
 
 // Arquivos do "esqueleto" do app, guardados para funcionar offline
 const ARQUIVOS_BASE = [
@@ -28,6 +28,7 @@ const ARQUIVOS_BASE = [
   './modules/mod-11.js',
   './modules/mod-12.js',
   './supabase-config.js',
+  './dedupe-consultas.js',
   './carregador.js',
   './push-notificacoes.js',
   './dacte-leitor.js',
@@ -75,6 +76,17 @@ self.addEventListener('activate', (evento) => {
   );
 });
 
+// Controla de quanto em quanto tempo vale conferir se há versão nova.
+let _ultimaRevalidacao = 0;
+const INTERVALO_REVALIDACAO = 10 * 60 * 1000;   // 10 minutos
+
+function precisaRevalidar() {
+  const agora = Date.now();
+  if (agora - _ultimaRevalidacao < INTERVALO_REVALIDACAO) return false;
+  _ultimaRevalidacao = agora;
+  return true;
+}
+
 self.addEventListener('fetch', (evento) => {
   const req = evento.request;
   const url = new URL(req.url);
@@ -112,6 +124,11 @@ self.addEventListener('fetch', (evento) => {
     evento.respondWith(
       caches.open(VERSAO).then((cache) =>
         cache.match(req).then((cacheado) => {
+          // Revalidação com intervalo: antes, TODO arquivo era rebuscado na
+          // rede em toda abertura (46 requisições de fundo). Agora só uma vez
+          // a cada 10 min — o deploy continua chegando, sem o custo por load.
+          if (cacheado && !precisaRevalidar()) return cacheado;
+
           const daRede = fetch(req, { cache: 'no-cache' })
             .then((resposta) => {
               if (resposta && resposta.status === 200) {
