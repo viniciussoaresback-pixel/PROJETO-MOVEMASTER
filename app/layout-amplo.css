@@ -330,3 +330,14 @@
 
 [data-tema="claro"] .btn-atualizar-tudo { border-color: rgba(15,17,21,.12); color: #6b7280; }
 [data-tema="claro"] .btn-atualizar-tudo:hover { background: rgba(15,17,21,.05); }
+
+/* Rota e data no card das viagens em andamento */
+.viagem-item-rota,
+.viagem-item-data {
+  font-size: .72rem;
+  color: var(--text-secondary, #9ca3af);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
