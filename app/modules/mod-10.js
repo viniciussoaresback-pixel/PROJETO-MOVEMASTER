@@ -407,10 +407,11 @@ function _histAbaFinanceiro(v){
     <div class="histv-fin-col histv-fin-full">
       <div class="histv-sec-tit">DETALHAMENTO DA REMUNERAÇÃO</div>
       <table class="histv-tab">
-        <thead><tr><th>PEDIDO</th><th>TRECHO</th><th>ORIGEM DO VALOR</th><th>VALOR</th></tr></thead>
+        <thead><tr><th>PEDIDO</th><th>TRECHO</th><th>ORIGEM DO VALOR</th><th>VALOR</th><th></th></tr></thead>
         <tbody>
           ${detPed.map(({p,vm}) => `<tr>
-            <td><strong>#${p.id}</strong> ${p.placa||''}</td>
+            <td><strong>#${p.id}</strong> ${p.placa||''}
+                <button class="conf-esp-btn" style="margin-left:6px" onclick="abrirTrajetoriaPedido(${p.id})" title="Trajetória: trechos, caminhões, motoristas e transbordo">🗺️</button></td>
             <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
             <td>${_histOrigemValorLabel(vm.origem)}</td>
             <td>${vm.valor!=null ? 'R$ '+vm.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '<span style="color:#f87171">a definir</span>'}</td>
@@ -1175,42 +1176,49 @@ async function carregarRelatorioFaturamento(){
   if (!de || !ate){ alert('Informe o período.'); return; }
   if (cont) cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Carregando...</p>';
   try {
-    // 1. CTes emitidos no período
-    const { data: espelhos, error } = await supabase.from('ocorrencias')
-      .select('cte_numero, cte_emitido_em, dados_extras, created_at')
-      .eq('tipo','pdf_fiscal').eq('cte_emitido', true);
-    if (error) throw error;
-
-    // mapa nome do cliente -> tipo
+    // FONTE: o próprio pedido.
+    //
+    // Antes o relatório partia dos espelhos de carga marcados com
+    // "cte_emitido = true". Esse botão não existe mais no fluxo — hoje o
+    // fiscal salva o número do CT-e no pedido e anexa manifesto/DACTE.
+    // O diagnóstico mostrou 12 espelhos e ZERO marcados, com 73 pedidos
+    // entregues: o relatório vinha vazio por depender de um clique que
+    // ninguém dá mais.
+    //
+    // Agora a regra é direta: pedido com número de CT-e salvo está faturado.
     const tipoPorCliente = {};
     (clientesGlobais||[]).forEach(c => { if (c.nome) tipoPorCliente[c.nome] = c.tipo_cliente || ''; });
 
     const linhas = [];
-    (espelhos||[]).forEach(e => {
-      const dataCte = (e.cte_emitido_em || e.created_at || '').slice(0,10);
-      if (!dataCte || dataCte < de || dataCte >= ate) return; // fora do período (por emissão)
-      let extras = {}; try { extras = JSON.parse(e.dados_extras||'{}'); } catch(_){}
-      const ids = Array.isArray(extras.pedidos_ids) ? extras.pedidos_ids : [];
-      ids.forEach(pid => {
-        const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pid));
-        if (!p) return;
-        if ((p.status||'') !== 'Entregue') return; // só entregues
-        if ((p.cobrancaStatus||'') === 'cortesia') return; // cortesia não gera receita
-        linhas.push({
-          id: p.id, cteNumero: e.cte_numero, dataCte,
-          cliente: p.cliente || '—', tipoCliente: TIPOS_CLIENTE[tipoPorCliente[p.cliente]] || '—',
-          motorista: p.motorista1 || '—', cegonha: p.placaCegonha || '—',
-          veiculo: `${p.modelo||''} ${p.placa||''}`.trim() || '—',
-          trecho: `${p.cidadeOrigem||'?'} → ${p.cidadeDestino||'?'}`,
-          frete: Number(p.valorFrete||0),
-          cobrado: (p.cobrancaStatus === 'confirmado' || p.receitaConfirmada) ? 'sim' : 'não',
-          cteOk: e.cte_numero ? 'sim' : 'não'
-        });
+    (pedidosGlobais||[]).forEach(p => {
+      if (!p.numeroCte) return;                                  // sem CT-e não é faturamento
+      if ((p.status||'') !== 'Entregue') return;                 // só entregues
+      if ((p.cobrancaStatus||'') === 'cortesia') return;         // cortesia não gera receita
+
+      // Data do faturamento: quando o CT-e foi salvo. Se o registro for
+      // antigo e não tiver essa data, cai na previsão de entrega.
+      const dataCte = String(p.cteEmitidoEm || p.dataPrevEntrega || '').slice(0,10);
+      if (!dataCte) return;
+      if (dataCte < de || dataCte > ate) return;                 // inclui o dia final
+                                                                  // (antes era >= ate e
+                                                                  //  cortava o último dia)
+
+      linhas.push({
+        id: p.id, cteNumero: p.numeroCte, dataCte,
+        cliente: p.cliente || '—', tipoCliente: TIPOS_CLIENTE[tipoPorCliente[p.cliente]] || '—',
+        motorista: p.motorista1 || '—', cegonha: p.placaCegonha || '—',
+        veiculo: `${p.modelo||''} ${p.placa||''}`.trim() || '—',
+        trecho: `${p.cidadeOrigem||'?'} → ${p.cidadeDestino||'?'}`,
+        frete: Number(p.valorFrete||0),
+        cobrado: (p.cobrancaStatus === 'confirmado' || p.receitaConfirmada) ? 'sim' : 'não',
+        cteOk: 'sim'
       });
     });
+
+    linhas.sort((a,b) => String(a.dataCte).localeCompare(String(b.dataCte)));
     _relatFatCache = linhas;
     if (linhas.length === 0 && cont){
-      cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum CT-e emitido e entregue neste período.<br><span style="font-size:.85rem">O relatório considera apenas pedidos com CT-e emitido no período <strong>e</strong> status Entregue (cortesias ficam de fora).</span></p>';
+      cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum CT-e emitido e entregue neste período.<br><span style="font-size:.85rem">O relatório considera pedidos com <strong>número de CT-e salvo</strong> no período e status <strong>Entregue</strong> (cortesias ficam de fora).</span></p>';
       const res = document.getElementById('relatFatResumo'); if (res) res.innerHTML = '';
       if (typeof renderizarRemuneracaoMotorista === 'function') renderizarRemuneracaoMotorista();
       return;
