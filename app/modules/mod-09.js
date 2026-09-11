@@ -640,6 +640,7 @@ async function marcarColetaEquipe(pedidoId, equipeId){
     }); } catch(_){}
     await aposMutacaoPedidos();
     renderizarEquipesPainel();
+    _propagarMudancaOperacional();
   } catch(e){ alert('Erro ao marcar coleta: '+(e.message||e)); }
 }
 
@@ -663,6 +664,7 @@ async function marcarEntregaEquipe(pedidoId, equipeId){
     }); } catch(_){}
     await aposMutacaoPedidos();
     renderizarEquipesPainel();
+    _propagarMudancaOperacional();
   } catch(e){ alert('Erro ao marcar entrega: '+(e.message||e)); }
 }
 
@@ -1752,3 +1754,33 @@ function _confAtualizarDiferencasFrete(){
   const tD = document.getElementById('confTotDif');
   if (tD) tD.textContent = temEsperado ? fmt(totalLancado - totalEsperado) : '—';
 }
+
+
+/* =========================================================================
+   PROPAGAÇÃO DE MUDANÇA OPERACIONAL
+
+   Quando uma coleta ou entrega é confirmada — pela equipe ou pelo motorista
+   — a informação precisa alcançar TODAS as telas, não só a de quem clicou.
+   O pedido sai da fila da Central, muda de status no Painel, some das
+   pendências do fiscal, entra na Conferência.
+
+   Cada renderizador verifica o próprio container e sai na primeira linha
+   se não estiver na tela, então chamar todos é barato e evita esquecer um.
+   ========================================================================= */
+function _propagarMudancaOperacional(){
+  [
+    'renderizarCentralOperacoes', 'renderizarEquipesPainel',
+    'renderizarViagensAndamento', 'renderizarCentralConferencia',
+    'renderizarColetasDirecionadas', 'renderizarRomaneiosMotorista',
+    'carregarPedidosMotorista', 'renderizarOcupacao', 'renderizarKanban',
+    'renderizarPainelCegonhas', 'renderizarPedidosComercial',
+    'renderizarComercialPedidos', 'carregarDadosFiscal',
+    'renderizarAcompanhamento', 'renderizarCobranca'
+  ].forEach(fn => {
+    if (typeof window[fn] === 'function') {
+      try { window[fn](); } catch(e){ console.warn(fn, e); }
+    }
+  });
+}
+
+window._propagarMudancaOperacional = _propagarMudancaOperacional;
