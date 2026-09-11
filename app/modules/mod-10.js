@@ -677,9 +677,28 @@ function _veiculosNaRota(rotaId){
 // HISTÓRICO: todos os pedidos que já fizeram parte da viagem (mesmo que transbordados).
 // Usa o vínculo histórico (viagem_pedidos); cai para o atual se a tabela ainda não existir.
 function _pedidosHistoricoDaViagem(rotaId){
-  const vinculos = (viagemPedidosGlobais||[]).filter(v => String(v.rota_id) === String(rotaId));
-  if (vinculos.length === 0) return _veiculosNaRota(rotaId); // fallback
-  const ids = new Set(vinculos.map(v => String(v.pedido_id)));
+  // UNIÃO das duas fontes, e não uma OU outra.
+  //
+  // Antes: se existisse QUALQUER vínculo em viagem_pedidos, só ele era
+  // considerado. Um carro puxado para a viagem DEPOIS da criação — ou cujo
+  // vínculo não chegou a ser gravado — simplesmente não aparecia. Na tela
+  // do fiscal isso travava o processo: o carro existia na carga mas não
+  // tinha onde salvar o CT-e dele.
+  //
+  // Agora consideramos tanto o vínculo histórico (que preserva transbordo)
+  // quanto o rota_id atual do pedido. Nenhum carro fica de fora.
+  const ids = new Set();
+
+  (viagemPedidosGlobais||[])
+    .filter(v => String(v.rota_id) === String(rotaId))
+    .forEach(v => ids.add(String(v.pedido_id)));
+
+  (pedidosGlobais||[])
+    .filter(p => String(p.rotaId ?? p.rota_id ?? '') === String(rotaId))
+    .forEach(p => ids.add(String(p.id)));
+
+  if (ids.size === 0) return _veiculosNaRota(rotaId);   // último recurso
+
   return (pedidosGlobais||[]).filter(p => ids.has(String(p.id)));
 }
 
