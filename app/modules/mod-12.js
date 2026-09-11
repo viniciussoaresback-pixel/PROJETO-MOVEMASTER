@@ -1517,6 +1517,7 @@ async function _cgAbrirRastreio(pedidoId){
       <div class="cg-rastreio-acoes">
         <button class="cg-acao-btn" onclick="abrirEdicaoPedido(${p.id})">✏️ Editar</button>
         <button class="cg-acao-btn" onclick="abrirHistorico(${p.id})">📜 Histórico</button>
+        <button class="cg-acao-btn" onclick="abrirTrajetoriaPedido(${p.id})" title="Por onde o pedido passou, caminhão e motorista de cada trecho">🗺️ Trajetória</button>
         <button class="cg-acao-btn cg-acao-del" onclick="excluirPedido(${p.id})">🗑️ Excluir</button>
       </div>
       <div class="cg-rastreio-dados">
