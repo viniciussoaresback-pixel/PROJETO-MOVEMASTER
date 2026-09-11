@@ -123,6 +123,7 @@ function normalizarPedido(p) {
         aguardandoTransbordo: p.aguardando_transbordo || false,
         precisaEquipeEntrega: p.precisa_equipe_entrega || false,
         numeroCte: p.numero_cte || null,
+    cteEmitidoEm: p.cte_emitido_em || null,
         cteEmitidoEm: p.cte_emitido_em || null,
         aprovado: p.aprovado !== false,
         aprovadoEm: p.aprovado_em || null,
