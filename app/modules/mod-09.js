@@ -630,11 +630,16 @@ async function marcarColetaEquipe(pedidoId, equipeId){
   try {
     const { error } = await supabase.from('pedidos').update({
       coleta_equipe_em: new Date().toISOString(), coleta_equipe_por: membro, coleta_equipe_id: parseInt(equipeId),
-      patio_atual: cidade, patio_desde: new Date().toISOString()  // trouxe pro pátio
+      patio_atual: cidade, patio_desde: new Date().toISOString(),  // trouxe pro pátio
+      // O STATUS faltava aqui. A entrega da equipe já gravava 'Entregue',
+      // mas a coleta não mexia no status — o carro chegava ao pátio e o
+      // resto do sistema continuava vendo o pedido como não coletado.
+      status: 'Em Coleta',
+      status_planilha: 'Coletado'
     }).eq('id', parseInt(pedidoId));
     if (error) throw error;
     try { await supabase.from('historico_status').insert({
-      pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: p.status,
+      pedido_id: parseInt(pedidoId), status_anterior: _statusAntes, status_novo: 'Coletado',
       usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
       observacao: `📥 Coletado pela equipe ${eq.nome}${membro?' ('+membro+')':''} — levado ao pátio de ${eq.cidade_base}.`
     }); } catch(_){}
