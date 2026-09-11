@@ -515,10 +515,20 @@ function _aColetarDaEquipe(eq){
 
 // Carros "a entregar" por uma equipe: destino na cidade base, já no pátio da cidade, não entregues
 function _aEntregarDaEquipe(eq){
-  return (pedidosGlobais||[]).filter(p =>
-    p.status !== 'Cancelado' && !p.entregaEquipeEm &&
-    _cidadeIgual(p.cidadeDestino, eq.cidade_base) &&
-    p.patioAtual && _cidadeIgual(p.patioAtual, eq.cidade_base));
+  return (pedidosGlobais||[]).filter(p => {
+    if (p.status === 'Cancelado') return false;
+    if (p.entregaEquipeEm) return false;          // já entregue por equipe
+
+    // (a) DIRECIONAMENTO EXPLÍCITO da Central de Operações.
+    //     Antes o filtro só olhava o pátio, e ignorava entregaEquipeId —
+    //     por isso direcionar a entrega não fazia nada aparecer aqui.
+    if (p.entregaEquipeId && String(p.entregaEquipeId) === String(eq.id)) return true;
+
+    // (b) Regra que já existia: o carro chegou ao pátio da cidade da equipe.
+    //     Continua valendo para o fluxo automático, sem direcionamento.
+    return _cidadeIgual(p.cidadeDestino, eq.cidade_base)
+        && p.patioAtual && _cidadeIgual(p.patioAtual, eq.cidade_base);
+  });
 }
 
 // Feitas: coletadas ou entregues por esta equipe
