@@ -1125,6 +1125,8 @@ function _recarregarRealtime() {
         try { if (typeof renderizarRomaneiosMotorista === 'function') renderizarRomaneiosMotorista(); } catch (e) {}
         try { if (typeof renderizarDocsMotorista === 'function') renderizarDocsMotorista(); } catch (e) {}
 
+        try { if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional(); } catch (e) {}
+
         // Notificações no sino, instantâneas:
         try { if (typeof carregarNotificacoes === 'function') await carregarNotificacoes(); } catch (e) {}
     }, 400); // agrupa mudanças em rajada num só refresh
