@@ -1488,7 +1488,7 @@ function _confAbaConteudo(v){
 
   if (_confAbaDetalhe === 'veiculos'){
     return `<table class="conf-det-tabela">
-      <thead><tr><th>#</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem</th><th>Destino</th><th>Frete</th><th>CT-e</th></tr></thead>
+      <thead><tr><th>#</th><th>Placa</th><th>Modelo</th><th>Cliente</th><th>Origem</th><th>Destino</th><th>Frete</th><th>CT-e</th><th></th></tr></thead>
       <tbody>${v.pedidos.map((p,i)=>`<tr>
         <td>${i+1}</td>
         <td><strong>${p.placa||'—'}</strong></td>
@@ -1498,8 +1498,9 @@ function _confAbaConteudo(v){
         <td>${p.cidadeDestino||'—'}</td>
         <td class="right">${fmt(p.valorFrete)}</td>
         <td class="center">${(p.numeroCte||cteInfoDoPedido(p.id))?'🟢':'🔴'}</td>
+        <td class="center"><button class="conf-esp-btn" onclick="abrirTrajetoriaPedido(${p.id})" title="Por onde este carro passou: trechos, caminhões, motoristas e transbordo">🗺️</button></td>
       </tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="6"><strong>Total da viagem</strong></td><td class="right"><strong>${fmt(v.total)}</strong></td><td class="center">${v.comCte}/${v.pedidos.length}</td></tr></tfoot>
+      <tfoot><tr><td colspan="6"><strong>Total da viagem</strong></td><td class="right"><strong>${fmt(v.total)}</strong></td><td class="center">${v.comCte}/${v.pedidos.length}</td><td></td></tr></tfoot>
     </table>`;
   }
 
