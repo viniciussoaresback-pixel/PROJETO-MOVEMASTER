@@ -488,7 +488,12 @@ function _centralEntregas(){
   return (pedidosGlobais||[]).filter(p => {
     if (['Cancelado'].includes(p.status||'')) return false;
     if (p.status === 'Entregue') return false;      // já entregue → sai
-    if (p.entregaEquipeEm) return false;
+    // Direcionado para EQUIPE — o campo de data nem sempre vem preenchido,
+    // então consideramos o vínculo da equipe, que é o que de fato marca o
+    // direcionamento. Era por isso que a contagem não baixava.
+    if (p.entregaEquipeEm || p.entregaEquipeId || p.precisaEquipeEntrega) return false;
+    // Direcionado para MOTORISTA (campo próprio, fora da carga)
+    if (p.entregaMotorista) return false;
     if (p.aguardandoRetirada) return false;          // foi pra "aguardando retirada" → sai da fila
     // precisa estar em transporte (a caminho do destino)
     if (p.status !== 'Em Transporte') return false;
@@ -822,8 +827,15 @@ async function _centralConfirmarEquipeEntrega(ids){
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
     if (!p) continue;
     try {
-      await supabase.from('pedidos').update({ entrega_equipe_id: parseInt(equipeId), precisa_equipe_entrega: true }).eq('id', id);
-      p.entregaEquipeId = parseInt(equipeId); p.precisaEquipeEntrega = true;
+      const agora = new Date().toISOString();
+      await supabase.from('pedidos').update({
+        entrega_equipe_id: parseInt(equipeId),
+        precisa_equipe_entrega: true,
+        entrega_equipe_em: agora            // faltava: é o campo que tira da fila
+      }).eq('id', id);
+      p.entregaEquipeId = parseInt(equipeId);
+      p.precisaEquipeEntrega = true;
+      p.entregaEquipeEm = agora;
       try { await supabase.from('historico_status').insert({ pedido_id: parseInt(id), status_anterior: p.status, status_novo: p.status, usuario_nome: usuario, observacao: `👥 Entrega direcionada para a equipe ${eq?eq.nome:''}.` }); } catch(_){}
     } catch(e){ console.error('Erro ao direcionar entrega', id, e); }
   }
