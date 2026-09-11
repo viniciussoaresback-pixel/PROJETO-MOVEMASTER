@@ -1,0 +1,45 @@
+/* Trajetória do Pedido — v1: simples de propósito, clareza antes de enfeite */
+.trj-overlay { position:fixed; inset:0; z-index:10000; display:flex; align-items:center;
+  justify-content:center; background:rgba(0,0,0,.62); backdrop-filter:blur(3px); padding:1rem; }
+.trj-painel { background:var(--surface-1,#14161b); border:1px solid var(--border,rgba(255,255,255,.14));
+  border-radius:12px; width:min(860px,96vw); max-height:90vh; display:flex; flex-direction:column; overflow:hidden; }
+.trj-topo { display:flex; align-items:center; justify-content:space-between; padding:.9rem 1.1rem;
+  border-bottom:1px solid var(--border,rgba(255,255,255,.12)); }
+.trj-fechar { background:none; border:none; color:inherit; font-size:1.05rem; cursor:pointer; opacity:.7; }
+.trj-corpo { padding:1.1rem; overflow:auto; }
+
+.trj-sec-tit { font-size:.72rem; text-transform:uppercase; letter-spacing:.5px; opacity:.65;
+  margin:1.2rem 0 .6rem; padding-bottom:4px; border-bottom:1px solid var(--border,rgba(255,255,255,.08)); }
+.trj-sec-tit:first-child { margin-top:0; }
+
+.trj-trecho { border:1px solid var(--border,rgba(255,255,255,.12)); border-left:3px solid #22c55e;
+  border-radius:8px; padding:.7rem .9rem; margin-bottom:.5rem; }
+.trj-trecho-cab { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+.trj-num { font-size:.7rem; font-weight:700; text-transform:uppercase; opacity:.6; }
+.trj-nome { font-weight:700; }
+.trj-status { font-size:.68rem; padding:1px 8px; border-radius:20px; background:rgba(255,255,255,.08); }
+.trj-st-concluida { background:rgba(34,197,94,.18); color:#4ade80; }
+.trj-st-cancelada { background:rgba(239,68,68,.18); color:#f87171; }
+.trj-linha { font-size:.85rem; margin:3px 0; }
+.trj-mini { font-size:.72rem; opacity:.6; }
+.trj-obs { font-size:.68rem; opacity:.5; font-style:italic; margin-left:6px; }
+
+/* Transbordo: registro explícito, por isso tem destaque próprio */
+.trj-transbordo { margin:.2rem 0 .6rem 1.4rem; padding:.5rem .8rem; border-left:3px solid #38bdf8;
+  background:rgba(56,189,248,.08); border-radius:0 8px 8px 0; font-size:.85rem; }
+.trj-transbordo .trj-mini { display:block; margin-top:2px; }
+
+/* Rota cancelada e trecho não confirmado ficam visualmente recuados */
+.trj-cancelada { border-left-color:#ef4444; opacity:.72; }
+.trj-incerto { border-left-color:#f59e0b; border-left-style:dashed; }
+
+.trj-alerta { border:1px solid rgba(245,158,11,.4); background:rgba(245,158,11,.1);
+  border-radius:8px; padding:.8rem 1rem; margin-bottom:1rem; font-size:.86rem; }
+.trj-alerta-tit { font-weight:700; margin-bottom:6px; }
+.trj-alerta p { margin:.35rem 0; }
+
+.trj-hist { width:100%; border-collapse:collapse; font-size:.78rem; }
+.trj-hist th { text-align:left; padding:6px 8px; font-size:.68rem; text-transform:uppercase; opacity:.6; }
+.trj-hist td { padding:6px 8px; border-top:1px solid var(--border,rgba(255,255,255,.07)); vertical-align:top; }
+
+[data-tema="claro"] .trj-painel { background:#fff; border-color:rgba(15,17,21,.12); }
