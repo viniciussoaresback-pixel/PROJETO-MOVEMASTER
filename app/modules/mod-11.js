@@ -1807,8 +1807,76 @@ function renderizarColetasDirecionadas(){
       <div class="mpedido-veiculo">🚗 ${p.modelo || ''} · <strong>${p.placa || ''}</strong></div>
       ${endereco ? `<div class="mpedido-data">🏠 ${endereco}</div>` : ''}
       ${quando ? `<div class="mpedido-data">📅 Direcionada em ${new Date(quando).toLocaleString('pt-BR')}</div>` : ''}
+      <div class="mpedido-acoes">
+        <button class="btn-motorista-acao btn-macao-foto"
+                onclick="confirmarServicoAvulso(${p.id},'${tipo}')">
+          ✅ Confirmar ${ehColeta ? 'coleta' : 'entrega'}
+        </button>
+      </div>
     </div>`;
   }).join('');
 }
 
 window.renderizarColetasDirecionadas = renderizarColetasDirecionadas;
+
+
+/* =========================================================================
+   CONFIRMAÇÃO DE COLETA / ENTREGA AVULSA (motorista)
+
+   Sem isto o serviço direcionado ficava parado: aparecia para o motorista,
+   mas ele não tinha como dizer que fez, e o pedido não andava.
+
+   A propagação para o resto do sistema é automática e vem de três camadas
+   que já existem:
+     1. o espelho local (dedupe-consultas.js) aplica o UPDATE na memória;
+     2. aposMutacaoPedidos() redesenha a tela na hora e sincroniza depois;
+     3. o Realtime avisa as outras sessões abertas (logística, fiscal...).
+   Por isso não é preciso chamar renderizador por renderizador aqui.
+   ========================================================================= */
+async function confirmarServicoAvulso(pedidoId, tipo){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p || !supabase) return;
+  const ehColeta = tipo === 'coleta';
+
+  if (!confirm(`Confirmar ${ehColeta ? 'a COLETA' : 'a ENTREGA'} do veículo ${p.placa||'#'+p.id}?`)) return;
+
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Motorista';
+  const agora = new Date().toISOString();
+  const anterior = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
+
+  try {
+    const upd = ehColeta
+      ? { status: 'Em Transporte', status_planilha: 'Coletado',
+          coleta_confirmada_em: agora, coleta_confirmada_por: usuario }
+      : { status: 'Entregue', status_planilha: 'Entregue',
+          entrega_confirmada_em: agora, entrega_confirmada_por: usuario,
+          patio_atual: null, patio_desde: null };
+
+    const { error } = await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    if (error) throw error;
+
+    try {
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId),
+        status_anterior: anterior,
+        status_novo: ehColeta ? 'Coletado' : 'Entregue',
+        usuario_nome: usuario,
+        usuario_perfil: (typeof perfilAtual!=='undefined' ? perfilAtual : 'motorista'),
+        observacao: `${ehColeta ? '🚚 Coleta avulsa' : '🏁 Entrega avulsa'} confirmada pelo motorista (direcionada pela Central).`
+      });
+    } catch(_){}
+
+    if (typeof mmToast === 'function')
+      mmToast(`✅ ${ehColeta ? 'Coleta' : 'Entrega'} confirmada!`);
+
+    // Atualiza o sistema inteiro: memória, tela atual e demais sessões.
+    if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
+    renderizarColetasDirecionadas();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+
+  } catch(e){
+    alert('Não foi possível confirmar: ' + (e.message||e));
+  }
+}
+
+window.confirmarServicoAvulso = confirmarServicoAvulso;
