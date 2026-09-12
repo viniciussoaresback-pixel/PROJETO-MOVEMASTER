@@ -511,18 +511,20 @@ function _aColetarDaEquipe(eq){
 
     if (p.formaColeta === 'motorista') return false; // motorista coleta direto: não passa por equipe
 
-    // Direcionado pela logística (Central ou Planejamento) manda em tudo:
-    // é a decisão mais recente e mais específica.
-    if (p.coletaMotorista) return false;                                  // foi para um motorista
-    if (p.coletaEquipeId) return String(p.coletaEquipeId) === String(eq.id);
-
-    // 1) combinado explícito no lançamento: equipe escolhida pelo comercial
-    if (p.equipeColetaId) return String(p.equipeColetaId) === String(eq.id);
-    // 2) marcado "coletador busca" sem equipe explícita: cai pela cidade base
-    if (p.formaColeta === 'coletador') return _cidadeIgual(p.cidadeOrigem, eq.cidade_base);
-    // 3) fallback antigo: sem combinado, usa a geografia (origem = cidade base)
-    if (!p.formaColeta) return _cidadeIgual(p.cidadeOrigem, eq.cidade_base);
-    return false;
+    // A equipe só vê o que a LOGÍSTICA direcionou. Ponto.
+    //
+    // Antes havia três caminhos automáticos: a equipe escolhida pelo
+    // comercial no lançamento, o "coletador busca" casando por cidade, e um
+    // fallback que jogava qualquer pedido sem forma de coleta para a equipe
+    // da cidade de origem. Resultado: o pedido caía sozinho na fila de uma
+    // equipe sem ninguém ter decidido — que é justamente o que queremos
+    // tirar das mãos do comercial.
+    //
+    // O que o comercial preencheu vira SUGESTÃO, mostrada no card do
+    // Planejamento. Só o direcionamento da logística coloca o serviço aqui.
+    if (p.coletaMotorista) return false;                 // foi para um motorista
+    if (!p.coletaEquipeId) return false;                 // ninguém direcionou ainda
+    return String(p.coletaEquipeId) === String(eq.id);
   });
 }
 
