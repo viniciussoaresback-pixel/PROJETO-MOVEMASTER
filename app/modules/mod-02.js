@@ -1789,10 +1789,13 @@ async function _colJaNoPatio(ids){
     const antes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
     try {
       await supabase.from('pedidos').update({
-        patio_atual: p.cidadeOrigem || null, patio_desde: agora,
+        // Grava no mesmo formato dos pátios cadastrados (Cidade/UF), senão
+        // o carro não casa com nenhum pátio da lista.
+        patio_atual: p.cidadeOrigem ? (p.cidadeOrigem + (p.ufOrigem ? '/' + p.ufOrigem : '')) : null,
+        patio_desde: agora,
         status: 'Em Coleta', status_planilha: 'Coletado'
       }).eq('id', id);
-      p.patioAtual = p.cidadeOrigem; p.status = 'Em Coleta'; p.statusPlanilha = 'Coletado';
+      p.patioAtual = p.cidadeOrigem ? (p.cidadeOrigem + (p.ufOrigem ? '/' + p.ufOrigem : '')) : null; p.status = 'Em Coleta'; p.statusPlanilha = 'Coletado';
       try { await supabase.from('historico_status').insert({
         pedido_id: parseInt(id), status_anterior: antes, status_novo: 'Coletado',
         usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
