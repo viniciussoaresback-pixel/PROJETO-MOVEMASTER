@@ -476,6 +476,12 @@ function _centralColetas(){
     if (p.coletaEquipeEm) return false;      // já coletado pela equipe → sai
     if (p.patioAtual) return false;          // já está no pátio → não precisa coletar
     if (p.formaColeta === 'motorista') return false; // motorista coleta direto
+
+    // Já direcionado → sai da fila, igual acontece nas entregas.
+    // O acompanhamento passa a ser no card do Planejamento ("Enviado para
+    // coleta"), e o carro volta a aparecer só se o direcionamento for
+    // desfeito. Assim a fila mostra o que ainda PRECISA de decisão.
+    if (p.coletaEquipeId || p.coletaMotorista) return false;
     // ANTES existia aqui: if (p.rotaId || p.placaCegonha) return false.
     // Estava errado: alocar numa cegonha NÃO é coletar. O carro podia ser
     // reservado para uma carga hoje e só ser buscado dias depois — e nesse
