@@ -1727,12 +1727,18 @@ function _colDirecionamentoHTML(p){
     return `<span class="col-tag col-enviado">📤 Enviado para coleta — ${p.coletaMotorista}</span>
       <button class="col-btn" onclick="event.stopPropagation();_colAbrirDirecionamento([${p.id}])" title="Trocar o direcionamento ou confirmar que já chegou">↻</button>`;
 
-  // Combinado pelo comercial, ainda sem direcionamento
-  const combinado = p.formaColeta === 'patio'
-    ? '<span class="col-tag col-prev">🕓 Cliente leva ao pátio (aguardando chegada)</span>'
-    : p.formaColeta === 'motorista'
-    ? '<span class="col-tag col-prev">🚛 Motorista coleta direto</span>'
-    : '';
+  // Combinado pelo comercial no lançamento. É SUGESTÃO, não direcionamento:
+  // nada entra na fila de nenhuma equipe por causa disto.
+  let combinado = '';
+  if (p.formaColeta === 'patio')
+    combinado = '<span class="col-tag col-prev">🕓 Cliente leva ao pátio (aguardando chegada)</span>';
+  else if (p.formaColeta === 'motorista')
+    combinado = '<span class="col-tag col-prev">🚛 Motorista coleta direto</span>';
+  else if (p.equipeColetaId){
+    const eqs = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(p.equipeColetaId));
+    combinado = `<span class="col-tag col-prev" title="Sugerido pelo comercial no lançamento — ainda não direcionado">💡 Comercial sugeriu: ${eqs?eqs.nome:'equipe'}</span>`;
+  } else if (p.formaColeta === 'coletador')
+    combinado = '<span class="col-tag col-prev" title="Sugerido pelo comercial — ainda não direcionado">💡 Comercial: coletador busca</span>';
 
   return `${combinado}
     <button class="col-btn" onclick="event.stopPropagation();_colAbrirDirecionamento([${p.id}])">📍 Direcionar coleta</button>`;
