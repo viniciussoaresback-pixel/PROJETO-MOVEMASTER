@@ -946,6 +946,16 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
 // O fluxo de Transbordo preenche o pátio automaticamente.
 // ============================================
 
+// Compara nomes de pátio ignorando UF, acentos e caixa.
+// "Cascavel", "cascavel/pr" e "Cascavel/PR" são o mesmo pátio — antes só o
+// terceiro formato batia, e o carro simplesmente não aparecia na tela.
+function _normPatio(v){
+  return String(v||'')
+    .split('/')[0]
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .trim().toUpperCase();
+}
+
 const PATIOS_FIXOS = [
     'Cascavel/PR', 'Curitiba/PR', 'Maringá/PR', 'São José dos Pinhais/PR',
     'Gravataí/RS', 'São José/SC', 'Balneário Camboriú/SC', 'São Bernardo do Campo/SP'
@@ -989,18 +999,28 @@ async function renderizarPainelPatios() {
     const painel = alvos[0] || document.getElementById('painelPatios');
     if (!painel) return;
 
+    // TODO carro que está num pátio aparece aqui — seja aguardando entrega,
+    // aguardando transbordo ou aguardando carga. O que define é estar no
+    // pátio, não o motivo.
     const carros = pedidosGlobais.filter(p =>
-        p.patioAtual && PATIOS_FIXOS.includes(p.patioAtual) && !['Entregue', 'Cancelado'].includes(p.status)
+        p.patioAtual && !['Entregue', 'Cancelado'].includes(p.status)
     );
 
     // Agrupar por pátio — SOMENTE pátios fixos (evita "pátios fantasma"
     // criados por carros cujo patio_atual é a cidade de destino aguardando equipe).
+    // Os pátios fixos aparecem sempre (mesmo vazios, para a operação ver que
+    // estão zerados). Pátios fora da lista ganham grupo próprio em vez de o
+    // carro sumir — melhor um pátio inesperado visível que um carro perdido.
     const grupos = {};
     PATIOS_FIXOS.forEach(pt => grupos[pt] = []);
+    const _mapaFixos = {};
+    PATIOS_FIXOS.forEach(pt => { _mapaFixos[_normPatio(pt)] = pt; });
     carros.forEach(p => {
-        if (grupos[p.patioAtual]) {          // só entra se for um pátio fixo conhecido
-            grupos[p.patioAtual].push(p);
-        }
+        // Casa pelo nome normalizado (ignora UF e acento). Se o pátio não
+        // estiver na lista fixa, cria o grupo em vez de descartar o carro —
+        // antes ele sumia do sistema inteiro.
+        const chave = _mapaFixos[_normPatio(p.patioAtual)] || p.patioAtual;
+        (grupos[chave] = grupos[chave] || []).push(p);
     });
 
     // Alerta de permanência: 48h+ no pátio merece atenção
@@ -1045,11 +1065,19 @@ async function renderizarPainelPatios() {
                 </div>`;
             }).join('');
 
+        // Pátio com carros começa RECOLHIDO: o objetivo é ver todos os
+        // pátios de uma vez, sem rolar a tela. Clicando no cabeçalho, abre
+        // a lista daquele pátio.
+        const emAlertaPatio = lista.filter(p => p.patioDesde &&
+            (Date.now() - new Date(p.patioDesde).getTime()) / 3600000 >= LIMITE_ALERTA_H).length;
+
         return `
         <div class="patio-card ${lista.length === 0 ? 'patio-card-vazio' : ''}">
-            <div class="patio-header">
+            <div class="patio-header" onclick="this.parentNode.classList.toggle('patio-aberto')" title="Clique para abrir/fechar">
+                <span class="patio-seta">▸</span>
                 <span class="patio-nome">🅿️ ${patio}</span>
                 <span class="patio-qtd">${lista.length} carro${lista.length === 1 ? '' : 's'}</span>
+                ${emAlertaPatio ? `<span class="patio-alerta-mini" title="${emAlertaPatio} carro(s) parados há mais de ${LIMITE_ALERTA_H}h">⚠️ ${emAlertaPatio}</span>` : ''}
             </div>
             ${(() => {
                 if (lista.length === 0) return '';
