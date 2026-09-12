@@ -513,6 +513,9 @@ function preencherSelectCidades(cidades, selectID) {
 function mapearPedidoDoBanco(p) {
   return {
     coletaMotorista: p.coleta_motorista,
+    coletaEquipeId: p.coleta_equipe_id || null,
+    coletaEquipeEm: p.coleta_equipe_em || null,
+    coletaDirecionadaEm: p.coleta_direcionada_em || null,
     comOcorrencia: p.com_ocorrencia,
     ocorrenciaMotivo: p.ocorrencia_motivo,
     entregaMotorista: p.entrega_motorista,
