@@ -980,7 +980,13 @@ async function registrarMovimentacaoPatio(pedido, texto) {
 }
 
 async function renderizarPainelPatios() {
-    const painel = document.getElementById('painelPatios');
+    // A tela de Pátios agora aparece em dois lugares: Gestão Logística e
+    // Painel de Acompanhamento (ao lado da Central de Operação). Renderiza
+    // em TODOS os containers visíveis, em vez de só no primeiro do DOM —
+    // com getElementById, o segundo nunca seria preenchido.
+    const alvos = [...document.querySelectorAll('#painelPatios, .painel-patios-alvo')]
+        .filter(el => el.offsetParent !== null);
+    const painel = alvos[0] || document.getElementById('painelPatios');
     if (!painel) return;
 
     const carros = pedidosGlobais.filter(p =>
