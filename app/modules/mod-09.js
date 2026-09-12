@@ -502,8 +502,21 @@ function _aColetarDaEquipe(eq){
   return (pedidosGlobais||[]).filter(p => {
     if (['Entregue','Cancelado'].includes(p.status||'Pendente')) return false;
     if (p.coletaEquipeEm || p.patioAtual) return false;
+
+    // Carro que JÁ SAIU não é mais coleta da equipe.
+    // Sem esta checagem, uma carga em viagem aparecia para a equipe; ao
+    // marcar coleta, o status voltava para "Coletado" e a viagem em
+    // andamento era desfeita — corrompendo a operação inteira.
+    if (['Em Transporte','Transbordo'].includes(p.status||'')) return false;
+
     if (p.formaColeta === 'motorista') return false; // motorista coleta direto: não passa por equipe
-    // 1) combinado explícito: equipe de coleta escolhida no pedido
+
+    // Direcionado pela logística (Central ou Planejamento) manda em tudo:
+    // é a decisão mais recente e mais específica.
+    if (p.coletaMotorista) return false;                                  // foi para um motorista
+    if (p.coletaEquipeId) return String(p.coletaEquipeId) === String(eq.id);
+
+    // 1) combinado explícito no lançamento: equipe escolhida pelo comercial
     if (p.equipeColetaId) return String(p.equipeColetaId) === String(eq.id);
     // 2) marcado "coletador busca" sem equipe explícita: cai pela cidade base
     if (p.formaColeta === 'coletador') return _cidadeIgual(p.cidadeOrigem, eq.cidade_base);
@@ -619,6 +632,15 @@ function renderizarEquipesPainel(){
 function _setEquipeAba(id, aba){ _equipeAba[id] = aba; renderizarEquipesPainel(); }
 
 async function marcarColetaEquipe(pedidoId, equipeId){
+  // Trava de segurança, além do filtro da lista: nunca permitir que uma
+  // coleta rebaixe o status de um carro que já está viajando.
+  {
+    const _p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+    if (_p && ['Em Transporte','Transbordo','Entregue'].includes(_p.status||'')) {
+      alert(`Este veículo já está em "${_p.status}". Não é possível registrar coleta agora.\n\nSe houve um erro na operação, ajuste o status pelo Painel antes.`);
+      return;
+    }
+  }
   if (typeof bloquearSeNaoEquipe === 'function' && bloquearSeNaoEquipe('marcar coleta')) return;
   const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
   const eq = (equipesEntregaGlobais||[]).find(e => String(e.id) === String(equipeId));
