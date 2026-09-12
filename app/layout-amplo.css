@@ -435,3 +435,9 @@
   background: rgba(245, 158, 11, .18);
   color: #fbbf24;
 }
+
+/* Coleta direcionada, ainda não confirmada */
+.col-enviado {
+  background: rgba(168, 85, 247, .16);
+  color: #c084fc;
+}
