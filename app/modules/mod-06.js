@@ -1002,8 +1002,15 @@ async function renderizarPainelPatios() {
     // TODO carro que está num pátio aparece aqui — seja aguardando entrega,
     // aguardando transbordo ou aguardando carga. O que define é estar no
     // pátio, não o motivo.
+    // Carro está NO pátio quando está parado lá — não quando está a caminho.
+    //
+    // Um carro Em Transporte costuma ter patio_atual preenchido com a cidade
+    // de DESTINO (reserva de onde ele vai parar). Aceitar isso criava pátios
+    // fantasma — Ubiratã, Nova Laranjeiras — com carros que estão na estrada.
     const carros = pedidosGlobais.filter(p =>
-        p.patioAtual && !['Entregue', 'Cancelado'].includes(p.status)
+        p.patioAtual
+        && !['Entregue', 'Cancelado'].includes(p.status)
+        && !['Em Transporte', 'Transbordo'].includes(p.status)
     );
 
     // Agrupar por pátio — SOMENTE pátios fixos (evita "pátios fantasma"
@@ -1019,7 +1026,11 @@ async function renderizarPainelPatios() {
         // Casa pelo nome normalizado (ignora UF e acento). Se o pátio não
         // estiver na lista fixa, cria o grupo em vez de descartar o carro —
         // antes ele sumia do sistema inteiro.
-        const chave = _mapaFixos[_normPatio(p.patioAtual)] || p.patioAtual;
+        // Pátio conhecido entra no seu grupo. Desconhecido vai para um grupo
+        // único "Outros locais" — o carro continua visível, sem poluir a tela
+        // com um card por cidade.
+        const fixo = _mapaFixos[_normPatio(p.patioAtual)];
+        const chave = fixo || '📍 Outros locais';
         (grupos[chave] = grupos[chave] || []).push(p);
     });
 
