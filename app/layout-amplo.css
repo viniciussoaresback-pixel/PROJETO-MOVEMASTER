@@ -450,3 +450,61 @@
   gap: 4px;
   flex-wrap: wrap;
 }
+
+/* =========================================================================
+   PÁTIOS — visão compacta
+   Antes cada pátio era um card alto com todos os carros abertos, e era
+   preciso rolar a tela para ver os 8. Agora nasce recolhido: o cabeçalho
+   mostra pátio, quantidade e alerta, e a lista abre no clique.
+   ========================================================================= */
+
+.painel-patios-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.patio-card { padding: 0 !important; }
+
+.patio-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.patio-header:hover { background: rgba(255, 255, 255, .05); }
+
+.patio-seta { opacity: .5; font-size: .75rem; transition: transform .15s ease; }
+.patio-card.patio-aberto .patio-seta { transform: rotate(90deg); }
+
+.patio-nome { flex: 1; font-size: .86rem; font-weight: 700; }
+.patio-qtd { font-size: .72rem; opacity: .7; white-space: nowrap; }
+
+.patio-alerta-mini {
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: rgba(245, 158, 11, .2);
+  color: #fbbf24;
+}
+
+/* Os carros só aparecem com o pátio aberto */
+.patio-card > *:not(.patio-header) { display: none; }
+.patio-card.patio-aberto > * { display: block; }
+
+/* Pátio vazio fica discreto e não abre */
+.patio-card-vazio { opacity: .45; }
+.patio-card-vazio .patio-seta { visibility: hidden; }
+
+/* Cards de carro menores, já que agora são vistos dentro do pátio */
+.carro-patio-card { padding: 7px 9px !important; font-size: .8rem; }
+.carro-patio-cliente { font-size: .8rem; }
+.carro-patio-veiculo, .carro-patio-rota { font-size: .74rem; }
+
+@media (min-width: 1500px) {
+  .painel-patios-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+}
