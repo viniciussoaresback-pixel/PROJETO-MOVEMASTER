@@ -1708,15 +1708,24 @@ async function salvarCadastroCliente(event) {
    ========================================================================= */
 
 function _colDirecionamentoHTML(p){
-  // Já resolvido: mostra o estado, sem botão
+  // O card acompanha o ciclo inteiro da coleta:
+  //   sem direcionamento → "Direcionar coleta"
+  //   direcionado        → "Enviado para coleta" (sai da fila da Central)
+  //   confirmado         → "Já no pátio · coletado"
+  // É o que liga o processo: a Central decide, o card acompanha.
+
   if (p.patioAtual)
-    return `<span class="col-tag col-ok">✅ No pátio${p.patioAtual ? ' — ' + p.patioAtual : ''}</span>`;
+    return `<span class="col-tag col-ok">✅ Já no pátio · coletado${p.patioAtual ? ' — ' + p.patioAtual : ''}</span>`;
+
   if (p.coletaEquipeId){
     const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(p.coletaEquipeId));
-    return `<span class="col-tag col-aguard">👥 Equipe ${eq?eq.nome:'—'} — aguardando coleta</span>`;
+    return `<span class="col-tag col-enviado">📤 Enviado para coleta — equipe ${eq?eq.nome:'—'}</span>
+      <button class="col-btn" onclick="event.stopPropagation();_colAbrirDirecionamento([${p.id}])" title="Trocar o direcionamento ou confirmar que já chegou">↻</button>`;
   }
+
   if (p.coletaMotorista)
-    return `<span class="col-tag col-aguard">👤 ${p.coletaMotorista} — aguardando coleta</span>`;
+    return `<span class="col-tag col-enviado">📤 Enviado para coleta — ${p.coletaMotorista}</span>
+      <button class="col-btn" onclick="event.stopPropagation();_colAbrirDirecionamento([${p.id}])" title="Trocar o direcionamento ou confirmar que já chegou">↻</button>`;
 
   // Combinado pelo comercial, ainda sem direcionamento
   const combinado = p.formaColeta === 'patio'
