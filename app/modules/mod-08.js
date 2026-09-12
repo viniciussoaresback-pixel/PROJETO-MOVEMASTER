@@ -1190,9 +1190,10 @@ function mostrarViewPainel(view, btn){
   const viagens = document.getElementById('painelViewViagens');
   const planejamento = document.getElementById('painelViewPlanejamento');
   const central = document.getElementById('painelViewCentral');
+  const patios = document.getElementById('painelViewPatios');
   if (!painel) return;
   const esconder = painel.querySelectorAll('.ocup-resumo, .ocup-filtros, .tabela-scroll, #sugestoesRotaPainel');
-  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas' || view === 'viagens' || view === 'planejamento' || view === 'central');
+  const ehExtra = (view === 'corredores' || view === 'avancar' || view === 'historico' || view === 'vagas' || view === 'viagens' || view === 'planejamento' || view === 'central' || view === 'patios');
   esconder.forEach(e => e.style.display = ehExtra ? 'none' : '');
   if (corredores) corredores.style.display = (view === 'corredores') ? '' : 'none';
   if (avancar) avancar.style.display = (view === 'avancar') ? '' : 'none';
@@ -1201,17 +1202,26 @@ function mostrarViewPainel(view, btn){
   if (viagens) viagens.style.display = (view === 'viagens') ? '' : 'none';
   if (planejamento) planejamento.style.display = (view === 'planejamento') ? '' : 'none';
   if (central) central.style.display = (view === 'central') ? '' : 'none';
+  if (patios) patios.style.display = (view === 'patios') ? '' : 'none';
   if (view === 'corredores') renderizarPainelCorredores();
   if (view === 'avancar') renderizarAvancarPedidos();
   if (view === 'historico'){ historico.innerHTML = _histCargasCasca(); renderizarHistoricoCargas(); }
   if (view === 'viagens') renderizarViagensAndamento();
   if (view === 'planejamento') renderizarPlanejamentoRotas();
   if (view === 'central') renderizarCentralOperacao();
+  // Pátios ao lado da Central: são as duas pontas da mesma pergunta —
+  // o que está esperando ser coletado e o que já chegou.
+  // A tela vive em Gestão Logística; aqui montamos o mesmo container e
+  // chamamos o mesmo renderizador, sem duplicar código.
+  if (view === 'patios'){
+    if (patios && !patios.querySelector('.painel-patios-alvo')) patios.innerHTML = '<div class="painel-patios-alvo"></div>';
+    if (typeof renderizarPainelPatios === 'function') renderizarPainelPatios();
+  }
   if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="_mmDeb('renderizarVagasPorRota', renderizarVagasPorRota)"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
   // toque de "surgir" na view que ficou visível
-  const _vis = [corredores,avancar,historico,vagas,viagens,planejamento,central].find(e => e && e.style.display !== 'none');
+  const _vis = [corredores,avancar,historico,vagas,viagens,planejamento,central,patios].find(e => e && e.style.display !== 'none');
   if (_vis){ _vis.classList.remove('mm-surge'); void _vis.offsetWidth; _vis.classList.add('mm-surge'); }
 }
 
