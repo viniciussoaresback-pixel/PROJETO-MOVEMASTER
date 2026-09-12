@@ -382,3 +382,56 @@
   cursor: pointer;
 }
 .col-btn:hover { background: rgba(56,189,248,.14); border-color: rgba(56,189,248,.45); }
+
+/* ---- Central de Operações: entregas agrupadas por viagem ---- */
+.central-card-data {
+  font-size: .7rem;
+  color: var(--text-secondary, #9ca3af);
+  margin-top: 2px;
+}
+
+.central-viagens { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+
+.central-viagem-bloco {
+  border: 1px solid var(--border, rgba(255,255,255,.12));
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.central-viagem-cab {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; cursor: pointer;
+  background: rgba(255,255,255,.03);
+}
+.central-viagem-cab:hover { background: rgba(255,255,255,.06); }
+
+.cvb-seta { transition: transform .15s ease; opacity: .6; font-size: .8rem; }
+.central-viagem-bloco.aberto .cvb-seta { transform: rotate(90deg); }
+
+.cvb-info { flex: 1; min-width: 0; }
+.cvb-tit { font-weight: 700; font-size: .9rem; }
+.cvb-sub { font-size: .72rem; color: var(--text-secondary, #9ca3af); margin-top: 1px; }
+.cvb-acoes { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* Os carros só aparecem ao abrir o bloco — a decisão em lote vem primeiro */
+.central-viagem-itens { display: none; padding: 4px 12px 10px; }
+.central-viagem-bloco.aberto .central-viagem-itens { display: block; }
+
+.cvb-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border, rgba(255,255,255,.07));
+  font-size: .82rem;
+}
+.cvb-item-info { flex: 1; min-width: 0; }
+.cvb-item-rota { font-size: .72rem; color: var(--text-secondary, #9ca3af); }
+.cvb-item-acoes { display: flex; gap: 4px; flex-shrink: 0; }
+
+[data-tema="claro"] .central-viagem-cab { background: rgba(15,17,21,.03); }
+[data-tema="claro"] .central-viagem-cab:hover { background: rgba(15,17,21,.06); }
+
+/* Carro já alocado numa carga mas ainda não coletado — prioridade */
+.col-urgente {
+  background: rgba(245, 158, 11, .18);
+  color: #fbbf24;
+}
