@@ -476,7 +476,13 @@ function _centralColetas(){
     if (p.coletaEquipeEm) return false;      // já coletado pela equipe → sai
     if (p.patioAtual) return false;          // já está no pátio → não precisa coletar
     if (p.formaColeta === 'motorista') return false; // motorista coleta direto
-    if (p.rotaId || p.placaCegonha) return false;    // já em viagem
+    // ANTES existia aqui: if (p.rotaId || p.placaCegonha) return false.
+    // Estava errado: alocar numa cegonha NÃO é coletar. O carro podia ser
+    // reservado para uma carga hoje e só ser buscado dias depois — e nesse
+    // intervalo ele sumia da fila de coleta sem estar no pátio, ficando
+    // invisível no sistema inteiro.
+    // O que tira da fila é o carro estar FISICAMENTE no pátio, e isso já é
+    // tratado acima pelo patioAtual.
     // filtro de base: pela cidade de origem
     if (_centralBase !== '__todas__' && !_cidadeIgual(p.cidadeOrigem, _centralBase)) return false;
     return true;
@@ -591,7 +597,11 @@ function _centralColunaColetas(coletas){
           </div>
           <div class="central-card-cliente">${p.cliente||'—'}${p.modelo?` · <span class="central-sub">${p.modelo}</span>`:''}</div>
           <div class="central-card-rota">${p.cidadeOrigem||'—'}/${p.ufOrigem||''} <span class="central-seta">→</span> ${p.cidadeDestino||'—'}/${p.ufDestino||''}</div>
-          <div class="central-card-tipo">${_tipoColetaLabel(p)}</div>
+          <div class="central-card-tipo">${_tipoColetaLabel(p)}${
+            (p.placaCegonha || p.rotaId)
+              ? ` <span class="col-tag col-urgente" title="A cegonha já está reservada para este carro — a coleta é prioridade">🚛 Alocado${p.placaCegonha ? ' na ' + p.placaCegonha : ''} · falta coletar</span>`
+              : ''
+          }</div>
         </div>
       </label>`).join('')}
     </div>
@@ -612,7 +622,8 @@ function _centralColunaEntregas(entregas){
       <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
     </div>
     ${entregas.length === 0 ? '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>' : `
-    <div class="central-cards">
+    ${_centralEntregasPorViagem(entregas)}
+    <div class="central-cards" style="display:none">
       ${entregas.map(p => `<label class="central-card" for="echk_${p.id}">
         <input type="checkbox" id="echk_${p.id}" class="central-chk-entrega" value="${p.id}">
         <div class="central-card-body">
@@ -623,6 +634,7 @@ function _centralColunaEntregas(entregas){
           </div>
           <div class="central-card-cliente">${p.cliente||'—'}${p.modelo?` · <span class="central-sub">${p.modelo}</span>`:''}</div>
           <div class="central-card-rota">${p.cidadeOrigem||'—'}/${p.ufOrigem||''} <span class="central-seta">→</span> ${p.cidadeDestino||'—'}/${p.ufDestino||''}</div>
+          ${_centralDataLancamento(p)}
           <div class="central-card-tipo">${_tipoEntregaLabel(p)}${p.precisaEquipeEntrega?' <span style="color:#a855f7;font-size:.72rem;font-weight:700">· 👥 equipe</span>':''}${p.motorista1?` · <span class="central-sub">👤 ${p.motorista1}</span>`:''}</div>
           ${p.tipoEntrega === 'patio' ? `<button class="central-btn-mini" onclick="event.preventDefault();_centralDisponivelRetirada(${p.id})" title="Veículo chegou ao pátio, disponível para o cliente retirar">🏢 Disponível p/ retirada</button>` : ''}
         </div>
@@ -1775,3 +1787,68 @@ function _cgFecharViagem(){
   if (overlay){ overlay.classList.remove('aberto'); overlay.innerHTML = ''; }
   _cgViagemSel = null;
 }
+
+
+/* =========================================================================
+   CENTRAL DE OPERAÇÕES — ajustes
+   ========================================================================= */
+
+// Data em que o pedido foi lançado (item pedido pela operação)
+function _centralDataLancamento(p){
+  const bruto = p.dataSolicitacao || p.createdAt || p.created_at;
+  if (!bruto) return '';
+  const d = new Date(bruto);
+  if (isNaN(d)) return '';
+  return `<div class="central-card-data">📅 Lançado em ${d.toLocaleDateString('pt-BR')}</div>`;
+}
+
+/* Entregas agrupadas POR VIAGEM.
+   Antes era uma lista solta de carros: com 3 cargas na rua (7 + 11 + 3
+   carros) viravam 21 cartões sem dizer de quem era cada um. Agrupando pela
+   viagem, a logística vê "carga do Claudemir — 7 carros" e decide de uma
+   vez, ou abre e escolhe carro a carro. */
+function _centralEntregasPorViagem(entregas){
+  const grupos = {};
+  entregas.forEach(p => {
+    const chave = p.rotaId || p.rota_id || 'sem-viagem';
+    (grupos[chave] = grupos[chave] || []).push(p);
+  });
+
+  return `<div class="central-viagens">` + Object.keys(grupos).map(chave => {
+    const itens = grupos[chave];
+    const r = (rotasGlobais||[]).find(x => String(x.id) === String(chave));
+    const motorista = r?.motorista_1 || itens[0]?.motorista1 || 'sem motorista';
+    const cegonha   = r?.placa_cegonha || itens[0]?.placaCegonha || '—';
+    const titulo    = chave === 'sem-viagem' ? 'Sem viagem vinculada' : (r?.nome || ('Viagem #' + chave));
+    const ids       = itens.map(p => p.id);
+
+    return `<div class="central-viagem-bloco">
+      <div class="central-viagem-cab" onclick="this.parentNode.classList.toggle('aberto')">
+        <span class="cvb-seta">▸</span>
+        <div class="cvb-info">
+          <div class="cvb-tit">👤 ${motorista}</div>
+          <div class="cvb-sub">🚛 ${cegonha} · ${itens.length} carro(s) · ${titulo}</div>
+        </div>
+        <div class="cvb-acoes" onclick="event.stopPropagation()">
+          <button class="central-btn-mini" onclick="_centralModalMotorista([${ids.join(',')}])" title="Direcionar a carga toda para um motorista">👤 Todos</button>
+          <button class="central-btn-mini" onclick="_centralModalEquipeEntrega([${ids.join(',')}])" title="Direcionar a carga toda para uma equipe">👥 Todos</button>
+        </div>
+      </div>
+      <div class="central-viagem-itens">
+        ${itens.map(p => `<div class="cvb-item">
+          <div class="cvb-item-info">
+            <strong>#${p.id}</strong> ${p.placa||'—'} · ${p.cliente||'—'}
+            <div class="cvb-item-rota">${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}${_centralDataLancamento(p).replace(/<[^>]+>/g,' ')}</div>
+          </div>
+          <div class="cvb-item-acoes">
+            <button class="central-btn-mini" onclick="_centralModalMotorista([${p.id}])" title="Só este carro para um motorista">👤</button>
+            <button class="central-btn-mini" onclick="_centralModalEquipeEntrega([${p.id}])" title="Só este carro para uma equipe">👥</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+window._centralDataLancamento = _centralDataLancamento;
+window._centralEntregasPorViagem = _centralEntregasPorViagem;
