@@ -477,11 +477,10 @@ function _centralColetas(){
     if (p.patioAtual) return false;          // já está no pátio → não precisa coletar
     if (p.formaColeta === 'motorista') return false; // motorista coleta direto
 
-    // Já direcionado → sai da fila, igual acontece nas entregas.
-    // O acompanhamento passa a ser no card do Planejamento ("Enviado para
-    // coleta"), e o carro volta a aparecer só se o direcionamento for
-    // desfeito. Assim a fila mostra o que ainda PRECISA de decisão.
-    if (p.coletaEquipeId || p.coletaMotorista) return false;
+    // Direcionado CONTINUA na fila, com a marca de "enviado para coleta".
+    // Só sai quando a coleta é confirmada (patioAtual / coletaEquipeEm, já
+    // tratados acima). Assim a logística enxerga o que está em andamento e
+    // não perde de vista o que foi enviado e ainda não voltou.
     // ANTES existia aqui: if (p.rotaId || p.placaCegonha) return false.
     // Estava errado: alocar numa cegonha NÃO é coletar. O carro podia ser
     // reservado para uma carga hoje e só ser buscado dias depois — e nesse
@@ -610,7 +609,15 @@ function _centralColunaColetas(coletas){
           </div>
           <div class="central-card-cliente">${p.cliente||'—'}${p.modelo?` · <span class="central-sub">${p.modelo}</span>`:''}</div>
           <div class="central-card-rota">${p.cidadeOrigem||'—'}/${p.ufOrigem||''} <span class="central-seta">→</span> ${p.cidadeDestino||'—'}/${p.ufDestino||''}</div>
-          <div class="central-card-tipo">${_tipoColetaLabel(p)}${
+          <div class="central-card-tipo">${(() => {
+            if (p.coletaMotorista)
+              return `<span class="col-tag col-enviado">📤 Enviado — ${p.coletaMotorista}</span> `;
+            if (p.coletaEquipeId){
+              const _eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(p.coletaEquipeId));
+              return `<span class="col-tag col-enviado">📤 Enviado — equipe ${_eq?_eq.nome:'—'}</span> `;
+            }
+            return '';
+          })()}${_tipoColetaLabel(p)}${
             (p.placaCegonha || p.rotaId)
               ? ` <span class="col-tag col-urgente" title="A cegonha já está reservada para este carro — a coleta é prioridade">🚛 Alocado${p.placaCegonha ? ' na ' + p.placaCegonha : ''} · falta coletar</span>`
               : ''
@@ -798,9 +805,18 @@ async function _centralConfirmarEquipe(ids){
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
     if (!p) continue;
     try {
-      await supabase.from('pedidos').update({ equipe_coleta_id: parseInt(equipeId), forma_coleta: p.formaColeta || 'coletador' }).eq('id', id);
-      p.equipeColetaId = parseInt(equipeId);
-      if (!p.formaColeta) p.formaColeta = 'coletador';
+      // coleta_equipe_id é o DIRECIONAMENTO da logística.
+      // equipe_coleta_id (nomes parecidos, coisas diferentes) é a sugestão do
+      // comercial no lançamento — não é mexida aqui, para o combinado
+      // original continuar registrado.
+      const _agora = new Date().toISOString();
+      await supabase.from('pedidos').update({
+        coleta_equipe_id: parseInt(equipeId),
+        coleta_direcionada_em: _agora,
+        coleta_direcionada_por: document.getElementById('usuarioLogado')?.textContent || 'Logística'
+      }).eq('id', id);
+      p.coletaEquipeId = parseInt(equipeId);
+      p.coletaDirecionadaEm = _agora;
     } catch(e){ console.error('Erro ao direcionar coleta', id, e); }
   }
   document.getElementById('modalCentralEquipe')?.remove();
