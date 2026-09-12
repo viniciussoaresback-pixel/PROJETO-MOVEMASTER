@@ -508,3 +508,21 @@
 @media (min-width: 1500px) {
   .painel-patios-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 }
+
+
+/* Pátio ABERTO ocupa a linha inteira e os carros se espalham para o lado,
+   em vez de empilhar numa coluna estreita. */
+.painel-patios-grid { grid-auto-flow: row dense; }
+
+.patio-card.patio-aberto { grid-column: 1 / -1; }
+
+.patio-card.patio-aberto .carros-patio-lista,
+.patio-card.patio-aberto > div:not(.patio-header) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+/* Pátio fechado: só o cabeçalho, compacto */
+.patio-card:not(.patio-aberto) { min-height: 0; }
