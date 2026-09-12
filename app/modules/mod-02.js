@@ -233,6 +233,7 @@ function renderizarPedidosDrag() {
             <div class="drag-card-rota">${rotaComTransbordoHTML(p)}</div>
             <div class="drag-card-detalhe">🚗 ${p.modelo || ''} · ${p.placa || ''}${p.referencia ? ` <span class="badge-ref" title="Referência: ${p.referencia}">🔖 ${p.referencia}</span>` : ''}</div>
             ${badgePrazoEntrega(p) ? `<div class="drag-card-detalhe">${badgePrazoEntrega(p)}</div>` : ''}
+            <div class="drag-card-detalhe" draggable="false">${_colDirecionamentoHTML(p)}</div>
             <div class="drag-card-bottom" draggable="false">
                 ${statusDropdownHTML(p)}
                 ${montarMenuAcoes(p.id, [
@@ -1686,3 +1687,123 @@ async function salvarCadastroCliente(event) {
 // LISTAS RECOLHÍVEIS (Cadastros)
 // Cabeçalho clicável abre/fecha a tabela e seus controles.
 // ============================================
+
+
+
+/* =========================================================================
+   DIRECIONAMENTO DE COLETA — pela LOGÍSTICA, no planejamento
+
+   Por que aqui: hoje quem define a coleta é o comercial, no lançamento,
+   pelo campo forma_coleta. Só que esse campo diz o que foi COMBINADO com o
+   cliente — não quem vai buscar o carro amanhã. Quem sabe isso é a
+   logística, e é aqui que ela está montando as cargas.
+
+   O campo do comercial não é alterado: ele continua registrando o combinado.
+   O direcionamento vive em campos próprios (coleta_equipe_id /
+   coleta_motorista / patio_atual), e pode contrariar o combinado quando a
+   realidade muda — que é o caso mais comum.
+
+   "Cliente leva no pátio" NÃO marca o carro como no pátio: isso é previsão,
+   não fato. Vira "aguardando cliente" até alguém confirmar a chegada.
+   ========================================================================= */
+
+function _colDirecionamentoHTML(p){
+  // Já resolvido: mostra o estado, sem botão
+  if (p.patioAtual)
+    return `<span class="col-tag col-ok">✅ No pátio${p.patioAtual ? ' — ' + p.patioAtual : ''}</span>`;
+  if (p.coletaEquipeId){
+    const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(p.coletaEquipeId));
+    return `<span class="col-tag col-aguard">👥 Equipe ${eq?eq.nome:'—'} — aguardando coleta</span>`;
+  }
+  if (p.coletaMotorista)
+    return `<span class="col-tag col-aguard">👤 ${p.coletaMotorista} — aguardando coleta</span>`;
+
+  // Combinado pelo comercial, ainda sem direcionamento
+  const combinado = p.formaColeta === 'patio'
+    ? '<span class="col-tag col-prev">🕓 Cliente leva ao pátio (aguardando chegada)</span>'
+    : p.formaColeta === 'motorista'
+    ? '<span class="col-tag col-prev">🚛 Motorista coleta direto</span>'
+    : '';
+
+  return `${combinado}
+    <button class="col-btn" onclick="event.stopPropagation();_colAbrirDirecionamento([${p.id}])">📍 Direcionar coleta</button>`;
+}
+
+// Aceita 1 ou vários pedidos — a logística pode direcionar em lote
+function _colAbrirDirecionamento(ids){
+  const old = document.getElementById('modalDirecionarColeta'); if (old) old.remove();
+  const qtd = ids.length;
+  const div = document.createElement('div');
+  div.id = 'modalDirecionarColeta';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000';
+  div.innerHTML = `
+    <div style="background:var(--surface-1,#1a1c20);max-width:460px;width:92%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">📍 Direcionar coleta</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${qtd} pedido(s) selecionado(s).</p>
+
+      <button class="forma-entrega-opt" onclick="_colJaNoPatio([${ids.join(',')}])">
+        <div class="feo-ic">✅</div>
+        <div><div class="feo-tit">Já está no pátio</div>
+        <div class="feo-sub">O carro já chegou. Confirma a coleta agora.</div></div>
+      </button>
+
+      <button class="forma-entrega-opt" onclick="_colParaEquipe([${ids.join(',')}])">
+        <div class="feo-ic">👥</div>
+        <div><div class="feo-tit">Equipe de coleta</div>
+        <div class="feo-sub">A equipe busca e leva ao pátio. Fica aguardando a confirmação dela.</div></div>
+      </button>
+
+      <button class="forma-entrega-opt" onclick="_colParaMotorista([${ids.join(',')}])">
+        <div class="feo-ic">👤</div>
+        <div><div class="feo-tit">Motorista</div>
+        <div class="feo-sub">Aparece no app dele, separado da carga da cegonha.</div></div>
+      </button>
+
+      <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalDirecionarColeta').remove()">Cancelar</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+async function _colJaNoPatio(ids){
+  document.getElementById('modalDirecionarColeta')?.remove();
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const agora = new Date().toISOString();
+  for (const id of ids){
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
+    if (!p) continue;
+    const antes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
+    try {
+      await supabase.from('pedidos').update({
+        patio_atual: p.cidadeOrigem || null, patio_desde: agora,
+        status: 'Em Coleta', status_planilha: 'Coletado'
+      }).eq('id', id);
+      p.patioAtual = p.cidadeOrigem; p.status = 'Em Coleta'; p.statusPlanilha = 'Coletado';
+      try { await supabase.from('historico_status').insert({
+        pedido_id: parseInt(id), status_anterior: antes, status_novo: 'Coletado',
+        usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+        observacao: '✅ Confirmado no pátio pela logística.'
+      }); } catch(_){}
+    } catch(e){ console.error('direcionar coleta', id, e); }
+  }
+  if (typeof mmToast === 'function') mmToast(`✅ ${ids.length} carro(s) confirmados no pátio`);
+  if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
+  if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+}
+
+function _colParaEquipe(ids){
+  document.getElementById('modalDirecionarColeta')?.remove();
+  if (typeof _centralModalEquipe === 'function') return _centralModalEquipe(ids);
+  alert('Direcionamento para equipe indisponível nesta tela.');
+}
+
+function _colParaMotorista(ids){
+  document.getElementById('modalDirecionarColeta')?.remove();
+  if (typeof _centralModalMotoristaColeta === 'function') return _centralModalMotoristaColeta(ids);
+  alert('Direcionamento para motorista indisponível nesta tela.');
+}
+
+window._colDirecionamentoHTML = _colDirecionamentoHTML;
+window._colAbrirDirecionamento = _colAbrirDirecionamento;
+window._colJaNoPatio = _colJaNoPatio;
+window._colParaEquipe = _colParaEquipe;
+window._colParaMotorista = _colParaMotorista;
