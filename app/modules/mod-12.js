@@ -483,6 +483,12 @@ function _centralColetas(){
     // invisível no sistema inteiro.
     // O que tira da fila é o carro estar FISICAMENTE no pátio, e isso já é
     // tratado acima pelo patioAtual.
+    //
+    // Mas carro JÁ EM VIAGEM também não é coleta pendente: ele saiu, está na
+    // estrada. A distinção é o status, não a alocação:
+    //   • alocado e aguardando  → continua na fila (a cegonha espera por ele)
+    //   • em transporte/transbordo → saiu, não é mais coleta
+    if (['Em Transporte','Transbordo'].includes(p.status||'')) return false;
     // filtro de base: pela cidade de origem
     if (_centralBase !== '__todas__' && !_cidadeIgual(p.cidadeOrigem, _centralBase)) return false;
     return true;
@@ -586,7 +592,8 @@ function _centralColunaColetas(coletas){
       <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
     </div>
     ${coletas.length === 0 ? '<p class="central-vazio">Nenhuma coleta pendente. 👍</p>' : `
-    <div class="central-cards">
+    ${_centralColetasPorViagem(coletas)}
+    <div class="central-cards" style="display:none">
       ${coletas.map(p => `<label class="central-card" for="cchk_${p.id}">
         <input type="checkbox" id="cchk_${p.id}" class="central-chk-coleta" value="${p.id}">
         <div class="central-card-body">
@@ -1828,6 +1835,7 @@ function _centralEntregasPorViagem(entregas){
         <div class="cvb-info">
           <div class="cvb-tit">👤 ${motorista}</div>
           <div class="cvb-sub">🚛 ${cegonha} · ${itens.length} carro(s) · ${titulo}</div>
+          ${_centralInicioViagem(r)}
         </div>
         <div class="cvb-acoes" onclick="event.stopPropagation()">
           <button class="central-btn-mini" onclick="_centralModalMotorista([${ids.join(',')}])" title="Direcionar a carga toda para um motorista">👤 Todos</button>
@@ -1852,3 +1860,91 @@ function _centralEntregasPorViagem(entregas){
 
 window._centralDataLancamento = _centralDataLancamento;
 window._centralEntregasPorViagem = _centralEntregasPorViagem;
+
+
+/* Coletas agrupadas, mesma lógica das entregas.
+   Diferença: aqui a maioria dos carros ainda NÃO tem viagem — eles estão
+   justamente esperando entrar numa. Por isso o agrupamento é:
+     • por viagem, quando já alocado (a cegonha está reservada, é prioridade)
+     • num bloco "aguardando alocação" para o restante */
+function _centralColetasPorViagem(coletas){
+  const grupos = {};
+  coletas.forEach(p => {
+    const chave = (p.rotaId || p.rota_id || p.placaCegonha) ? (p.rotaId || p.rota_id || p.placaCegonha) : '__livre__';
+    (grupos[chave] = grupos[chave] || []).push(p);
+  });
+
+  // Os alocados vêm primeiro: têm cegonha esperando
+  const chaves = Object.keys(grupos).sort((a,b) => (a === '__livre__' ? 1 : 0) - (b === '__livre__' ? 1 : 0));
+
+  return `<div class="central-viagens">` + chaves.map(chave => {
+    const itens = grupos[chave];
+    const livre = chave === '__livre__';
+    const r = livre ? null : (rotasGlobais||[]).find(x => String(x.id) === String(chave));
+    const motorista = livre ? '' : (r?.motorista_1 || itens[0]?.motorista1 || 'sem motorista');
+    const cegonha   = livre ? '' : (r?.placa_cegonha || itens[0]?.placaCegonha || '—');
+    const ids = itens.map(p => p.id);
+
+    return `<div class="central-viagem-bloco ${livre ? '' : 'aberto'}">
+      <div class="central-viagem-cab" onclick="this.parentNode.classList.toggle('aberto')">
+        <span class="cvb-seta">▸</span>
+        <div class="cvb-info">
+          <div class="cvb-tit">${livre ? '📋 Aguardando alocação' : '🚛 ' + cegonha}</div>
+          <div class="cvb-sub">${livre
+            ? itens.length + ' carro(s) sem carga definida'
+            : '👤 ' + motorista + ' · ' + itens.length + ' carro(s) · <span style="color:#fbbf24">a cegonha espera</span>'}
+            ${_centralPeriodoLancamento(itens)}</div>
+        </div>
+        <div class="cvb-acoes" onclick="event.stopPropagation()">
+          <button class="central-btn-mini" onclick="_centralModalMotoristaColeta([${ids.join(',')}])" title="Direcionar todos para um motorista">👤 Todos</button>
+          <button class="central-btn-mini" onclick="_centralModalEquipe([${ids.join(',')}])" title="Direcionar todos para uma equipe">👥 Todos</button>
+        </div>
+      </div>
+      <div class="central-viagem-itens">
+        ${itens.map(p => `<div class="cvb-item">
+          <div class="cvb-item-info">
+            <strong>#${p.id}</strong> ${p.placa||'—'} · ${p.cliente||'—'}
+            <div class="cvb-item-rota">${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}${_centralDataLancamento(p).replace(/<[^>]+>/g,' ')}</div>
+          </div>
+          <div class="cvb-item-acoes">
+            <button class="central-btn-mini" onclick="_centralModalMotoristaColeta([${p.id}])" title="Só este carro para um motorista">👤</button>
+            <button class="central-btn-mini" onclick="_centralModalEquipe([${p.id}])" title="Só este carro para uma equipe">👥</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+window._centralColetasPorViagem = _centralColetasPorViagem;
+
+
+/* Data de início da viagem — ajuda a localizar a carga na lista.
+   Usa iniciada_em (o clique em "Iniciar viagem"); se for registro antigo
+   sem esse campo, cai na data de saída planejada. */
+function _centralInicioViagem(r){
+  if (!r) return '';
+  const bruto = r.iniciada_em || r.data_saida;
+  if (!bruto) return '';
+  const d = new Date(bruto);
+  if (isNaN(d)) return '';
+  const planejada = !r.iniciada_em;
+  return `<div class="cvb-sub">${planejada ? '📅 Saída prevista' : '🚚 Em viagem desde'} ${d.toLocaleDateString('pt-BR')}</div>`;
+}
+
+/* Período de lançamento dos carros do bloco. Com vários pedidos mostra o
+   intervalo, que é o que ajuda a achar "aquela carga da semana passada". */
+function _centralPeriodoLancamento(itens){
+  const datas = (itens||[])
+    .map(p => String(p.dataSolicitacao || p.createdAt || p.created_at || '').slice(0,10))
+    .filter(d => d.length === 10)
+    .sort();
+  if (!datas.length) return '';
+  const fmt = (iso) => iso.split('-').reverse().join('/');
+  const primeira = fmt(datas[0]);
+  const ultima   = fmt(datas[datas.length-1]);
+  return `<div class="cvb-sub">📅 Lançado ${primeira === ultima ? 'em ' + primeira : 'entre ' + primeira + ' e ' + ultima}</div>`;
+}
+
+window._centralInicioViagem = _centralInicioViagem;
+window._centralPeriodoLancamento = _centralPeriodoLancamento;
