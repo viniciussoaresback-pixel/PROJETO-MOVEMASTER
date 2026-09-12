@@ -1709,6 +1709,7 @@ function _planAgruparErenderizar(pedidos){
         ${p.referencia?`<div class="plan-pedido-ref">🏷️ ID: <strong>${p.referencia}</strong></div>`:''}
         <div class="plan-pedido-rota">${p.cidadeOrigem||''} → <strong>${p.cidadeDestino||''}</strong>${(p.patioAtual && _norm(p.patioAtual)!==_norm(p.cidadeOrigem||''))?` <span style="color:#a855f7;font-size:.72rem">(está em ${String(p.patioAtual).split('/')[0]})</span>`:''}</div>
         ${_planPedidoDatasHTML(p)}
+        <div class="plan-pedido-coleta">${(typeof _colDirecionamentoHTML==='function') ? _colDirecionamentoHTML(p) : ''}</div>
         <div class="plan-pedido-acoes">
           <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover para outro corredor →</button>
         </div>
@@ -1736,6 +1737,7 @@ function _planAgruparErenderizar(pedidos){
         <summary>Ver os ${g.itens.length} carros</summary>
         ${g.itens.map(x => `<div class="plan-grupo-carro">🚗 <strong>${x.placa||'—'}</strong> · ${x.modelo||''}${x.referencia?` · <span style="color:#f59e0b">🏷️ ${x.referencia}</span>`:''}${x.valorFrete?` · <span style="color:#22c55e">R$ ${Number(x.valorFrete).toLocaleString('pt-BR')}</span>`:''}</div>`).join('')}
       </details>
+      <div class="plan-pedido-coleta">${(typeof _colDirecionamentoHTML==='function') ? _colDirecionamentoHTML(p) : ''}</div>
       <div class="plan-pedido-acoes">
         <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover o grupo para outro corredor →</button>
       </div>
