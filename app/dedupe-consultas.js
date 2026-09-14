@@ -202,6 +202,15 @@ window.atualizarTudo = atualizarTudo;
       if (mudou && typeof refrescarTelaAtual === 'function') {
         clearTimeout(window.__mmEspelhoTimer);
         window.__mmEspelhoTimer = setTimeout(() => {
+          // Se a pessoa está digitando, NÃO redesenha: o redesenho destrói o
+          // campo, tira o foco e faz a tela "pular". Era o que acontecia ao
+          // salvar o CT-e no fiscal — salvava e a tela saía do lugar.
+          // A memória já foi atualizada acima; a tela se acerta no próximo
+          // redesenho natural.
+          const a = document.activeElement;
+          const digitando = a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName);
+          if (digitando) return;
+
           try { refrescarTelaAtual(); } catch (e) { console.warn('refrescarTelaAtual:', e); }
         }, 60);
       }
