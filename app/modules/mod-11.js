@@ -396,11 +396,12 @@ async function _salvarNumeroCteGrupoValor(chave, ids, valor){
   const val = (valor == null ? '' : String(valor)).trim();
   const okSpan = document.getElementById(`cteOk_${chave}`);
   try {
-    for (const id of ids){
-      await supabase.from('pedidos').update({ numero_cte: val||null, cte_emitido_em: val?new Date().toISOString():null }).eq('id', parseInt(id));
-      const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-      if (p){ p.numeroCte = val||null; p.cteEmitidoEm = val?new Date().toISOString():null; }
-    }
+    // Em lote: uma chamada para todos os carros do grupo
+    const _agoraCte = val ? new Date().toISOString() : null;
+    await mmAtualizarPedidos(ids,
+      { numero_cte: val || null, cte_emitido_em: _agoraCte },
+      (p) => { p.numeroCte = val || null; p.cteEmitidoEm = _agoraCte; }
+    );
     if (okSpan) okSpan.textContent = val ? `✅ CTe ${val}` : '';
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFiscal', val?`✅ CTe ${val} registrada (${ids.length} carro(s)).`:`CTe removida.`, 'success');
     // NÃO re-renderiza o card inteiro (não fecha o container)
@@ -1058,25 +1059,50 @@ function _viagemModalCarros(titulo, subtitulo, carros, corBtn, textoBtn, onConfi
 async function _viagemMudarStatusCarros(ids, statusInterno, statusPlanilha, obs){
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Operador';
   const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
+  // ANTES: um laço sequencial com DOIS acessos ao servidor por carro
+  // (update + histórico), cada um esperando o anterior. Com 11 carros eram
+  // 22 idas em fila — 6 a 7 segundos — e a tela ia se preenchendo aos poucos,
+  // mostrando 4, depois 6, depois todos.
+  //
+  // AGORA: uma única chamada para todos os carros (in.(...)) e os históricos
+  // num insert só. Duas idas ao servidor, independente da quantidade.
   let ok = 0; const falhas = [];
-  for (const id of ids){
-    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    if (!p){ falhas.push(id+' (não encontrado)'); continue; }
-    const antes = statusPlanilhaDoPedido(p);
+
+  const alvos = ids
+    .map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id)))
+    .filter(Boolean);
+
+  ids.forEach(id => {
+    if (!alvos.some(p => String(p.id)===String(id))) falhas.push(id+' (não encontrado)');
+  });
+
+  if (alvos.length){
+    // Guarda o status anterior de cada um ANTES de alterar, para o histórico
+    const antesPorId = {};
+    alvos.forEach(p => { antesPorId[p.id] = statusPlanilhaDoPedido(p); });
+
     try {
-      const { error } = await supabase.from('pedidos').update({ status: statusInterno, status_planilha: statusPlanilha }).eq('id', id);
+      const { error } = await supabase.from('pedidos')
+        .update({ status: statusInterno, status_planilha: statusPlanilha })
+        .in('id', alvos.map(p => p.id));
       if (error) throw error;
-      p.status = statusInterno; p.statusPlanilha = statusPlanilha;
-      ok++;
+
+      // Memória atualizada de uma vez: a tela redesenha completa, sem etapas
+      alvos.forEach(p => { p.status = statusInterno; p.statusPlanilha = statusPlanilha; });
+      ok = alvos.length;
+
       try {
-        await supabase.from('historico_status').insert({
-          pedido_id: id, status_anterior: antes, status_novo: statusPlanilha,
-          usuario_nome: usuario, usuario_perfil: perfil, observacao: obs
-        });
-      } catch(eh){ console.warn('Histórico não gravado p/', id, eh?.message); }
+        await supabase.from('historico_status').insert(
+          alvos.map(p => ({
+            pedido_id: p.id, status_anterior: antesPorId[p.id], status_novo: statusPlanilha,
+            usuario_nome: usuario, usuario_perfil: perfil, observacao: obs
+          }))
+        );
+      } catch(eh){ console.warn('Histórico não gravado:', eh?.message); }
+
     } catch(e){
-      falhas.push('#'+id+' ('+(e?.message||'erro')+')');
-      console.error('Falha ao mudar status do pedido', id, e);
+      falhas.push((e?.message||'erro ao atualizar os carros'));
+      console.error('Falha ao mudar status em lote', e);
     }
   }
   if (falhas.length){
@@ -1216,15 +1242,17 @@ async function _viagemConfirmarEntregaMotorista(ids){
 async function _viagemEntregaParaEquipe(rotaId, ids){
   document.getElementById('modalFormaEntrega')?.remove();
   // marca que chegou ao pátio e precisa de equipe (usa a Central: aguardando_retirada=false, mas fica pendente de entrega pela equipe)
-  for (const id of ids){
-    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    if (!p) continue;
-    try {
-      await supabase.from('pedidos').update({ status:'Em Transporte', patio_atual: p.cidadeDestino, precisa_equipe_entrega: true }).eq('id', id);
-      p.patioAtual = p.cidadeDestino; p.precisaEquipeEntrega = true;
-      await supabase.from('historico_status').insert({ pedido_id: parseInt(id), status_anterior:'Em Transporte', status_novo:'Em Transporte', usuario_nome: document.getElementById('usuarioLogado')?.textContent||'Logística', observacao:'🚛→👥 Motorista deixou no pátio; direcionado para equipe de entrega' });
-    } catch(e){ console.error(e); }
-  }
+  const _usr = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  // Cada carro tem cidade de destino própria, então o patch é por pedido —
+  // o auxiliar agrupa os iguais e faz poucas chamadas em vez de uma por carro.
+  await mmAtualizarPedidos(ids,
+    (p) => ({ status:'Em Transporte', patio_atual: p.cidadeDestino, precisa_equipe_entrega: true }),
+    (p) => { p.patioAtual = p.cidadeDestino; p.precisaEquipeEntrega = true; }
+  );
+  await mmRegistrarHistorico(ids.map(id => ({
+    pedido_id: parseInt(id), status_anterior:'Em Transporte', status_novo:'Em Transporte',
+    usuario_nome: _usr, observacao:'🚛→👥 Motorista deixou no pátio; direcionado para equipe de entrega'
+  })));
   renderizarViagensAndamento();
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} veículo(s) direcionado(s) para a equipe de entrega. Veja na Central de Operação.`, 'success');
 }
