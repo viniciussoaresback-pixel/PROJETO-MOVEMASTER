@@ -718,6 +718,41 @@ async function _registrarVinculoViagem(rotaId, pedidoId){
   } catch(e){ /* tabela pode não existir ainda */ }
 }
 
+// Registra vínculo histórico de vários pedidos numa viagem (em lote)
+async function _registrarVinculoViagemLote(rotaId, pedidoIds) {
+  if (!rotaId || !Array.isArray(pedidoIds) || !pedidoIds.length) return;
+
+  const ids = pedidoIds
+    .map(id => parseInt(id))
+    .filter(id => id && !_vinculoViagemPedido(rotaId, id)); // só os que ainda não têm vínculo
+
+  if (!ids.length) return;
+
+  try {
+    const registros = ids.map(pedido_id => ({
+      rota_id: parseInt(rotaId),
+      pedido_id
+    }));
+
+    const { data, error } = await supabase
+      .from('viagem_pedidos')
+      .insert(registros)
+      .select();
+
+    if (error) throw error;
+
+    if (Array.isArray(data) && data.length) {
+      viagemPedidosGlobais.push(...data);
+    }
+  } catch (e) {
+    console.warn('Não foi possível registrar vínculos em lote:', e?.message || e);
+    // fallback: tenta um por um (compatibilidade)
+    for (const pid of ids) {
+      await _registrarVinculoViagem(rotaId, pid);
+    }
+  }
+}
+
 // Marca a saída do pedido de uma viagem por transbordo (não apaga o vínculo)
 async function _marcarSaidaTransbordo(rotaId, pedidoId, motivo, cidadeTransbordo){
   const v = _vinculoViagemPedido(rotaId, pedidoId);
