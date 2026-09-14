@@ -526,3 +526,15 @@
 
 /* Pátio fechado: só o cabeçalho, compacto */
 .patio-card:not(.patio-aberto) { min-height: 0; }
+
+/* Lápis de edição rápida nos dados da viagem */
+.jv-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: .45;
+  font-size: .78rem;
+  padding: 0 2px;
+  margin-left: 4px;
+}
+.jv-edit-btn:hover { opacity: 1; }
