@@ -7,8 +7,11 @@
 
 :root {
   /* largura máxima do conteúdo: acompanha a tela, com um teto confortável */
-  --mm-largura-conteudo: 1800px;
-  --mm-padding-lateral: 2rem;
+  /* Largura livre: a tela é usada por inteiro, com uma margem pequena só
+     para o conteúdo não encostar na borda. Antes o teto de 1800px deixava
+     faixas vazias nos dois lados em monitores grandes. */
+  --mm-largura-conteudo: 100%;
+  --mm-padding-lateral: 1.25rem;
 }
 
 /* ---- cabeçalho e conteúdo principal ---- */
@@ -25,8 +28,9 @@
 }
 
 /* Em telas muito largas (ultrawide), não deixa a linha ficar longa demais */
-@media (min-width: 2100px) {
-  :root { --mm-largura-conteudo: 2000px; }
+/* Em telas muito largas, um teto evita linhas longas demais para ler */
+@media (min-width: 2400px) {
+  :root { --mm-largura-conteudo: 2300px; }
 }
 
 /* ---- painel lateral de detalhes da viagem (Central de Conferência) ---- */
@@ -538,3 +542,18 @@
   margin-left: 4px;
 }
 .jv-edit-btn:hover { opacity: 1; }
+
+
+/* =========================================================================
+   FAIXA "NOVA VERSÃO" — tema claro
+   A faixa nasce com fundo escuro fixo no JS. No tema claro isso some com o
+   texto e fica estranho. Aqui ela ganha o visual do tema.
+   ========================================================================= */
+[data-tema="claro"] #mmFaixaVersao,
+[data-tema="claro"] .mm-faixa-versao {
+  background: #fff !important;
+  color: #111 !important;
+  border: 1px solid rgba(15, 17, 21, .14) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .14) !important;
+}
+[data-tema="claro"] .mm-faixa-versao button.mm-depois { color: #6b7280 !important; }
