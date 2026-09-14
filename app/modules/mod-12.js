@@ -478,14 +478,16 @@ async function _viagemConfirmarPuxar(rotaId, cap){
 // Coletas (→ equipe) | Entregas (→ motorista), filtro por base, saem ao confirmar.
 // ============================================================
 let _centralBase = '__todas__';
-// Busca da Central de Operação — mesmo formato do filtro de Pedidos:
-// placa (do carro ou da cegonha), ID e referência.
-let _centralBusca = '';
-function _centralFiltraBusca(lista){
-  const b = (typeof _norm === 'function') ? _norm(_centralBusca||'') : String(_centralBusca||'').toLowerCase().trim();
+// Busca da Central de Operação — uma para cada coluna (coletas e entregas),
+// no mesmo formato do filtro de Pedidos: placa (do carro ou da cegonha),
+// ID, referência, cliente e motorista.
+let _centralBuscaColeta = '';
+let _centralBuscaEntrega = '';
+function _centralFiltraBusca(lista, termo){
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const b = n(termo||'');
   if (!b) return lista;
-  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase());
-  return lista.filter(p => n(`${p.placa||''} ${p.placaCegonha||''} ${p.referencia||''} ${p.cliente||''} #${p.id} ${p.id}`).includes(b));
+  return lista.filter(p => n(`${p.placa||''} ${p.placaCegonha||''} ${p.referencia||''} ${p.cliente||''} ${p.motorista1||''} #${p.id} ${p.id}`).includes(b));
 }
 
 // Bases = cidades-base distintas das equipes
@@ -571,9 +573,11 @@ function _centralConcluidosHoje(){
 function renderizarCentralOperacao(){
   const cont = document.getElementById('painelViewCentral');
   if (!cont) return;
-  const coletas = _centralFiltraBusca(_centralColetas());
-  const entregas = _centralFiltraBusca(_centralEntregas());
-  const aguardando = _centralFiltraBusca(_centralAguardando());
+  const coletasTodas = _centralColetas();
+  const entregasTodas = _centralEntregas();
+  const coletas = _centralFiltraBusca(coletasTodas, _centralBuscaColeta);
+  const entregas = _centralFiltraBusca(entregasTodas, _centralBuscaEntrega);
+  const aguardando = _centralAguardando();
   const concluidos = _centralConcluidosHoje();
   const bases = _centralBases();
 
@@ -586,45 +590,42 @@ function renderizarCentralOperacao(){
           ${bases.map(b => `<option value="${b}" ${_centralBase===b?'selected':''}>${b}</option>`).join('')}
         </select>
       </div>
-      <div class="central-busca">
-        <input type="text" id="centralBusca" class="ocup-busca"
-               placeholder="🔍 Buscar por placa (carro ou cegonha), ID ou referência..."
-               value="${String(_centralBusca||'').replace(/"/g,'&quot;')}"
-               oninput="_mmDeb('renderizarCentralOperacao', _centralSetBusca)">
-        ${_centralBusca ? `<button class="central-busca-limpar" onclick="_centralLimparBusca()" title="Limpar busca">✕</button>` : ''}
-      </div>
       <div class="central-kpis">
-        <div class="central-kpi central-kpi-laranja"><div class="central-kpi-ic">🚚</div><div><span class="central-kpi-lbl">Coletas pendentes</span><span class="central-kpi-num">${coletas.length}</span></div></div>
-        <div class="central-kpi central-kpi-azul"><div class="central-kpi-ic">📦</div><div><span class="central-kpi-lbl">Entregas pendentes</span><span class="central-kpi-num">${entregas.length}</span></div></div>
+        <div class="central-kpi central-kpi-laranja"><div class="central-kpi-ic">🚚</div><div><span class="central-kpi-lbl">Coletas pendentes</span><span class="central-kpi-num">${coletasTodas.length}</span></div></div>
+        <div class="central-kpi central-kpi-azul"><div class="central-kpi-ic">📦</div><div><span class="central-kpi-lbl">Entregas pendentes</span><span class="central-kpi-num">${entregasTodas.length}</span></div></div>
         <div class="central-kpi central-kpi-amarelo"><div class="central-kpi-ic">⏳</div><div><span class="central-kpi-lbl">Aguardando confirmação</span><span class="central-kpi-num">${aguardando.length}</span></div></div>
         <div class="central-kpi central-kpi-verde"><div class="central-kpi-ic">✅</div><div><span class="central-kpi-lbl">Concluídos hoje</span><span class="central-kpi-num">${concluidos}</span></div></div>
       </div>
     </div>
 
     <div class="central-colunas">
-      ${_centralColunaColetas(coletas)}
-      ${_centralColunaEntregas(entregas)}
+      ${_centralColunaColetas(coletas, coletasTodas.length)}
+      ${_centralColunaEntregas(entregas, entregasTodas.length)}
     </div>
 
     ${_centralAguardandoHTML(aguardando)}
 
-    <p class="central-rodape">${_centralBusca
-      ? `🔍 Mostrando apenas os pedidos que casam com "<strong>${String(_centralBusca).replace(/</g,'&lt;')}</strong>". <a href="#" onclick="event.preventDefault();_centralLimparBusca()">limpar busca</a>`
-      : 'ℹ️ Pedidos saem desta tela após a confirmação da coleta ou entrega.'}</p>`;
+    <p class="central-rodape">ℹ️ Pedidos saem desta tela após a confirmação da coleta ou entrega.</p>`;
 }
 
 function _centralSetBase(b){ _centralBase = b; renderizarCentralOperacao(); }
 
-// Busca da Central — guarda o texto, re-renderiza e devolve o cursor ao campo,
-// para que a digitação não seja interrompida pelo redesenho da tela.
-function _centralSetBusca(){
-  _centralBusca = document.getElementById('centralBusca')?.value || '';
-  const pos = document.getElementById('centralBusca')?.selectionStart ?? null;
+// Busca de cada coluna — guarda o texto, re-renderiza e devolve o cursor ao
+// campo, para que a digitação não seja interrompida pelo redesenho da tela.
+function _centralSetBusca(qual){
+  const id = qual === 'entrega' ? 'centralBuscaEntrega' : 'centralBuscaColeta';
+  const el0 = document.getElementById(id);
+  const txt = el0?.value || '';
+  const pos = el0?.selectionStart ?? null;
+  if (qual === 'entrega') _centralBuscaEntrega = txt; else _centralBuscaColeta = txt;
   renderizarCentralOperacao();
-  const el = document.getElementById('centralBusca');
+  const el = document.getElementById(id);
   if (el){ el.focus(); if (pos !== null){ try { el.setSelectionRange(pos, pos); } catch(_){} } }
 }
-function _centralLimparBusca(){ _centralBusca = ''; renderizarCentralOperacao(); }
+function _centralLimparBusca(qual){
+  if (qual === 'entrega') _centralBuscaEntrega = ''; else _centralBuscaColeta = '';
+  renderizarCentralOperacao();
+}
 
 function _tipoColetaLabel(p){
   if (p.formaColeta === 'cliente') return '🏠 Cliente leva ao pátio';
@@ -636,13 +637,26 @@ function _tipoEntregaLabel(p){
   return p.tipoEntrega === 'estabelecimento' ? '🏪 Estabelecimento do cliente' : '🏢 Retira no pátio';
 }
 
-function _centralColunaColetas(coletas){
+function _centralColunaColetas(coletas, total){
+  const busca = _centralBuscaColeta;
+  const filtrando = !!busca;
+  if (typeof total !== 'number') total = coletas.length;
   return `<div class="central-col">
     <div class="central-col-cab central-col-coletas">
-      <span>🚚 COLETAS PENDENTES</span>
+      <span>🚚 COLETAS PENDENTES${filtrando?` <span class="central-col-contagem">${coletas.length} de ${total}</span>`:''}</span>
       <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
     </div>
-    ${coletas.length === 0 ? '<p class="central-vazio">Nenhuma coleta pendente. 👍</p>' : `
+    <div class="central-col-busca">
+      <span class="central-col-busca-ic">🔍</span>
+      <input type="text" id="centralBuscaColeta"
+             placeholder="Placa, cegonha, ID, referência ou cliente"
+             value="${String(busca).replace(/"/g,'&quot;')}"
+             oninput="_mmDeb('centralBuscaColeta', function(){ _centralSetBusca('coleta'); })">
+      ${filtrando?`<button class="central-col-busca-x" onclick="_centralLimparBusca('coleta')" title="Limpar">✕</button>`:''}
+    </div>
+    ${coletas.length === 0 ? (filtrando
+        ? `<p class="central-vazio">Nenhuma coleta encontrada para essa busca.</p>`
+        : '<p class="central-vazio">Nenhuma coleta pendente. 👍</p>') : `
     ${_centralColetasPorViagem(coletas)}
     <div class="central-cards" style="display:none">
       ${coletas.map(p => `<label class="central-card" for="cchk_${p.id}">
@@ -681,13 +695,26 @@ function _centralColunaColetas(coletas){
   </div>`;
 }
 
-function _centralColunaEntregas(entregas){
+function _centralColunaEntregas(entregas, total){
+  const busca = _centralBuscaEntrega;
+  const filtrando = !!busca;
+  if (typeof total !== 'number') total = entregas.length;
   return `<div class="central-col">
     <div class="central-col-cab central-col-entregas">
-      <span>📦 ENTREGAS PENDENTES</span>
+      <span>📦 ENTREGAS PENDENTES${filtrando?` <span class="central-col-contagem">${entregas.length} de ${total}</span>`:''}</span>
       <button class="central-refresh" onclick="renderizarCentralOperacao()" title="Atualizar">🔄</button>
     </div>
-    ${entregas.length === 0 ? '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>' : `
+    <div class="central-col-busca">
+      <span class="central-col-busca-ic">🔍</span>
+      <input type="text" id="centralBuscaEntrega"
+             placeholder="Placa, cegonha, ID, referência ou cliente"
+             value="${String(busca).replace(/"/g,'&quot;')}"
+             oninput="_mmDeb('centralBuscaEntrega', function(){ _centralSetBusca('entrega'); })">
+      ${filtrando?`<button class="central-col-busca-x" onclick="_centralLimparBusca('entrega')" title="Limpar">✕</button>`:''}
+    </div>
+    ${entregas.length === 0 ? (filtrando
+        ? `<p class="central-vazio">Nenhuma entrega encontrada para essa busca.</p>`
+        : '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>') : `
     ${_centralEntregasPorViagem(entregas)}
     <div class="central-cards" style="display:none">
       ${entregas.map(p => `<label class="central-card" for="echk_${p.id}">
