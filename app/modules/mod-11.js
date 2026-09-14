@@ -590,9 +590,15 @@ function _montarJornadaHTML(p, hist, trechos){
 // ============================================================
 // TRANSBORDO via dropdown de status: escolher pátio → sugerir corredor da próxima perna
 // ============================================================
-function _abrirModalTransbordoStatus(pedidoId, rotuloAntes){
-  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
-  if (!p) return;
+function _abrirModalTransbordoStatus(pedidoIds, rotuloAntes){
+  // Aceita 1 carro (número) ou vários (array / "1,2,3"): a mesma escolha de
+  // pátio e corredor é aplicada a todos os selecionados.
+  const ids = (Array.isArray(pedidoIds) ? pedidoIds : String(pedidoIds).split(','))
+    .map(x => parseInt(x)).filter(n => !isNaN(n));
+  const alvos = ids.map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  if (alvos.length === 0) return;
+  const p = alvos[0];
+  const varios = alvos.length > 1;
   const old = document.getElementById('modalTransbStatus'); if (old) old.remove();
   const patios = (typeof PATIOS_FIXOS !== 'undefined') ? PATIOS_FIXOS : [];
   const div = document.createElement('div');
@@ -600,8 +606,13 @@ function _abrirModalTransbordoStatus(pedidoId, rotuloAntes){
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
   div.innerHTML = `
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
-      <h2 style="margin:0 0 6px">🔁 Transbordo do #${p.id}</h2>
-      <p class="text-muted" style="font-size:.86rem;margin:.2rem 0 1rem">${p.placa||''} · ${p.modelo||''} · destino final <strong>${p.cidadeDestino||'—'}</strong>. O carro sai do caminhão atual e aguarda a próxima perna.</p>
+      <h2 style="margin:0 0 6px">🔁 Transbordo ${varios ? `de ${alvos.length} carros` : `do #${p.id}`}</h2>
+      ${varios
+        ? `<p class="text-muted" style="font-size:.86rem;margin:.2rem 0 .6rem">O pátio e o corredor escolhidos abaixo valem para <strong>todos os ${alvos.length} carros</strong>. Eles saem do caminhão atual e aguardam a próxima perna.</p>
+           <div class="transb-lista-carros" style="display:flex;flex-direction:column;gap:4px;margin-bottom:1rem;max-height:160px;overflow:auto">
+             ${alvos.map(c => `<div style="font-size:.82rem"><strong>#${c.id}</strong> · ${c.placa||'—'} · ${c.modelo||''} <span class="text-muted">→ ${c.cidadeDestino||'—'}</span></div>`).join('')}
+           </div>`
+        : `<p class="text-muted" style="font-size:.86rem;margin:.2rem 0 1rem">${p.placa||''} · ${p.modelo||''} · destino final <strong>${p.cidadeDestino||'—'}</strong>. O carro sai do caminhão atual e aguarda a próxima perna.</p>`}
       <div class="pulo-etapa">
         <div class="pulo-etapa-tit">🅿️ Em qual pátio vai ficar?</div>
         <label>Pátio de transbordo</label>
@@ -616,7 +627,7 @@ function _abrirModalTransbordoStatus(pedidoId, rotuloAntes){
         <div id="transbSugestao" style="font-size:.8rem;color:#4ade80;margin-top:6px"></div>
       </div>
       <div style="display:flex;gap:10px;margin-top:16px">
-        <button class="btn btn-primary" style="flex:1" onclick="_confirmarTransbordoStatus(${pedidoId}, '${rotuloAntes.replace(/'/g,"\\'")}')">✅ Confirmar transbordo</button>
+        <button class="btn btn-primary" style="flex:1" onclick="_confirmarTransbordoStatus('${ids.join(',')}', '${String(rotuloAntes||'').replace(/'/g,"\\'")}')">✅ Confirmar transbordo${varios ? ` (${alvos.length})` : ''}</button>
         <button class="btn btn-secondary" onclick="document.getElementById('modalTransbStatus').remove()">Cancelar</button>
       </div>
     </div>`;
@@ -683,47 +694,72 @@ async function _desfazerTransbordo(pedidoId){
   } catch(e){ alert('Erro ao desfazer transbordo: '+(e.message||e)); }
 }
 
-async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
-  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
-  if (!p) return;
+// Aplica o transbordo a UM pedido (update + histórico + saída da viagem de origem).
+// Extraído para que a confirmação possa rodar em lote com a mesma escolha de pátio/corredor.
+async function _aplicarTransbordoPedido(p, patio, corredorId, rotuloAntes, usuario, perfil){
+  const pedidoId = p.id;
+  const cegonhaAnterior = p.placaCegonha || '';
+  const _rotaOrigem = p.rotaId || p.rota_id || null;
+  const upd = {
+    status: 'Transbordo',
+    status_planilha: 'Transbordo',
+    cidade_transbordo: patio,
+    transbordo_em: new Date().toISOString(),
+    patio_atual: patio,
+    patio_desde: new Date().toISOString(),
+    aguardando_transbordo: !corredorId,  // se não direcionou a corredor, fica aguardando transbordo
+    qtd_transbordos: (p.qtdTransbordos || 0) + 1,
+    // Item 2: NÃO sai da viagem agora — fica na viagem antiga até ela finalizar.
+    // Mas já pode ser planejado nos corredores (a próxima perna).
+    corredor_manual_id: corredorId ? parseInt(corredorId) : null
+  };
+  await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+  // preserva o vínculo histórico da viagem de origem (marca saída, não apaga)
+  if (_rotaOrigem){ await _marcarSaidaTransbordo(_rotaOrigem, pedidoId, `transbordo em ${patio}`, patio); }
+  Object.assign(p, {
+    status:'Transbordo', statusPlanilha:'Transbordo', cidadeTransbordo:patio,
+    patioAtual:patio,
+    aguardandoTransbordo: !corredorId, qtdTransbordos: (p.qtdTransbordos||0)+1,
+    corredorManualId: corredorId ? parseInt(corredorId) : null
+  });
+  // registra a perna que acabou (para os trechos automáticos usarem depois)
+  try {
+    await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: rotuloAntes, status_novo: 'Transbordo',
+      usuario_nome: usuario, usuario_perfil: perfil,
+      observacao: `🔁 Transbordo no pátio de ${patio}${cegonhaAnterior?' — chegou com '+cegonhaAnterior:''}${corredorId?' — direcionado a um corredor':' — aguardando definição de corredor'}`
+    });
+  } catch(_){}
+  // notifica comercial sobre o transbordo do pedido
+  if (typeof notificar === 'function'){
+    try { notificar({ perfil:'comercial', tipo:'status', pedidoId: parseInt(pedidoId),
+      titulo:'🔁 Transbordo registrado', mensagem:`#${pedidoId} transbordou no pátio de ${patio}.` }); } catch(_){}
+  }
+}
+
+// Confirma o transbordo de 1 ou vários carros — todos vão para o MESMO pátio
+// e o MESMO corredor escolhidos no modal.
+async function _confirmarTransbordoStatus(pedidoIds, rotuloAntes){
+  const ids = (Array.isArray(pedidoIds) ? pedidoIds : String(pedidoIds).split(','))
+    .map(x => parseInt(x)).filter(n => !isNaN(n));
+  const alvos = ids.map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  if (alvos.length === 0) return;
   const patio = document.getElementById('transbPatio')?.value || '';
   const corredorId = document.getElementById('transbCorredor')?.value || null;
-  if (!patio){ alert('Selecione o pátio onde o carro vai ficar.'); return; }
+  if (!patio){ alert('Selecione o pátio onde o(s) carro(s) vai(vão) ficar.'); return; }
   const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
   const usuario = document.getElementById('usuarioLogado')?.textContent || '';
-  const cegonhaAnterior = p.placaCegonha || '';
+  const btn = document.getElementById('modalTransbStatus')?.querySelector('.btn-primary');
+  if (btn){ btn.disabled = true; btn.textContent = '⏳ Registrando...'; }
+  const falhas = [];
   try {
-    const _rotaOrigem = p.rotaId || p.rota_id || null;
-    const upd = {
-      status: 'Transbordo',
-      status_planilha: 'Transbordo',
-      cidade_transbordo: patio,
-      transbordo_em: new Date().toISOString(),
-      patio_atual: patio,
-      patio_desde: new Date().toISOString(),
-      aguardando_transbordo: !corredorId,  // se não direcionou a corredor, fica aguardando transbordo
-      qtd_transbordos: (p.qtdTransbordos || 0) + 1,
-      // Item 2: NÃO sai da viagem agora — fica na viagem antiga até ela finalizar.
-      // Mas já pode ser planejado nos corredores (a próxima perna).
-      corredor_manual_id: corredorId ? parseInt(corredorId) : null
-    };
-    await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
-    // preserva o vínculo histórico da viagem de origem (marca saída, não apaga)
-    if (_rotaOrigem){ await _marcarSaidaTransbordo(_rotaOrigem, pedidoId, `transbordo em ${patio}`, patio); }
-    Object.assign(p, {
-      status:'Transbordo', statusPlanilha:'Transbordo', cidadeTransbordo:patio,
-      patioAtual:patio,
-      aguardandoTransbordo: !corredorId, qtdTransbordos: (p.qtdTransbordos||0)+1,
-      corredorManualId: corredorId ? parseInt(corredorId) : null
-    });
-    // registra a perna que acabou (para os trechos automáticos usarem depois)
-    try {
-      await supabase.from('historico_status').insert({
-        pedido_id: parseInt(pedidoId), status_anterior: rotuloAntes, status_novo: 'Transbordo',
-        usuario_nome: usuario, usuario_perfil: perfil,
-        observacao: `🔁 Transbordo no pátio de ${patio}${cegonhaAnterior?' — chegou com '+cegonhaAnterior:''}${corredorId?' — direcionado a um corredor':' — aguardando definição de corredor'}`
-      });
-    } catch(_){}
+    for (const p of alvos){
+      // cada carro pode estar num status diferente; usa o rótulo real quando houver
+      const rotulo = (typeof statusPlanilhaDoPedido === 'function')
+        ? (statusPlanilhaDoPedido(p) || rotuloAntes) : rotuloAntes;
+      try { await _aplicarTransbordoPedido(p, patio, corredorId, rotulo, usuario, perfil); }
+      catch(e){ falhas.push(`#${p.id}: ${e.message||e}`); }
+    }
     document.getElementById('modalTransbStatus')?.remove();
     await recarregarPedidos();
     if (typeof renderizarAcompanhamento === 'function') renderizarAcompanhamento();
@@ -731,14 +767,17 @@ async function _confirmarTransbordoStatus(pedidoId, rotuloAntes){
     if (typeof renderizarPlanejamentoRotas === 'function') renderizarPlanejamentoRotas();
     if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento();
     if (typeof renderizarVagasPorRota === 'function') renderizarVagasPorRota();
-    // notifica comercial sobre o transbordo do pedido
-    if (typeof notificar === 'function'){
-      try { notificar({ perfil:'comercial', tipo:'status', pedidoId: parseInt(pedidoId),
-        titulo:'🔁 Transbordo registrado', mensagem:`#${pedidoId} transbordou no pátio de ${patio}.` }); } catch(_){}
+    const ok = alvos.length - falhas.length;
+    if (falhas.length) alert(`Alguns carros não puderam ser transbordados:\n\n• ${falhas.join('\n• ')}`);
+    if (ok > 0 && typeof exibirMensagem === 'function'){
+      const quem = ok === 1 ? `#${alvos[0].id}` : `${ok} carros`;
+      exibirMensagem('mensagemLogistica',
+        `🔁 ${quem} em transbordo no pátio de ${patio}${corredorId?' e direcionado(s) ao corredor':''}. ${corredorId?'':'Veja em "Aguardando transbordo".'}`, 'success');
     }
-    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica',
-      `🔁 #${pedidoId} em transbordo no pátio de ${patio}${corredorId?' e direcionado ao corredor':''}. ${corredorId?'':'Veja em "Aguardando transbordo".'}`, 'success');
-  } catch(e){ alert('Erro ao registrar transbordo: '+(e.message||e)); }
+  } catch(e){
+    if (btn){ btn.disabled = false; btn.textContent = '✅ Confirmar transbordo'; }
+    alert('Erro ao registrar transbordo: '+(e.message||e));
+  }
 }
 
 // Marca (planejamento) que um pedido vai transbordar em determinada parada — só um lembrete visual
@@ -1311,11 +1350,13 @@ async function _confirmarOcorrencia(pedidoId, descricao, rota){
 async function _viagemRegistrarTransbordo(rota, carros){
   const elegiveis = carros.filter(c => !['Entregue','Cancelado','Transbordo'].includes(c.status));
   if (elegiveis.length === 0){ alert('Nenhum carro elegível para transbordo.'); return; }
-  // usa o fluxo de transbordo que já existe (escolhe pátio → corredor), 1 carro por vez
-  if (elegiveis.length === 1){ _abrirModalTransbordoStatus(elegiveis[0].id, statusPlanilhaDoPedido(elegiveis[0])); return; }
-  _viagemModalCarros('🔁 Registrar Transbordo', 'Selecione o carro que vai transbordar (um por vez, para escolher pátio e corredor).', elegiveis, '#fb923c', '➡️ Continuar', async (ids) => {
+  // usa o fluxo de transbordo que já existe (escolhe pátio → corredor).
+  // Vários carros podem transbordar juntos: a escolha vale para todos os selecionados.
+  if (elegiveis.length === 1){ _abrirModalTransbordoStatus([elegiveis[0].id], statusPlanilhaDoPedido(elegiveis[0])); return; }
+  _viagemModalCarros('🔁 Registrar Transbordo', 'Selecione os carros que vão transbordar. O pátio e o corredor escolhidos em seguida valem para todos eles.', elegiveis, '#fb923c', '➡️ Continuar', async (ids) => {
     document.getElementById('modalViagemAcao').remove();
-    _abrirModalTransbordoStatus(ids[0], statusPlanilhaDoPedido((pedidosGlobais||[]).find(x=>x.id===ids[0])));
+    const primeiro = (pedidosGlobais||[]).find(x => String(x.id)===String(ids[0]));
+    _abrirModalTransbordoStatus(ids, primeiro ? statusPlanilhaDoPedido(primeiro) : 'Em Transporte');
   });
 }
 
