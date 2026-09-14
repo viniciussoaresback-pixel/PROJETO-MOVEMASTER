@@ -1783,26 +1783,32 @@ async function _colJaNoPatio(ids){
   document.getElementById('modalDirecionarColeta')?.remove();
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   const agora = new Date().toISOString();
-  for (const id of ids){
+  // Em lote: guarda o status anterior de todos antes de alterar
+  const _antesPorId = {};
+  (ids||[]).forEach(id => {
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    if (!p) continue;
-    const antes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
-    try {
-      await supabase.from('pedidos').update({
-        // Grava no mesmo formato dos pátios cadastrados (Cidade/UF), senão
-        // o carro não casa com nenhum pátio da lista.
-        patio_atual: p.cidadeOrigem ? (p.cidadeOrigem + (p.ufOrigem ? '/' + p.ufOrigem : '')) : null,
-        patio_desde: agora,
-        status: 'Em Coleta', status_planilha: 'Coletado'
-      }).eq('id', id);
-      p.patioAtual = p.cidadeOrigem ? (p.cidadeOrigem + (p.ufOrigem ? '/' + p.ufOrigem : '')) : null; p.status = 'Em Coleta'; p.statusPlanilha = 'Coletado';
-      try { await supabase.from('historico_status').insert({
-        pedido_id: parseInt(id), status_anterior: antes, status_novo: 'Coletado',
-        usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
-        observacao: '✅ Confirmado no pátio pela logística.'
-      }); } catch(_){}
-    } catch(e){ console.error('direcionar coleta', id, e); }
-  }
+    if (p) _antesPorId[p.id] = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
+  });
+
+  await mmAtualizarPedidos(ids,
+    (p) => ({
+      patio_atual: p.cidadeOrigem ? (p.cidadeOrigem + (p.ufOrigem ? '/' + p.ufOrigem : '')) : null,
+      patio_desde: agora,
+      status: 'Em Coleta',
+      status_planilha: 'Coletado'
+    }),
+    (p) => {
+      p.patioAtual = p.cidadeOrigem ? (p.cidadeOrigem + (p.ufOrigem ? '/' + p.ufOrigem : '')) : null;
+      p.status = 'Em Coleta'; p.statusPlanilha = 'Coletado';
+    }
+  );
+
+  await mmRegistrarHistorico((ids||[]).map(id => ({
+    pedido_id: parseInt(id), status_anterior: _antesPorId[id], status_novo: 'Coletado',
+    usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+    observacao: '✅ Confirmado no pátio pela logística.'
+  })));
+
   if (typeof mmToast === 'function') mmToast(`✅ ${ids.length} carro(s) confirmados no pátio`);
   if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
   if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
