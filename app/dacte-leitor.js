@@ -344,48 +344,86 @@ async function _dacteAplicar() {
   if (!_dacteResultado) return;
   const { linhas } = _dacteResultado;
 
-  // Um grupo só pode receber um CT-e: se dois documentos apontarem para o
-  // mesmo grupo, avisa em vez de sobrescrever em silêncio.
-  const destino = {};
-  const conflitos = [];
+  // A gravação é POR CARRO, não por grupo.
+  //
+  // Antes o código decidia por grupo de requisição e recusava quando dois
+  // CT-es apontavam para o mesmo grupo. Só que isso é normal: um DACTE com
+  // vários CT-es cobre carros diferentes da mesma requisição. Não havia
+  // conflito — cada CT-e vai para os carros cuja placa ele traz.
+  //
+  // Conflito de verdade é outra coisa: DOIS CT-es trazendo a MESMA placa.
+  // Só nesse caso avisamos, porque aí o carro receberia dois números.
+  const porPedido = {};          // pedidoId -> numero do CT-e
+  const duplicados = [];
 
   linhas.forEach((l, i) => {
     if (!document.getElementById(`dacteUsar_${i}`)?.checked) return;
+
     l.alvos.forEach(g => {
-      if (destino[g.chave] && destino[g.chave].numero !== l.cte.numeroCte) {
-        conflitos.push(`${g.chave}: CT-e ${destino[g.chave].numero} e ${l.cte.numeroCte}`);
-      }
-      destino[g.chave] = { numero: l.cte.numeroCte, ids: g.ids };
+      (g.ids || []).forEach((pedidoId, idx) => {
+        const placa = (g.placas || [])[idx];
+        // Só grava no carro cuja placa está NESTE CT-e
+        if (placa && !l.cte.placas.includes(placa)) return;
+
+        if (porPedido[pedidoId] && porPedido[pedidoId] !== l.cte.numeroCte) {
+          duplicados.push(`${placa || ('#' + pedidoId)}: CT-e ${porPedido[pedidoId]} e ${l.cte.numeroCte}`);
+        }
+        porPedido[pedidoId] = l.cte.numeroCte;
+      });
     });
   });
 
-  if (conflitos.length) {
-    alert('Dois CT-es diferentes apontam para o mesmo grupo de carros:\n\n'
-      + conflitos.join('\n')
-      + '\n\nConfira os documentos e tente de novo.');
+  if (duplicados.length) {
+    alert('O mesmo carro aparece em dois CT-es diferentes:\n\n'
+      + duplicados.join('\n')
+      + '\n\nConfira os documentos: cada carro deve ter um CT-e só.');
     return;
   }
 
-  const chaves = Object.keys(destino);
-  if (!chaves.length) { alert('Nenhum CT-e marcado para aplicar.'); return; }
+  const pedidos = Object.keys(porPedido);
+  if (!pedidos.length) { alert('Nenhum CT-e marcado para aplicar.'); return; }
+
+  // Agrupa por número de CT-e: um update por documento, não por carro
+  const porNumero = {};
+  pedidos.forEach(id => {
+    const n = porPedido[id];
+    (porNumero[n] = porNumero[n] || []).push(parseInt(id));
+  });
 
   let gravados = 0;
-  for (const chave of chaves) {
-    const { numero, ids } = destino[chave];
+  const agora = new Date().toISOString();
+
+  for (const numero of Object.keys(porNumero)) {
+    const ids = porNumero[numero];
     try {
-      if (typeof _salvarNumeroCteGrupoValor === 'function') {
-        await _salvarNumeroCteGrupoValor(chave, ids, numero);
+      if (typeof mmAtualizarPedidos === 'function') {
+        await mmAtualizarPedidos(ids,
+          { numero_cte: numero, cte_emitido_em: agora },
+          (p) => { p.numeroCte = numero; p.cteEmitidoEm = agora; }
+        );
+      } else {
+        await supabase.from('pedidos')
+          .update({ numero_cte: numero, cte_emitido_em: agora }).in('id', ids);
       }
-      const campo = document.getElementById(`cteNum_${chave}`);
-      if (campo) campo.value = numero;
-      gravados++;
+      gravados += ids.length;
     } catch (e) {
-      console.error('Falha ao gravar CT-e do grupo', chave, e);
+      console.error('Falha ao gravar CT-e', numero, e);
     }
   }
 
+  // Atualiza os campos visíveis dos grupos afetados
+  document.querySelectorAll('[id^="cteNum_"]').forEach(campo => {
+    const chave = campo.id.replace('cteNum_', '');
+    const grupo = (window._fiscalGruposPorRota || {});
+    Object.values(grupo).flat().forEach(g => {
+      if (g.chave !== chave) return;
+      const n = (g.ids || []).map(id => porPedido[id]).filter(Boolean)[0];
+      if (n) campo.value = n;
+    });
+  });
+
   _dacteFechar();
   if (typeof exibirMensagem === 'function') {
-    exibirMensagem('mensagemFiscal', `✅ ${gravados} CT-e(s) preenchidos automaticamente.`, 'success');
+    exibirMensagem('mensagemFiscal', `✅ CT-e preenchido em ${gravados} carro(s).`, 'success');
   }
 }
