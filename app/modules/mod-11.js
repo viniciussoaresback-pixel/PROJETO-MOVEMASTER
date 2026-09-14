@@ -895,8 +895,10 @@ function _viagemDetalheHTML(rota, carros){
     <div class="jv-dados-grid">
       <div><span class="jv-dl">Origem</span><span class="jv-dv">${origem}</span></div>
       <div><span class="jv-dl">Destino final</span><span class="jv-dv">${destinoFinal}</span></div>
-      <div><span class="jv-dl">Motorista</span><span class="jv-dv">${rota.motorista_1||'a definir'}</span></div>
-      <div><span class="jv-dl">Caminhão / Carreta</span><span class="jv-dv">${rota.placa_cegonha||'a definir'}</span></div>
+      <div><span class="jv-dl">Motorista</span><span class="jv-dv">${rota.motorista_1||'<em style="opacity:.6">a definir</em>'}
+        <button class="jv-edit-btn" onclick="_viagemDefinirMotorista(${rota.id})" title="${rota.motorista_1?'Trocar o motorista':'Definir o motorista desta viagem'}">✏️</button></span></div>
+      <div><span class="jv-dl">Caminhão / Carreta</span><span class="jv-dv">${rota.placa_cegonha||'<em style="opacity:.6">a definir</em>'}
+        <button class="jv-edit-btn" onclick="_viagemDefinirCegonha(${rota.id})" title="${rota.placa_cegonha?'Trocar o caminhão':'Definir o caminhão desta viagem'}">✏️</button></span></div>
       <div><span class="jv-dl">Carros na carga</span><span class="jv-dv">${carros.length}</span></div>
       <div><span class="jv-dl">Frete da carga</span><span class="jv-dv" style="color:#4ade80;font-weight:700">${
         'R$ ' + carros.reduce((soma, c) => soma + (Number(c.valorFrete) || 0), 0)
@@ -1910,3 +1912,90 @@ async function confirmarServicoAvulso(pedidoId, tipo){
 }
 
 window.confirmarServicoAvulso = confirmarServicoAvulso;
+
+
+/* =========================================================================
+   DEFINIR MOTORISTA / CAMINHÃO direto na viagem
+
+   Sem isto, uma viagem criada sem motorista travava: não dava para enviar
+   ao fiscal e a única saída era refazer a viagem. Agora dá para completar
+   a informação onde ela está faltando.
+   ========================================================================= */
+
+async function _viagemDefinirMotorista(rotaId){
+  const r = (rotasGlobais||[]).find(x => String(x.id)===String(rotaId));
+  if (!r) return;
+
+  const lista = (motoristasGlobais||[]).map(m => m.nome).filter(Boolean);
+  const atual = r.motorista_1 || '';
+  const nome = prompt(
+    `Motorista desta viagem:\n\n${lista.slice(0,25).join('\n')}${lista.length>25?'\n...':''}`,
+    atual
+  );
+  if (nome === null) return;
+  const valor = nome.trim();
+  if (!valor) return;
+
+  try {
+    const { error } = await supabase.from('rotas_planejadas')
+      .update({ motorista_1: valor }).eq('id', rotaId);
+    if (error) throw error;
+    r.motorista_1 = valor;
+
+    // Os carros da carga acompanham o motorista da viagem
+    const ids = _veiculosNaRota(rotaId).map(p => p.id);
+    if (ids.length && typeof mmAtualizarPedidos === 'function'){
+      await mmAtualizarPedidos(ids, { motorista_1: valor }, (p) => { p.motorista1 = valor; });
+    }
+
+    if (typeof mmToast === 'function') mmToast(`✅ Motorista definido: ${valor}`);
+    renderizarViagensAndamento();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+  } catch(e){
+    alert('Não foi possível salvar: ' + (e.message||e));
+  }
+}
+
+async function _viagemDefinirCegonha(rotaId){
+  const r = (rotasGlobais||[]).find(x => String(x.id)===String(rotaId));
+  if (!r) return;
+
+  const cegonhas = (veiculosGlobais||[])
+    .filter(v => (v.tipo||'').toLowerCase().includes('cegonha') || v.capacidade)
+    .map(v => `${v.placa}${v.capacidade?' ('+v.capacidade+' vagas)':''}`);
+  const placa = prompt(
+    `Caminhão / carreta desta viagem:\n\n${cegonhas.slice(0,25).join('\n')}${cegonhas.length>25?'\n...':''}`,
+    r.placa_cegonha || ''
+  );
+  if (placa === null) return;
+  const valor = placa.trim().split(' ')[0].toUpperCase();
+  if (!valor) return;
+
+  try {
+    const { error } = await supabase.from('rotas_planejadas')
+      .update({ placa_cegonha: valor }).eq('id', rotaId);
+    if (error) throw error;
+    r.placa_cegonha = valor;
+
+    const ids = _veiculosNaRota(rotaId).map(p => p.id);
+    if (ids.length && typeof mmAtualizarPedidos === 'function'){
+      await mmAtualizarPedidos(ids, { placa_cegonha: valor }, (p) => { p.placaCegonha = valor; });
+    }
+
+    // Motorista padrão do veículo, se a viagem ainda não tiver um
+    const veic = (veiculosGlobais||[]).find(v => v.placa === valor);
+    if (veic?.motorista_padrao && !r.motorista_1){
+      await supabase.from('rotas_planejadas').update({ motorista_1: veic.motorista_padrao }).eq('id', rotaId);
+      r.motorista_1 = veic.motorista_padrao;
+    }
+
+    if (typeof mmToast === 'function') mmToast(`✅ Caminhão definido: ${valor}`);
+    renderizarViagensAndamento();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+  } catch(e){
+    alert('Não foi possível salvar: ' + (e.message||e));
+  }
+}
+
+window._viagemDefinirMotorista = _viagemDefinirMotorista;
+window._viagemDefinirCegonha = _viagemDefinirCegonha;
