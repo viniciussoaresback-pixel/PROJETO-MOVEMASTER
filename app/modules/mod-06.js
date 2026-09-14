@@ -864,43 +864,50 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
 
         // Ao CANCELAR a rota: a viagem não aconteceu — os carros voltam à etapa anterior.
         if (novoStatus === 'cancelada'){
-            const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
-            const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
-            const carros = (pedidosGlobais||[]).filter(p =>
-                String(p.rotaId || p.rota_id) === String(rotaId) &&
-                !['Entregue','Cancelado'].includes(p.status||''));
-            for (const p of carros){
-                const rotuloAntes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
-                // Cancelou a rota = como se o planejamento nunca tivesse existido.
-                // Volta ao estado inicial: "Aguardando coleta" e SEM nenhum vínculo de motorista/cegonha/rota/pátio.
-                // Status próprio: o carro não é um pendente comum, está parado por um
-    // problema. Assim ele se destaca na fila e ninguém o puxa por engano.
-    const novoRotulo = 'Ocorrência';
-                const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo]) ? STATUS_PLANILHA[novoRotulo].interno : 'Aguardando Confirmação';
-                try {
-                    await supabase.from('pedidos').update({
-                        status: interno, status_planilha: novoRotulo,
-                        rota_id: null,                 // desvincula da rota
-                        placa_cegonha: null,           // solta a cegonha
-                        motorista_1: null, motorista_2: null,        // solta os motoristas
-                        percent_motorista_1: null, percent_motorista_2: null,
-                        corredor_manual_id: null,      // volta a encaixar automaticamente
-                        patio_atual: null, patio_desde: null  // não está mais em pátio nenhum
-                    }).eq('id', p.id);
-                    Object.assign(p, {
-                        status: interno, statusPlanilha: novoRotulo,
-                        rotaId: null, rota_id: null, placaCegonha: null,
-                        motorista1: null, motorista2: null,
-                        corredorManualId: null, patioAtual: null
-                    });
-                    await supabase.from('historico_status').insert({
-                        pedido_id: p.id, status_anterior: rotuloAntes, status_novo: novoRotulo,
-                        usuario_nome: usuario, usuario_perfil: perfil,
-                        observacao: '↩️ rota cancelada — pedido voltou ao estado inicial (sem motorista/cegonha/rota).'
-                    });
-                } catch(_){}
-            }
-        }
+    const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
+    const carros = (pedidosGlobais||[]).filter(p =>
+        String(p.rotaId || p.rota_id) === String(rotaId) &&
+        !['Entregue','Cancelado'].includes(p.status||''));
+    for (const p of carros){
+        const rotuloAntes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
+        // Cancelou a rota = como se o planejamento nunca tivesse existido.
+        // Volta ao estado inicial: "Aguardando coleta" e SEM vínculos.
+        const novoRotulo = 'Aguardando coleta';
+        const interno = (typeof STATUS_PLANILHA!=='undefined' && STATUS_PLANILHA[novoRotulo])
+            ? STATUS_PLANILHA[novoRotulo].interno
+            : 'Aguardando Confirmação';
+        try {
+            await supabase.from('pedidos').update({
+                status: interno,
+                status_planilha: novoRotulo,
+                rota_id: null,
+                placa_cegonha: null,
+                motorista_1: null,
+                motorista_2: null,
+                percent_motorista_1: null,
+                percent_motorista_2: null,
+                corredor_manual_id: null,
+                patio_atual: null,
+                patio_desde: null
+            }).eq('id', p.id);
+            Object.assign(p, {
+                status: interno, statusPlanilha: novoRotulo,
+                rotaId: null, rota_id: null, placaCegonha: null,
+                motorista1: null, motorista2: null,
+                corredorManualId: null, patioAtual: null
+            });
+            await supabase.from('historico_status').insert({
+                pedido_id: p.id,
+                status_anterior: rotuloAntes,
+                status_novo: novoRotulo,
+                usuario_nome: usuario,
+                usuario_perfil: perfil,
+                observacao: '↩️ rota cancelada — pedido voltou ao estado inicial (sem motorista/cegonha/rota).'
+            });
+        } catch(_){}
+    }
+}
 
         // Ao concluir, limpa os documentos (manifesto/CTe) da rota — controle do que está em aberto
         if (novoStatus === 'concluida'){
