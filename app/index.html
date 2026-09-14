@@ -313,6 +313,7 @@
                     <button class="nav-btn" data-tab="diretoria">📊 Visão Geral</button>
                     <button class="nav-btn" data-tab="visaoGlobal">🌐 Visão Global</button>
                     <button class="nav-btn" data-tab="comercialPedidos">📋 Pedidos</button>
+                    <button class="nav-btn" data-tab="patios">🅿️ Pátios</button>
                     <button class="nav-btn" data-tab="comercialViagens">🚛 Viagens</button>
                     <button class="nav-btn active" data-tab="comercial">Lançamento Comercial</button>
                     <button class="nav-btn" data-tab="orcamento">💵 Orçamento</button>
@@ -647,6 +648,17 @@
             <!-- TAB: ORÇAMENTO -->
             <section id="visaoGlobal" class="tab-content">
                 <div id="visaoGlobalConteudo"></div>
+            </section>
+
+            <section id="patios" class="tab-content">
+                <div class="card">
+                    <div class="painel-header-bar">
+                        <h2>🅿️ Pátios</h2>
+                        <button class="btn btn-secondary btn-sm" onclick="renderizarPainelPatios()">↻ Atualizar</button>
+                    </div>
+                    <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Carros parados em pátio agora — aguardando entrega, transbordo ou carga.</p>
+                    <div class="painel-patios-alvo"></div>
+                </div>
             </section>
 
             <section id="comercialPedidos" class="tab-content">
@@ -2388,6 +2400,7 @@
 
     <script src="dacte-leitor.js"></script>
     <script src="skeletons.js"></script>
+    <script src="lote.js"></script>
     <script src="trajetoria.js"></script>
     <script src="busca-historico.js"></script>
     <script src="modules/mod-01.js"></script>
