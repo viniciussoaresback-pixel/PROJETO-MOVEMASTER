@@ -332,28 +332,45 @@ async function _planConfirmarViagem(corId){
     const { data: rota, error } = await supabase.from('rotas_planejadas').insert(ins).select().single();
     if (error) throw error;
     if (rota) rotasGlobais.push(rota);
-    // vincula os pedidos
-    for (const id of ids){
-      const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-      if (!p) continue;
-      const upd = { rota_id: rota.id };
-      if (cegonha) upd.placa_cegonha = cegonha;
-      if (motorista) upd.motorista_1 = motorista;
-      // Se o pedido era um transbordado direcionado a este corredor, ao entrar na nova viagem
-      // ele deixa de ser "aguardando próxima perna": limpa o corredor manual e volta a status de transporte.
-      const pAtual = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-      if (pAtual && pAtual.status === 'Transbordo'){
-        upd.corredor_manual_id = null;
-        upd.status = 'Em Transporte';
-        upd.status_planilha = null;
-      }
-      await supabase.from('pedidos').update(upd).eq('id', id);
+    // Vincula os pedidos EM LOTE.
+    // Antes era um laço com duas idas ao servidor por carro (update +
+    // vínculo). Com 11 carros davam 22 esperas em fila, e a tela ia
+    // mostrando 6, depois 9, depois os 11. Agora são poucas chamadas,
+    // independente da quantidade.
+    const alvos = ids
+      .map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id)))
+      .filter(Boolean);
+
+    // Transbordados voltam a "em transporte" ao entrar na nova viagem —
+    // por isso vão num update separado dos demais.
+    const transb = alvos.filter(p => p.status === 'Transbordo');
+    const comuns = alvos.filter(p => p.status !== 'Transbordo');
+
+    const base = { rota_id: rota.id };
+    if (cegonha) base.placa_cegonha = cegonha;
+    if (motorista) base.motorista_1 = motorista;
+
+    if (comuns.length){
+      await supabase.from('pedidos').update(base).in('id', comuns.map(p => p.id));
+    }
+    if (transb.length){
+      await supabase.from('pedidos')
+        .update({ ...base, corredor_manual_id: null, status: 'Em Transporte', status_planilha: null })
+        .in('id', transb.map(p => p.id));
+    }
+
+    // Memória de uma vez só: a tela redesenha completa, sem etapas
+    alvos.forEach(p => {
       p.rotaId = rota.id; p.rota_id = rota.id;
       if (cegonha) p.placaCegonha = cegonha;
       if (motorista) p.motorista1 = motorista;
-      if (pAtual && pAtual.status === 'Transbordo'){ p.corredorManualId = null; p.corredor_manual_id = null; p.status = 'Em Transporte'; p.statusPlanilha = null; }
-      await _registrarVinculoViagem(rota.id, id); // vínculo histórico permanente
-    }
+    });
+    transb.forEach(p => {
+      p.corredorManualId = null; p.corredor_manual_id = null;
+      p.status = 'Em Transporte'; p.statusPlanilha = null;
+    });
+
+    await _registrarVinculoViagemLote(rota.id, alvos.map(p => p.id));
     document.getElementById('modalPlanViagem')?.remove();
     renderizarPlanejamentoRotas();
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `🚛 Viagem criada no corredor ${cor.nome} com ${ids.length} pedido(s).`, 'success');
@@ -744,24 +761,14 @@ async function _centralConfirmarMotoristaColeta(ids){
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   let ok = 0;
 
-  for (const id of ids){
-    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    try {
-      const { error } = await supabase.from('pedidos').update({
-        coleta_motorista: mot,
-        coleta_direcionada_em: new Date().toISOString(),
-        coleta_direcionada_por: usuario
-      }).eq('id', id);
-      if (error) throw error;
-      if (p){
-        p.coletaMotorista = mot;
-        p.coletaDirecionadaEm = new Date().toISOString();
-      }
-      ok++;
-    } catch(e){
-      console.error('Erro ao direcionar coleta', id, e);
-    }
-  }
+  // Em lote: um update para todos os carros selecionados
+  const _agoraCol = new Date().toISOString();
+  const _rc = await mmAtualizarPedidos(ids,
+    { coleta_motorista: mot, coleta_direcionada_em: _agoraCol, coleta_direcionada_por: usuario },
+    (p) => { p.coletaMotorista = mot; p.coletaDirecionadaEm = _agoraCol; }
+  );
+  ok = _rc.ok;
+
 
   document.getElementById('modalCentralMotColeta')?.remove();
   if (typeof mmToast === 'function') mmToast(`✅ ${ok} coleta(s) direcionada(s) para ${mot}`);
@@ -801,24 +808,14 @@ async function _centralConfirmarEquipe(ids){
   const equipeId = document.getElementById('centralEquipeSel')?.value;
   if (!equipeId){ alert('Selecione uma equipe.'); return; }
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
-  for (const id of ids){
-    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    if (!p) continue;
-    try {
-      // coleta_equipe_id é o DIRECIONAMENTO da logística.
-      // equipe_coleta_id (nomes parecidos, coisas diferentes) é a sugestão do
-      // comercial no lançamento — não é mexida aqui, para o combinado
-      // original continuar registrado.
-      const _agora = new Date().toISOString();
-      await supabase.from('pedidos').update({
-        coleta_equipe_id: parseInt(equipeId),
-        coleta_direcionada_em: _agora,
-        coleta_direcionada_por: document.getElementById('usuarioLogado')?.textContent || 'Logística'
-      }).eq('id', id);
-      p.coletaEquipeId = parseInt(equipeId);
-      p.coletaDirecionadaEm = _agora;
-    } catch(e){ console.error('Erro ao direcionar coleta', id, e); }
-  }
+  // Em lote. coleta_equipe_id é o DIRECIONAMENTO da logística;
+  // equipe_coleta_id (nome parecido) é a sugestão do comercial e não é mexida.
+  const _agoraEq = new Date().toISOString();
+  const _usrEq = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  await mmAtualizarPedidos(ids,
+    { coleta_equipe_id: parseInt(equipeId), coleta_direcionada_em: _agoraEq, coleta_direcionada_por: _usrEq },
+    (p) => { p.coletaEquipeId = parseInt(equipeId); p.coletaDirecionadaEm = _agoraEq; }
+  );
   document.getElementById('modalCentralEquipe')?.remove();
   renderizarCentralOperacao();
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} coleta(s) direcionada(s) para a equipe. A equipe confirma no app.`, 'success');
@@ -864,22 +861,18 @@ async function _centralConfirmarEquipeEntrega(ids){
   if (!equipeId){ alert('Selecione uma equipe.'); return; }
   const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(equipeId));
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
-  for (const id of ids){
+  // Em lote. entrega_equipe_em é o campo que tira o pedido da fila —
+  // faltava ser gravado, e por isso a contagem não baixava.
+  const _agoraEnt = new Date().toISOString();
+  await mmAtualizarPedidos(ids,
+    { entrega_equipe_id: parseInt(equipeId), precisa_equipe_entrega: true, entrega_equipe_em: _agoraEnt },
+    (p) => { p.entregaEquipeId = parseInt(equipeId); p.precisaEquipeEntrega = true; p.entregaEquipeEm = _agoraEnt; }
+  );
+  await mmRegistrarHistorico((ids||[]).map(id => {
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    if (!p) continue;
-    try {
-      const agora = new Date().toISOString();
-      await supabase.from('pedidos').update({
-        entrega_equipe_id: parseInt(equipeId),
-        precisa_equipe_entrega: true,
-        entrega_equipe_em: agora            // faltava: é o campo que tira da fila
-      }).eq('id', id);
-      p.entregaEquipeId = parseInt(equipeId);
-      p.precisaEquipeEntrega = true;
-      p.entregaEquipeEm = agora;
-      try { await supabase.from('historico_status').insert({ pedido_id: parseInt(id), status_anterior: p.status, status_novo: p.status, usuario_nome: usuario, observacao: `👥 Entrega direcionada para a equipe ${eq?eq.nome:''}.` }); } catch(_){}
-    } catch(e){ console.error('Erro ao direcionar entrega', id, e); }
-  }
+    return { pedido_id: parseInt(id), status_anterior: p?.status, status_novo: p?.status,
+             usuario_nome: usuario, observacao: `👥 Entrega direcionada para a equipe ${eq?eq.nome:''}.` };
+  }));
   document.getElementById('modalCentralEquipeEnt')?.remove();
   renderizarCentralOperacao();
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👥 ${ids.length} entrega(s) direcionada(s) para a equipe ${eq?eq.nome:''}. A equipe confirma no app.`, 'success');
@@ -916,20 +909,11 @@ async function _centralConfirmarMotorista(ids){
   // Grava em entrega_motorista, e NÃO em motorista_1. Antes escrevia no
   // motorista_1 — o campo do motorista da cegonha —, e por isso a entrega
   // avulsa entrava na carga e se misturava com os carros transportados.
-  for (const id of ids){
-    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
-    if (!p) continue;
-    try {
-      const { error } = await supabase.from('pedidos').update({
-        entrega_motorista: mot,
-        entrega_direcionada_em: new Date().toISOString(),
-        entrega_direcionada_por: usuario
-      }).eq('id', id);
-      if (error) throw error;
-      p.entregaMotorista = mot;
-      p.entregaDirecionadaEm = new Date().toISOString();
-    } catch(e){ console.error('Erro ao direcionar entrega', id, e); }
-  }
+  const _agoraEm = new Date().toISOString();
+  await mmAtualizarPedidos(ids,
+    { entrega_motorista: mot, entrega_direcionada_em: _agoraEm, entrega_direcionada_por: usuario },
+    (p) => { p.entregaMotorista = mot; p.entregaDirecionadaEm = _agoraEm; }
+  );
   document.getElementById('modalCentralMotorista')?.remove();
   renderizarCentralOperacao();
   if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `👤 ${ids.length} entrega(s) direcionada(s) para ${mot}. O motorista confirma no app.`, 'success');
