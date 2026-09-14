@@ -8804,13 +8804,30 @@ html span.log-passo-bolinha {
 .central-base { display:flex; flex-direction:column; gap:4px; }
 .central-base label { font-size:.68rem; font-weight:700; letter-spacing:.5px; color:var(--text-tertiary,#6b7280); }
 .central-base select { padding:9px 12px; border-radius:9px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; min-width:180px; font-weight:600; }
-/* Busca da Central de Operação (placa, ID, referência) */
-.central-busca { position:relative; display:flex; align-items:center; flex:1 1 260px; min-width:220px; }
-.central-busca .ocup-busca { width:100%; padding-right:34px; }
-.central-busca-limpar { position:absolute; right:8px; background:none; border:none; cursor:pointer;
-  color:var(--text-tertiary,#6b7280); font-size:.9rem; line-height:1; padding:4px; }
-.central-busca-limpar:hover { color:var(--text-primary,#e5e7eb); }
-@media (max-width:640px){ .central-busca { flex:1 1 100%; } }
+/* Busca de cada coluna da Central de Operação (coletas e entregas).
+   Fica logo abaixo do cabeçalho colorido, discreta, sem competir com os cards. */
+.central-col-busca { position:relative; display:flex; align-items:center; padding:10px 16px 0; }
+.central-col-busca-ic { position:absolute; left:26px; font-size:.78rem; opacity:.55; pointer-events:none; }
+.central-col-busca input {
+  width:100%; padding:7px 28px 7px 30px; font-size:.82rem;
+  border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:8px;
+  background:var(--surface-2,rgba(255,255,255,.04)); color:inherit;
+  transition:border-color .15s, background .15s;
+}
+.central-col-busca input::placeholder { color:var(--text-tertiary,#8b93a1); font-size:.78rem; }
+.central-col-busca input:focus {
+  outline:none; border-color:var(--accent,#ff6a00);
+  background:var(--surface-1,rgba(255,255,255,.06));
+}
+.central-col-busca-x {
+  position:absolute; right:22px; background:none; border:none; cursor:pointer;
+  color:var(--text-tertiary,#8b93a1); font-size:.8rem; line-height:1; padding:4px;
+}
+.central-col-busca-x:hover { color:var(--text-primary,#e5e7eb); }
+.central-col-contagem {
+  font-size:.72rem; font-weight:700; opacity:.75; margin-left:6px;
+  padding:1px 7px; border-radius:20px; background:rgba(128,128,128,.18);
+}
 
 .central-kpis { display:flex; gap:12px; flex:1; flex-wrap:wrap; }
 .central-kpi { flex:1; min-width:150px; display:flex; align-items:center; gap:12px; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:12px 16px; background:var(--surface-1,rgba(255,255,255,.03)); }
