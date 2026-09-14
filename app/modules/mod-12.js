@@ -478,6 +478,15 @@ async function _viagemConfirmarPuxar(rotaId, cap){
 // Coletas (→ equipe) | Entregas (→ motorista), filtro por base, saem ao confirmar.
 // ============================================================
 let _centralBase = '__todas__';
+// Busca da Central de Operação — mesmo formato do filtro de Pedidos:
+// placa (do carro ou da cegonha), ID e referência.
+let _centralBusca = '';
+function _centralFiltraBusca(lista){
+  const b = (typeof _norm === 'function') ? _norm(_centralBusca||'') : String(_centralBusca||'').toLowerCase().trim();
+  if (!b) return lista;
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase());
+  return lista.filter(p => n(`${p.placa||''} ${p.placaCegonha||''} ${p.referencia||''} ${p.cliente||''} #${p.id} ${p.id}`).includes(b));
+}
 
 // Bases = cidades-base distintas das equipes
 function _centralBases(){
@@ -562,9 +571,9 @@ function _centralConcluidosHoje(){
 function renderizarCentralOperacao(){
   const cont = document.getElementById('painelViewCentral');
   if (!cont) return;
-  const coletas = _centralColetas();
-  const entregas = _centralEntregas();
-  const aguardando = _centralAguardando();
+  const coletas = _centralFiltraBusca(_centralColetas());
+  const entregas = _centralFiltraBusca(_centralEntregas());
+  const aguardando = _centralFiltraBusca(_centralAguardando());
   const concluidos = _centralConcluidosHoje();
   const bases = _centralBases();
 
@@ -576,6 +585,13 @@ function renderizarCentralOperacao(){
           <option value="__todas__" ${_centralBase==='__todas__'?'selected':''}>Todas</option>
           ${bases.map(b => `<option value="${b}" ${_centralBase===b?'selected':''}>${b}</option>`).join('')}
         </select>
+      </div>
+      <div class="central-busca">
+        <input type="text" id="centralBusca" class="ocup-busca"
+               placeholder="🔍 Buscar por placa (carro ou cegonha), ID ou referência..."
+               value="${String(_centralBusca||'').replace(/"/g,'&quot;')}"
+               oninput="_mmDeb('renderizarCentralOperacao', _centralSetBusca)">
+        ${_centralBusca ? `<button class="central-busca-limpar" onclick="_centralLimparBusca()" title="Limpar busca">✕</button>` : ''}
       </div>
       <div class="central-kpis">
         <div class="central-kpi central-kpi-laranja"><div class="central-kpi-ic">🚚</div><div><span class="central-kpi-lbl">Coletas pendentes</span><span class="central-kpi-num">${coletas.length}</span></div></div>
@@ -592,10 +608,23 @@ function renderizarCentralOperacao(){
 
     ${_centralAguardandoHTML(aguardando)}
 
-    <p class="central-rodape">ℹ️ Pedidos saem desta tela após a confirmação da coleta ou entrega.</p>`;
+    <p class="central-rodape">${_centralBusca
+      ? `🔍 Mostrando apenas os pedidos que casam com "<strong>${String(_centralBusca).replace(/</g,'&lt;')}</strong>". <a href="#" onclick="event.preventDefault();_centralLimparBusca()">limpar busca</a>`
+      : 'ℹ️ Pedidos saem desta tela após a confirmação da coleta ou entrega.'}</p>`;
 }
 
 function _centralSetBase(b){ _centralBase = b; renderizarCentralOperacao(); }
+
+// Busca da Central — guarda o texto, re-renderiza e devolve o cursor ao campo,
+// para que a digitação não seja interrompida pelo redesenho da tela.
+function _centralSetBusca(){
+  _centralBusca = document.getElementById('centralBusca')?.value || '';
+  const pos = document.getElementById('centralBusca')?.selectionStart ?? null;
+  renderizarCentralOperacao();
+  const el = document.getElementById('centralBusca');
+  if (el){ el.focus(); if (pos !== null){ try { el.setSelectionRange(pos, pos); } catch(_){} } }
+}
+function _centralLimparBusca(){ _centralBusca = ''; renderizarCentralOperacao(); }
 
 function _tipoColetaLabel(p){
   if (p.formaColeta === 'cliente') return '🏠 Cliente leva ao pátio';
