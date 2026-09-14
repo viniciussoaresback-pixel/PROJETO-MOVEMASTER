@@ -8804,6 +8804,14 @@ html span.log-passo-bolinha {
 .central-base { display:flex; flex-direction:column; gap:4px; }
 .central-base label { font-size:.68rem; font-weight:700; letter-spacing:.5px; color:var(--text-tertiary,#6b7280); }
 .central-base select { padding:9px 12px; border-radius:9px; border:1px solid var(--border,rgba(255,255,255,.15)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; min-width:180px; font-weight:600; }
+/* Busca da Central de Operação (placa, ID, referência) */
+.central-busca { position:relative; display:flex; align-items:center; flex:1 1 260px; min-width:220px; }
+.central-busca .ocup-busca { width:100%; padding-right:34px; }
+.central-busca-limpar { position:absolute; right:8px; background:none; border:none; cursor:pointer;
+  color:var(--text-tertiary,#6b7280); font-size:.9rem; line-height:1; padding:4px; }
+.central-busca-limpar:hover { color:var(--text-primary,#e5e7eb); }
+@media (max-width:640px){ .central-busca { flex:1 1 100%; } }
+
 .central-kpis { display:flex; gap:12px; flex:1; flex-wrap:wrap; }
 .central-kpi { flex:1; min-width:150px; display:flex; align-items:center; gap:12px; border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:12px; padding:12px 16px; background:var(--surface-1,rgba(255,255,255,.03)); }
 .central-kpi-ic { width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; }
