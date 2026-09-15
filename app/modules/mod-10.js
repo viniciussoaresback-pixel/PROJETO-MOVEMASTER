@@ -793,6 +793,22 @@ async function _marcarSaidaTransbordo(rotaId, pedidoId, motivo, cidadeTransbordo
   } catch(e){}
 }
 
+// Desfaz a marca de saída no vínculo — usada quando o transbordo é
+// desfeito: sem isto o carro continuava constando como "saiu da carga" na
+// viagem de origem, e o histórico de cargas mostrava "saiu em X" para um
+// transbordo que não aconteceu.
+async function _desmarcarSaidaTransbordo(rotaId, pedidoId){
+  const v = _vinculoViagemPedido(rotaId, pedidoId);
+  if (!v) return;
+  try {
+    await supabase.from('viagem_pedidos')
+      .update({ saiu_em: null, motivo_saida: null, cidade_transbordo: null })
+      .eq('id', v.id);
+    v.saiu_em = null; v.motivo_saida = null; v.cidade_transbordo = null;
+  } catch(e){ console.warn('desmarcar saída:', e.message); }
+}
+window._desmarcarSaidaTransbordo = _desmarcarSaidaTransbordo;
+
 let _kanbanExpandido = new Set();
 function _toggleKanbanCard(chave){
   if (_kanbanExpandido.has(chave)) _kanbanExpandido.delete(chave); else _kanbanExpandido.add(chave);
