@@ -1161,12 +1161,35 @@ async function renderizarPainelPatios() {
     painel.innerHTML = resumoHTML +
         `<div class="painel-patios-grid">${patiosHTML}</div>` +
         `<div class="patios-movs">
-            <h3>📋 Últimas entradas e saídas</h3>
-            <div id="patiosMovsLista"><p class="text-muted text-sm">Carregando movimentações...</p></div>
+            <button class="patios-movs-tit" onclick="_patiosMovsToggle()">
+                <span>📋 Últimas entradas e saídas</span>
+                <span class="patios-movs-seta" id="patiosMovsSeta">${_patiosMovsAberto ? '▲' : '▼'}</span>
+            </button>
+            <div id="patiosMovsLista" class="${_patiosMovsAberto ? '' : 'oculto'}">
+                ${_patiosMovsAberto ? '<p class="text-muted text-sm">Carregando movimentações...</p>' : ''}
+            </div>
         </div>`;
 
-    carregarMovimentacoesPatios();
+    if (_patiosMovsAberto) carregarMovimentacoesPatios();
 }
+
+/* O extrato ficava sempre aberto, com 15 linhas de texto corrido embaixo dos
+   pátios — era a parte mais pesada da tela e quase nunca o motivo de alguém
+   abrir Pátios. Agora vem fechado; quem precisa do extrato clica. */
+let _patiosMovsAberto = false;
+function _patiosMovsToggle(){
+    _patiosMovsAberto = !_patiosMovsAberto;
+    const lista = document.getElementById('patiosMovsLista');
+    const seta = document.getElementById('patiosMovsSeta');
+    if (seta) seta.textContent = _patiosMovsAberto ? '▲' : '▼';
+    if (!lista) return;
+    lista.classList.toggle('oculto', !_patiosMovsAberto);
+    if (_patiosMovsAberto){
+        lista.innerHTML = '<p class="text-muted text-sm">Carregando movimentações...</p>';
+        carregarMovimentacoesPatios();
+    }
+}
+window._patiosMovsToggle = _patiosMovsToggle;
 
 // ---------- DETALHES DO CARRO (clique no card) ----------
 function abrirDetalheCarroPatio(pedidoId) {
@@ -1338,15 +1361,39 @@ async function carregarMovimentacoesPatios() {
             return;
         }
 
+        // Linha enxuta: tipo, carro, pátio e quando. A observação inteira —
+        // que é o texto longo que poluía a tela — vai para o title, ao alcance
+        // do mouse mas fora do caminho.
+        const _quando = (iso) => {
+            if (!iso) return '';
+            const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+            if (min < 60) return `há ${Math.max(1,min)} min`;
+            const h = Math.floor(min/60);
+            if (h < 24) return `há ${h}h`;
+            const d = Math.floor(h/24);
+            return d <= 7 ? `há ${d}d` : new Date(iso).toLocaleDateString('pt-BR');
+        };
+        // Só a cidade do pátio: "transbordo em Maringá/PR" vira "Maringá"
+        const _patioDaObs = (obs, ped) => {
+            const m = String(obs).match(/(?:em|no pátio de|pátio de|para)\s+([A-Za-zÀ-ÿ\s]{3,30}?)(?:\/[A-Z]{2})?(?:[,.;—]|$)/i);
+            if (m && m[1]) return m[1].trim();
+            return ped?.patioAtual ? String(ped.patioAtual).split('/')[0] : '';
+        };
+
         el.innerHTML = data.map(h => {
             const obs = h.observacao || '';
             const saida = h.status_anterior === 'Transbordo' || obs.includes('📤') || obs.includes('Saiu do pátio');
             const entrada = !saida;
+            const ped = (pedidosGlobais||[]).find(p => String(p.id)===String(h.pedido_id));
+            const carro = ped?.placa ? `${ped.placa}` : `#${h.pedido_id}`;
+            const patio = _patioDaObs(obs, ped);
             return `
-            <div class="patio-mov ${entrada ? 'mov-entrada' : 'mov-saida'}">
-                <span class="mov-tipo">${entrada ? '⬇ ENTROU' : '⬆ SAIU'}</span>
-                <span class="mov-info">Pedido <strong>#${h.pedido_id}</strong>${obs ? ' — ' + obs : ''}</span>
-                <span class="mov-meta">${h.usuario_nome || ''} · ${h.created_at ? new Date(h.created_at).toLocaleString('pt-BR') : ''}</span>
+            <div class="patio-mov ${entrada ? 'mov-entrada' : 'mov-saida'}"
+                 title="${String(obs).replace(/"/g,'&quot;')}${h.usuario_nome?' — '+h.usuario_nome:''}">
+                <span class="mov-tipo">${entrada ? '⬇' : '⬆'}</span>
+                <span class="mov-carro">${carro}</span>
+                <span class="mov-patio">${patio || '—'}</span>
+                <span class="mov-quando">${_quando(h.created_at)}</span>
             </div>`;
         }).join('');
     } catch (e) {
