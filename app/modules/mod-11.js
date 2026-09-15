@@ -2299,7 +2299,9 @@ function renderizarPlanejamentoRotas(){
       <div class="plan-col plan-col-pedidos">
         <div class="plan-col-tit">
           <span>${tituloCol} <span class="plan-col-badge">${pedidosCol.length}</span></span>
-          ${(modoSemRota||modoTransbordo||modoAprovacao) ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
+          ${modoSemRota
+            ? `<button class="plan-criar-viagem" onclick="_planViagemDireta()" title="Cria a rota excepcional e já abre a viagem, num passo só">🚛 Criar viagem</button>`
+            : (modoTransbordo||modoAprovacao) ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
         </div>
         <div class="plan-busca">
           <span class="plan-busca-ic">🔍</span>
@@ -2445,6 +2447,167 @@ function _planPedidosListaHTML(cor){
 }
 
 // Agrupa carros do mesmo pedido (grupo_id) num card só, expansível
+/* ============================================================
+   VIAGEM DIRETA A PARTIR DE "SEM ROTA"
+
+   Atalho para o destino fora de rota (Londrina → Cruz Machado e afins).
+   O caminho antigo era: criar corredor → jogar os carros nele → criar a
+   viagem. Aqui é um passo só: escolhe os carros, o sistema monta a rota
+   excepcional por baixo e já abre o modal de viagem.
+
+   Por que criar o corredor em vez de deixar a viagem sem nenhum: o SLA (e
+   portanto o ETA que o cliente recebe) vem do corredor, e o Planejamento
+   lista as viagens dentro da coluna do corredor. Viagem sem corredor ficaria
+   sem prazo e invisível na tela de planejar. Como o corredor nasce marcado
+   como excepcional, ele some da lista assim que a viagem termina — não suja
+   o cadastro.
+   ============================================================ */
+let _planVdPedidos = [];   // seleção corrente
+let _planVdCidades = [];   // sequência de cidades do corredor a criar
+
+function _planViagemDireta(){
+  const disponiveis = (typeof _planFiltraBusca === 'function')
+    ? _planFiltraBusca(_planPedidosSemRota()) : _planPedidosSemRota();
+  if (!disponiveis.length){ alert('Não há pedidos sem rota para montar uma viagem.'); return; }
+
+  const old = document.getElementById('modalViagemDireta'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalViagemDireta';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100060';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:560px;width:95%;max-height:90vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">🚛 Criar viagem direta</h2>
+      <p class="text-muted" style="font-size:.84rem;margin:.2rem 0 1rem">
+        Para destinos que não têm corredor. A rota é criada automaticamente a partir
+        das cidades dos carros e sai da lista quando a viagem terminar.
+      </p>
+
+      <div class="vd-lista">
+        ${disponiveis.map(p => `
+          <label class="vd-item">
+            <input type="checkbox" class="vd-chk" value="${p.id}" checked onchange="_planVdAtualizar()">
+            <span>
+              <strong>#${p.id}</strong> ${p.placa||'—'}${p.modelo?' · '+p.modelo:''}
+              <span class="text-muted"> · ${p.cliente||''}</span>
+              <div class="vd-item-rota">${(p.patioAtual||p.cidadeOrigem||'—')} → <strong>${p.cidadeDestino||'—'}</strong></div>
+            </span>
+          </label>`).join('')}
+      </div>
+
+      <div id="vdResumo" class="vd-resumo"></div>
+
+      <div class="form-group" style="margin-top:10px">
+        <label>Prazo estimado da viagem (SLA em horas) — usado para calcular o ETA</label>
+        <input type="number" id="vdSla" min="1" step="1" value="24">
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" id="btnVdCriar">🚛 Continuar</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalViagemDireta').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  _planVdAtualizar();
+  document.getElementById('btnVdCriar').onclick = _planVdConfirmar;
+}
+window._planViagemDireta = _planViagemDireta;
+
+// Monta a sequência de cidades a partir dos carros marcados.
+function _planVdAtualizar(){
+  const ids = [...document.querySelectorAll('.vd-chk:checked')].map(c => parseInt(c.value));
+  _planVdPedidos = ids.map(id => (pedidosGlobais||[]).find(p => String(p.id)===String(id))).filter(Boolean);
+  const box = document.getElementById('vdResumo');
+  if (!box) return;
+  if (_planVdPedidos.length === 0){ box.innerHTML = '<span class="text-muted">Marque ao menos um carro.</span>'; _planVdCidades = []; return; }
+
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const soCidade = v => String(v||'').split('/')[0].trim();
+  const unicos = (arr) => { const vis = {}; const out = []; arr.forEach(v => { const k = n(soCidade(v)); if (v && !vis[k]){ vis[k]=1; out.push(soCidade(v)); } }); return out; };
+
+  const origens = unicos(_planVdPedidos.map(p => p.patioAtual || p.cidadeOrigem));
+  const destinos = unicos(_planVdPedidos.map(p => p.cidadeDestino));
+  // origem principal = a mais repetida; as outras entram como paradas iniciais
+  const cont = {};
+  _planVdPedidos.forEach(p => { const c = n(soCidade(p.patioAtual || p.cidadeOrigem)); cont[c] = (cont[c]||0)+1; });
+  origens.sort((a,b) => (cont[n(b)]||0) - (cont[n(a)]||0));
+
+  _planVdCidades = [...origens, ...destinos.filter(d => !origens.some(o => n(o)===n(d)))];
+
+  const precisaOrdenar = destinos.length > 1;
+  box.innerHTML = `
+    <div class="vd-resumo-tit">Rota que será criada</div>
+    <div class="vd-seq" id="vdSeq">${_planVdSeqHTML()}</div>
+    ${precisaOrdenar
+      ? `<p class="vd-aviso">⚠️ Há <strong>${destinos.length} destinos diferentes</strong>. O sistema não sabe qual é o mais distante — coloque na ordem em que a cegonha vai passar. A última cidade vira o destino final.</p>`
+      : `<p class="vd-ok">✅ Destino único — nada a ordenar.</p>`}`;
+}
+window._planVdAtualizar = _planVdAtualizar;
+
+function _planVdSeqHTML(){
+  return _planVdCidades.map((c,i) => `
+    <div class="vd-seq-item">
+      <span class="vd-seq-num">${i+1}</span>
+      <span class="vd-seq-cidade">${c}${i===0?' <span class="vd-seq-tag">origem</span>':''}${i===_planVdCidades.length-1?' <span class="vd-seq-tag vd-seq-tag-fim">destino</span>':''}</span>
+      <span class="vd-seq-btns">
+        <button type="button" onclick="_planVdMover(${i},-1)" ${i===0?'disabled':''}>▲</button>
+        <button type="button" onclick="_planVdMover(${i},1)" ${i===_planVdCidades.length-1?'disabled':''}>▼</button>
+      </span>
+    </div>`).join('');
+}
+
+function _planVdMover(i, dir){
+  const j = i + dir;
+  if (j < 0 || j >= _planVdCidades.length) return;
+  const tmp = _planVdCidades[i]; _planVdCidades[i] = _planVdCidades[j]; _planVdCidades[j] = tmp;
+  const seq = document.getElementById('vdSeq');
+  if (seq) seq.innerHTML = _planVdSeqHTML();
+}
+window._planVdMover = _planVdMover;
+
+async function _planVdConfirmar(){
+  if (_planVdPedidos.length === 0){ alert('Marque ao menos um carro.'); return; }
+  if (_planVdCidades.length < 2){ alert('Não consegui identificar origem e destino desses carros. Confira se os pedidos têm cidade de origem e destino preenchidas.'); return; }
+  const sla = parseInt(document.getElementById('vdSla')?.value, 10) || 24;
+  const origem = _planVdCidades[0];
+  const destino = _planVdCidades[_planVdCidades.length - 1];
+  const nome = `${origem} → ${destino}`;
+
+  const btn = document.getElementById('btnVdCriar');
+  if (btn){ btn.disabled = true; btn.textContent = '⏳ Criando rota...'; }
+  try {
+    const { data, error } = await supabase.from('corredores').insert({
+      nome, origem, destino, sla_horas: sla, ativo: true, excepcional: true
+    }).select();
+    if (error) throw error;
+    const cor = data && data[0];
+    if (!cor) throw new Error('A rota não foi criada.');
+
+    const linhas = _planVdCidades.map((cidade, i) => ({ corredor_id: cor.id, ordem: i+1, cidade }));
+    await supabase.from('corredor_paradas').insert(linhas);
+    cor._paradas = linhas.map(l => ({ cidade: l.cidade, ordem: l.ordem }));
+    cor.excepcional = true;
+    corredoresGlobais.push(cor);
+
+    // Prende os carros nesta rota. Sem isto, se a viagem for cancelada no
+    // meio, o corredor ficaria vazio e os carros voltariam ao "Sem rota"
+    // sem nenhum vestígio do que se tentou montar.
+    const ids = _planVdPedidos.map(p => p.id);
+    await supabase.from('pedidos').update({ corredor_manual_id: cor.id }).in('id', ids);
+    _planVdPedidos.forEach(p => { p.corredorManualId = cor.id; });
+    if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+
+    document.getElementById('modalViagemDireta')?.remove();
+    _planCorredorSel = cor.id;
+    renderizarPlanejamentoRotas();
+    // e já abre a viagem com os carros selecionados
+    _planAbrirModalViagem(cor, _planVdPedidos);
+  } catch(e){
+    if (btn){ btn.disabled = false; btn.textContent = '🚛 Continuar'; }
+    alert('Erro ao criar a rota: ' + (e.message||e));
+  }
+}
+window._planVdConfirmar = _planVdConfirmar;
+
 function _planAgruparErenderizar(pedidos){
   const grupos = [];
   const vistos = {};
