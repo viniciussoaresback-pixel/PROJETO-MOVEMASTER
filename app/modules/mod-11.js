@@ -634,65 +634,139 @@ function _abrirModalTransbordoStatus(pedidoIds, rotuloAntes){
   document.body.appendChild(div);
 }
 
-// Sugere o corredor que melhor encaixa a próxima perna (a partir do pátio escolhido → destino final)
+// Sugere o corredor que melhor encaixa a próxima perna (a partir do pátio
+// escolhido → destino final).
+//
+// A comparação de cidade aqui precisa ser tolerante. O pátio vem de uma lista
+// fixa ("Maringá/PR"), mas o corredor é cadastrado à mão e aparece de várias
+// formas: "Maringa/Londrina x Cascavel" (sem acento), "Maringá / Londrina",
+// "Londrina-Maringá". A versão antiga comparava só o primeiro trecho antes da
+// barra, com toLowerCase e sem tirar acento — então "Maringá/PR" não casava
+// com "Maringa/Londrina", e o corredor sumia das sugestões.
+function _transbCidadesDoRotulo(txt){
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  // quebra em todos os separadores usados nos cadastros e descarta as UFs
+  return String(txt||'')
+    .split(/\s*(?:\/|\bx\b|,|—|–|-|>|→)\s*/i)
+    .map(t => n(t))
+    .filter(t => t && t.length > 2);   // "pr", "sc", "sp" fora
+}
+
+function _transbCorredorPassaPor(c, cidadeNorm){
+  const paradas = (c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino];
+  // procura a cidade nas paradas E no nome do corredor — em cadastro manual,
+  // muita vez a cidade intermediária só existe no nome
+  const alvos = [...paradas, c.nome];
+  return alvos.some(rot => _transbCidadesDoRotulo(rot).includes(cidadeNorm));
+}
+
 function _transbSugereCorredor(){
   const patio = document.getElementById('transbPatio')?.value || '';
   const sel = document.getElementById('transbCorredor');
   const sug = document.getElementById('transbSugestao');
   if (!sel) return;
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
   sel.innerHTML = '<option value="">— escolher depois (fica em Aguardando transbordo) —</option>';
   if (!patio){ if (sug) sug.textContent = ''; return; }
-  const cidadePatio = patio.split('/')[0].trim().toLowerCase();
-  // corredores cujas paradas incluem o pátio e seguem em frente
-  const corredores = (corredoresGlobais||[]).filter(c => {
-    const paradas = (c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino];
-    return paradas.some(cid => (cid||'').split('/')[0].trim().toLowerCase() === cidadePatio);
-  });
-  corredores.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.id; opt.textContent = c.nome;
-    sel.appendChild(opt);
-  });
-  // melhor sugestão: corredor que também passa pelo destino final do carro
+  const cidadePatio = n(patio.split('/')[0]);
+  const nomeCidade = patio.split('/')[0];
+  const todos = (corredoresGlobais||[]);
+  const passam = todos.filter(c => _transbCorredorPassaPor(c, cidadePatio));
+  const resto = todos.filter(c => !passam.includes(c));
+
+  if (passam.length){
+    const g = document.createElement('optgroup');
+    g.label = `Passam por ${nomeCidade}`;
+    passam.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.nome; g.appendChild(o); });
+    sel.appendChild(g);
+  }
+  // Os demais continuam na lista, num grupo separado: se o cadastro do
+  // corredor estiver escrito de um jeito que a busca não reconhece, o usuário
+  // ainda consegue escolher — antes ele simplesmente não tinha a opção.
+  if (resto.length){
+    const g2 = document.createElement('optgroup');
+    g2.label = passam.length ? 'Demais corredores' : 'Todos os corredores';
+    resto.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.nome; g2.appendChild(o); });
+    sel.appendChild(g2);
+  }
+
   if (sug){
-    const destino = null;
-    if (corredores.length === 1){ sel.value = corredores[0].id; sug.textContent = `💡 Sugestão: ${corredores[0].nome} (parte de ${patio.split('/')[0]}).`; }
-    else if (corredores.length > 1){ sug.textContent = `💡 ${corredores.length} corredores partem de ${patio.split('/')[0]}. Escolha o que leva ao destino.`; }
-    else { sug.textContent = `Nenhum corredor cadastrado partindo de ${patio.split('/')[0]}. O carro ficará em "Aguardando transbordo".`; }
+    if (passam.length === 1){
+      sel.value = passam[0].id;
+      sug.textContent = `💡 Sugestão: ${passam[0].nome} (passa por ${nomeCidade}).`;
+    } else if (passam.length > 1){
+      sug.textContent = `💡 ${passam.length} corredores passam por ${nomeCidade}. Escolha o que leva ao destino.`;
+    } else {
+      sug.textContent = `Nenhum corredor cadastrado passando por ${nomeCidade} — a lista abaixo traz todos, caso o cadastro esteja escrito de outra forma.`;
+    }
   }
 }
+window._transbSugereCorredor = _transbSugereCorredor;
 
-// Desfaz um transbordo marcado por engano: volta o pedido ao estado normal (sem transbordo)
-async function _desfazerTransbordo(pedidoId){
-  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
-  if (!p) return;
-  if (!confirm(`Desfazer o transbordo do pedido #${pedidoId}?\n\nEle volta ao estado normal (deixa de contar como transbordado) e será realocado normalmente nos corredores.`)) return;
+// Desfaz um transbordo marcado por engano: volta o pedido ao estado normal.
+// Precisa reverter TUDO o que o transbordo gravou — não só o status. Faltando
+// alguma peça, o carro fica num meio-termo: sem a marca de transbordo, mas
+// preso num pátio ou fora da carga de origem.
+async function _desfazerTransbordo(pedidoIds){
+  const ids = (Array.isArray(pedidoIds) ? pedidoIds : String(pedidoIds).split(','))
+    .map(x => parseInt(x)).filter(n => !isNaN(n));
+  const alvos = ids.map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  if (alvos.length === 0) return;
+
+  const quem = alvos.length === 1
+    ? `do pedido #${alvos[0].id} (${alvos[0].placa||''})`
+    : `de ${alvos.length} pedidos`;
+  if (!confirm(`Desfazer o transbordo ${quem}?\n\nO carro deixa de contar como transbordado, sai do pátio de transbordo e volta ao estado anterior — se ainda estiver numa viagem, volta para ela; senão, volta ao planejamento.`)) return;
+
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
-  try {
-    // volta status para o fluxo normal e zera as marcas de transbordo
-    const novoStatus = (p.rotaId || p.rota_id) ? 'Em Transporte' : 'Pendente';
-    await supabase.from('pedidos').update({
-      status: novoStatus,
-      status_planilha: null,
-      aguardando_transbordo: false,
-      cidade_transbordo: null,
-      qtd_transbordos: Math.max(0, (p.qtdTransbordos || 0) - 1)
-    }).eq('id', parseInt(pedidoId));
-    Object.assign(p, {
-      status: novoStatus, statusPlanilha: null, aguardandoTransbordo: false,
-      cidadeTransbordo: null, qtdTransbordos: Math.max(0, (p.qtdTransbordos||0) - 1)
-    });
-    await supabase.from('historico_status').insert({
-      pedido_id: parseInt(pedidoId), status_anterior: 'Transbordo', status_novo: novoStatus,
-      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
-      observacao: '↩️ Transbordo desfeito (marcado por engano)'
-    });
-    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao('↩️ Transbordo desfeito.');
-    if (typeof renderizarPlanejamentoRotas === 'function') renderizarPlanejamentoRotas();
-    if (typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
-    if (typeof _cgFecharRastreio === 'function') _cgFecharRastreio();
-  } catch(e){ alert('Erro ao desfazer transbordo: '+(e.message||e)); }
+  const falhas = [];
+
+  for (const p of alvos){
+    try {
+      const rotaOrigem = p.rotaId || p.rota_id || null;
+      const novoStatus = rotaOrigem ? 'Em Transporte' : 'Pendente';
+      await supabase.from('pedidos').update({
+        status: novoStatus,
+        status_planilha: null,
+        aguardando_transbordo: false,
+        cidade_transbordo: null,
+        // o transbordo colocou o carro no pátio e fixou um corredor para a
+        // próxima perna; desfazendo, as duas marcas têm de sair junto
+        patio_atual: null,
+        patio_desde: null,
+        corredor_manual_id: null,
+        qtd_transbordos: Math.max(0, (p.qtdTransbordos || 0) - 1)
+      }).eq('id', parseInt(p.id));
+
+      Object.assign(p, {
+        status: novoStatus, statusPlanilha: null, aguardandoTransbordo: false,
+        cidadeTransbordo: null, patioAtual: null, corredorManualId: null,
+        qtdTransbordos: Math.max(0, (p.qtdTransbordos||0) - 1)
+      });
+
+      // o carro nunca chegou a sair da carga — limpa a marca no vínculo
+      if (rotaOrigem && typeof _desmarcarSaidaTransbordo === 'function'){
+        await _desmarcarSaidaTransbordo(rotaOrigem, p.id);
+      }
+
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(p.id), status_anterior: 'Transbordo', status_novo: novoStatus,
+        usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+        observacao: `↩️ Transbordo desfeito (marcado por engano)${rotaOrigem?' — carro voltou à viagem de origem':' — carro voltou ao planejamento'}.`
+      });
+    } catch(e){ falhas.push(`#${p.id}: ${e.message||e}`); }
+  }
+
+  if (falhas.length) alert(`Não foi possível desfazer alguns transbordos:\n\n• ${falhas.join('\n• ')}`);
+  const ok = alvos.length - falhas.length;
+  if (ok > 0 && typeof _rmToastConfirmacao === 'function')
+    _rmToastConfirmacao(ok === 1 ? '↩️ Transbordo desfeito.' : `↩️ ${ok} transbordos desfeitos.`);
+
+  if (typeof recarregarPedidos === 'function') await recarregarPedidos();
+  if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+  if (typeof _cgFecharRastreio === 'function') _cgFecharRastreio();
 }
+window._desfazerTransbordo = _desfazerTransbordo;
 
 // Aplica o transbordo a UM pedido (update + histórico + saída da viagem de origem).
 // Extraído para que a confirmação possa rodar em lote com a mesma escolha de pátio/corredor.
