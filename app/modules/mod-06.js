@@ -1040,7 +1040,23 @@ async function renderizarPainelPatios() {
         // Pátio conhecido entra no seu grupo. Desconhecido vai para um grupo
         // único "Outros locais" — o carro continua visível, sem poluir a tela
         // com um card por cidade.
-        const fixo = _mapaFixos[_normPatio(p.patioAtual)];
+        // Casamento tolerante. O patio_atual é gravado por vários caminhos
+        // (transbordo, chegada, ocorrência, importação) e nem sempre sai
+        // idêntico ao da lista: aparece "Maringa" sem acento, "Maringá - PR"
+        // com hífen, "Pátio Maringá", "MARINGÁ/PR". Exigindo igualdade exata
+        // do texto normalizado, o carro caía em "Outros locais" mesmo estando
+        // num pátio nosso — foi o que aconteceu com os carros de Maringá.
+        const chaveNorm = _normPatio(p.patioAtual);
+        let fixo = _mapaFixos[chaveNorm];
+        if (!fixo && chaveNorm){
+            // Do mais específico para o mais genérico: "SAO JOSE" é prefixo de
+            // "SAO JOSE DOS PINHAIS", e sem ordenar por tamanho um carro em
+            // São José dos Pinhais poderia cair em São José/SC.
+            const cand = Object.keys(_mapaFixos)
+                .filter(k => k && (chaveNorm.includes(k) || k.includes(chaveNorm)))
+                .sort((a,b) => b.length - a.length);
+            if (cand.length) fixo = _mapaFixos[cand[0]];
+        }
         const chave = fixo || '📍 Outros locais';
         (grupos[chave] = grupos[chave] || []).push(p);
     });
@@ -1105,6 +1121,7 @@ async function renderizarPainelPatios() {
                     ${(() => { const m = _motivoPatio(p);
                       return `<div class="carro-patio-motivo" style="color:${m.cor};background:${m.cor}18;border:1px solid ${m.cor}38">${m.ico} ${m.txt}</div>`;
                     })()}
+                    ${!_mapaFixos[_normPatio(p.patioAtual)] ? `<div class="carro-patio-local-cru" title="Valor gravado em patio_atual — não bate com nenhum pátio da lista fixa">📍 local gravado: <strong>${p.patioAtual||'—'}</strong></div>` : ''}
                 </div>`;
             }).join('');
 
