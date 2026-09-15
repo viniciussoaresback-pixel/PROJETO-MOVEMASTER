@@ -965,6 +965,20 @@ async function carregarDadosFiscal() {
                 : '—';
             const gerado = pdf.created_at ? new Date(pdf.created_at).toLocaleString('pt-BR') : '—';
 
+            // Quando a viagem saiu. Vem do espelho quando foi gravado junto;
+            // para os espelhos antigos, busca na rota pelo pedido.
+            let inicioViagem = extras.viagem_iniciada_em || null;
+            if (!inicioViagem && typeof rotasGlobais !== 'undefined'){
+                const idsEsp = Array.isArray(extras.pedidos_ids) ? extras.pedidos_ids : [];
+                const pedRef = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : [])
+                    .find(p => idsEsp.includes(p.id));
+                const rotaRef = pedRef ? (rotasGlobais||[]).find(r => String(r.id)===String(pedRef.rotaId||pedRef.rota_id)) : null;
+                inicioViagem = rotaRef?.iniciada_em || null;
+            }
+            const inicioHTML = inicioViagem
+                ? `<span class="fiscal-inicio-viagem" title="Data em que a viagem saiu">🛫 ${new Date(inicioViagem).toLocaleString('pt-BR')}</span>`
+                : `<span class="fiscal-inicio-pend" title="A viagem ainda não foi iniciada">🕗 não iniciada</span>`;
+
             // Buscar motorista da cegonha
             const veiculo = (typeof veiculosGlobais !== 'undefined' ? veiculosGlobais : []).find(v => v.placa === placaCegonha);
             const motorista = veiculo?.motorista_padrao || '—';
@@ -994,7 +1008,7 @@ async function carregarDadosFiscal() {
                 <td><span style="background:rgba(249,115,22,0.12);color:#f97316;padding:0.15rem 0.5rem;border-radius:4px;font-weight:700">${totalPedidos} veículo(s)</span>${avisoCteExistente}</td>
                 <td>${motorista}</td>
                 <td style="color:#4ade80;font-weight:600">${totalFrete}</td>
-                <td style="font-size:0.78rem">${gerado}<br>${seloEmitido}</td>
+                <td style="font-size:0.78rem">${gerado}<br>${inicioHTML}<br>${seloEmitido}</td>
                 <td style="font-size:0.75rem;color:var(--text-muted)">${pdf.usuario_nome || '—'}</td>
                 <td class="fiscal-acoes-td">
                     <button class="btn btn-secondary btn-sm" onclick="regerarEspelhoCarga('${placaCegonha}', '${pdf.id}')" ${placaCegonha === '—' ? 'disabled title="Registro sem cegonha identificada"' : ''}>📄 Ver / Imprimir</button>
