@@ -143,6 +143,15 @@ function normalizarPedido(p) {
         obsColeta: p.obs_coleta || null,
         entregaEquipeEm: p.entrega_equipe_em || null,
         entregaEquipePor: p.entrega_equipe_por || null,
+        // Direcionamento (mandaram fazer) x confirmação (já foi feito).
+        // São coisas diferentes: misturar os dois fazia o serviço nascer
+        // "concluído" e sumir da lista de quem deveria executá-lo.
+        entregaDirecionadaEm: p.entrega_direcionada_em || null,
+        coletaDirecionadaEm: p.coleta_direcionada_em || null,
+        coletaConfirmadaEm: p.coleta_confirmada_em || null,
+        coletaConfirmadaPor: p.coleta_confirmada_por || null,
+        entregaConfirmadaEm: p.entrega_confirmada_em || null,
+        entregaConfirmadaPor: p.entrega_confirmada_por || null,
         origemLancamento: p.origem_lancamento || null,
         criadoPorNome: p.criado_por_nome || null,
         isReserva: p.is_reserva === true,
