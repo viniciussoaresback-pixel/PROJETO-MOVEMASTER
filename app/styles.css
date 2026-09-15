@@ -9674,3 +9674,76 @@ button:active, .btn:active, .nav-btn:active { transform: scale(0.97); transition
 .mm-clicado::after { content: ''; position: absolute; right: 10px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: mmSpin .6s linear infinite; opacity: .8; }
 @keyframes mmSpin { to { transform: rotate(360deg); } }
 body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
+
+/* ============================================================
+   SERVIÇOS AVULSOS DO MOTORISTA — seleção e confirmação em lote
+   ============================================================ */
+.mav-lote { background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid var(--border,rgba(255,255,255,.1));
+  border-radius:12px; padding:10px 12px; margin-bottom:12px; }
+.mav-lote-topo { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
+.mav-lote-todos { display:flex; align-items:center; gap:7px; font-size:.84rem; font-weight:600; cursor:pointer; }
+.mav-lote-todos input { width:18px; height:18px; accent-color:var(--accent,#ff6a00); }
+.mav-lote-cont { font-size:.76rem; color:var(--text-tertiary,#8b93a1); font-weight:600; }
+.mav-lote-btns { display:flex; gap:8px; flex-wrap:wrap; }
+.mav-lote-btns .btn-motorista-acao { flex:1 1 150px; }
+.mav-btn-coleta { background:#38bdf8; }
+.mav-btn-entrega { background:#a855f7; }
+.mav-chk-wrap { display:flex; align-items:center; margin-right:6px; }
+.mav-chk { width:20px; height:20px; accent-color:var(--accent,#ff6a00); cursor:pointer; }
+
+/* Busca do Planejamento de Rotas */
+.plan-busca { position:relative; display:flex; align-items:center; padding:0 0 10px; }
+.plan-busca-ic { position:absolute; left:10px; font-size:.78rem; opacity:.55; pointer-events:none; }
+.plan-busca input { width:100%; padding:7px 28px 7px 30px; font-size:.82rem;
+  border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:8px;
+  background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.plan-busca input::placeholder { color:var(--text-tertiary,#8b93a1); font-size:.78rem; }
+.plan-busca input:focus { outline:none; border-color:var(--accent,#ff6a00); }
+.plan-busca-x { position:absolute; right:6px; background:none; border:none; cursor:pointer;
+  color:var(--text-tertiary,#8b93a1); font-size:.8rem; padding:4px; }
+
+/* Motivo de permanência no pátio */
+.carro-patio-motivo { display:inline-block; margin-top:6px; padding:2px 8px; border-radius:6px;
+  font-size:.68rem; font-weight:700; letter-spacing:.2px; }
+
+/* Modal de ocorrência — destino do carro */
+.ocor-lista { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; max-height:140px; overflow:auto; }
+.ocor-lista-item { font-size:.8rem; padding:4px 8px; border-radius:6px; background:var(--surface-2,rgba(255,255,255,.04)); }
+.ocor-aviso { font-size:.82rem; line-height:1.45; padding:11px 13px; border-radius:10px; margin:6px 0 14px;
+  background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.35); color:#fca5a5; }
+.retirar-alerta { font-size:.8rem; padding:10px 12px; border-radius:9px; margin-top:10px;
+  background:rgba(96,165,250,.1); border:1px solid rgba(96,165,250,.35); color:#93c5fd; }
+.jv-acao-retirar { background:rgba(148,163,184,.14); color:#cbd5e1; border:1px solid rgba(148,163,184,.3); }
+
+/* Bloco de ocorrência no painel lateral do pedido */
+.cg-ocor-bloco { margin:12px 0; padding:13px; border-radius:11px;
+  background:rgba(239,68,68,.09); border:1px solid rgba(239,68,68,.32); }
+.cg-ocor-tit { font-size:.86rem; font-weight:800; color:#ef4444; margin-bottom:6px; }
+.cg-ocor-txt { font-size:.82rem; line-height:1.45; margin-bottom:10px; }
+
+/* Busca de cegonha no criar viagem */
+.plan-cegonha-busca { position:relative; display:flex; align-items:center; margin-bottom:6px; }
+.plan-cegonha-busca input { width:100%; padding:7px 70px 7px 30px; font-size:.82rem;
+  border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:8px;
+  background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.plan-cegonha-busca input:focus { outline:none; border-color:var(--accent,#ff6a00); }
+.plan-cegonha-cont { position:absolute; right:10px; font-size:.7rem; color:var(--text-tertiary,#8b93a1); font-weight:600; }
+.plan-trocar-veic { background:none; border:none; cursor:pointer; opacity:.55; font-size:.85rem;
+  padding:2px 5px; margin-left:auto; border-radius:5px; }
+.plan-trocar-veic:hover { opacity:1; background:rgba(255,255,255,.08); }
+.conf-card-saida { color:#60a5fa; font-size:.8rem; }
+
+/* O header do card do motorista ganhou o checkbox de seleção em lote:
+   sem isto o space-between jogava o #id para o meio. */
+.motorista-pedido-card .mpedido-header { gap:8px; justify-content:flex-start; }
+.motorista-pedido-card .mpedido-header .mpedido-status { margin-left:auto; }
+
+/* Marca de "já direcionado" nos cards da Central de Operação */
+.cvb-tag-enviado { display:inline-block; margin-top:5px; padding:2px 8px; border-radius:6px;
+  font-size:.68rem; font-weight:700; letter-spacing:.2px;
+  background:rgba(56,189,248,.14); color:#38bdf8; border:1px solid rgba(56,189,248,.35); }
+.cvb-item-enviado { background:rgba(56,189,248,.05); border-left:2px solid rgba(56,189,248,.45); }
+.cvb-sub-enviados { display:inline-block; margin-left:6px; font-size:.7rem; font-weight:700; color:#38bdf8; }
+
+/* Falha ao carregar a linha do tempo do histórico de cargas */
+.histv-tl-erro { padding:2rem; text-align:center; color:#f59e0b; font-size:.88rem; line-height:1.5; }
