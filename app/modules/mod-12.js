@@ -355,28 +355,86 @@ function _planViagemPreencheMot(){
 // Não é correção de digitação — é outro veículo — então a troca fica
 // registrada no histórico, senão some o rastro de qual carro estava na
 // carga quando o CT-e foi emitido.
-async function _planTrocarVeiculo(pedidoId){
+/* TROCA DE VEÍCULO — modal próprio.
+
+   Era feito com dois prompt() em sequência, e isso criava três armadilhas:
+   1) cancelar o segundo prompt devolvia string vazia e APAGAVA o modelo;
+   2) quem apertava Enter no segundo, aceitando o valor sugerido, mantinha o
+      modelo do carro ANTIGO junto com a placa nova — parecia que só a placa
+      tinha trocado;
+   3) não dava para validar nada enquanto o usuário digitava, e no celular
+      prompt() é péssimo.
+   Agora os dois campos ficam visíveis lado a lado, com o de/para na frente. */
+function _planTrocarVeiculo(pedidoId){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
   const placaAntiga = p.placa || '';
   const modeloAntigo = p.modelo || '';
+  const temCte = !!(p.numeroCte || p.numero_cte);
 
-  const placaNova = (prompt(`Trocar o veículo do pedido #${p.id}\n\nPlaca atual: ${placaAntiga||'—'}\n\nNova placa:`, placaAntiga) || '').trim().toUpperCase();
-  if (!placaNova || placaNova === placaAntiga.toUpperCase()){
-    if (placaNova && placaNova === placaAntiga.toUpperCase()) alert('A placa é a mesma — nada foi alterado.');
-    return;
-  }
-  const modeloNovo = (prompt(`Modelo do veículo ${placaNova}:`, modeloAntigo) || '').trim();
+  const old = document.getElementById('modalTrocaVeic'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalTrocaVeic';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100060';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:500px;width:94%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 6px">🔄 Trocar veículo — #${p.id}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">
+        ${p.cliente||''} · ${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}<br>
+        Hoje na carga: <strong>${placaAntiga||'—'}</strong>${modeloAntigo?` · ${modeloAntigo}`:''}
+      </p>
 
-  if (!confirm(`Confirmar a TROCA de veículo no pedido #${p.id}?\n\nDe:   ${placaAntiga||'—'} · ${modeloAntigo||'—'}\nPara: ${placaNova} · ${modeloNovo||'—'}\n\nIsso altera o pedido no sistema inteiro e fica registrado no histórico.`)) return;
+      <div class="troca-veic-grid">
+        <div class="form-group">
+          <label>Nova placa</label>
+          <input type="text" id="trocaPlaca" maxlength="10" placeholder="ABC1D23"
+                 value="${placaAntiga.replace(/"/g,'&quot;')}" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div class="form-group">
+          <label>Modelo do novo veículo</label>
+          <input type="text" id="trocaModelo" placeholder="Ex: HB20, Onix, Strada"
+                 value="${modeloAntigo.replace(/"/g,'&quot;')}">
+        </div>
+      </div>
+      <p class="troca-veic-dica">
+        ⚠️ Os dois campos vêm preenchidos com o veículo atual. Ajuste <strong>ambos</strong> —
+        é comum a placa mudar e o modelo ficar para trás.
+      </p>
 
+      ${temCte ? `<div class="dest-cte-aviso">📄 Este pedido já tem CT-e ${p.numeroCte||p.numero_cte}. O fiscal será avisado da troca.</div>` : ''}
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#0ea5e9" id="btnTrocaVeic">🔄 Confirmar troca</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalTrocaVeic').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  document.getElementById('btnTrocaVeic').onclick = () => {
+    const placaNova = (document.getElementById('trocaPlaca')?.value || '').trim().toUpperCase();
+    const modeloNovo = (document.getElementById('trocaModelo')?.value || '').trim();
+    if (!placaNova){ alert('Informe a placa do novo veículo.'); return; }
+    if (placaNova === placaAntiga.toUpperCase() && modeloNovo === modeloAntigo){
+      alert('Nada mudou — placa e modelo são os mesmos.'); return;
+    }
+    if (!confirm(`Confirmar a troca no pedido #${p.id}?\n\nDe:   ${placaAntiga||'—'} · ${modeloAntigo||'—'}\nPara: ${placaNova} · ${modeloNovo||'—'}\n\nAltera o pedido no sistema inteiro e fica registrado no histórico.`)) return;
+    document.getElementById('modalTrocaVeic').remove();
+    _confirmarTrocaVeiculo(p.id, placaNova, modeloNovo, placaAntiga, modeloAntigo);
+  };
+}
+window._planTrocarVeiculo = _planTrocarVeiculo;
+
+async function _confirmarTrocaVeiculo(pedidoId, placaNova, modeloNovo, placaAntiga, modeloAntigo){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
+    // modelo vazio não apaga o que já existe — preserva o anterior
+    const modeloFinal = modeloNovo || modeloAntigo || null;
     const { error } = await supabase.from('pedidos')
-      .update({ placa: placaNova, modelo: modeloNovo || null })
+      .update({ placa: placaNova, modelo: modeloFinal })
       .eq('id', parseInt(pedidoId));
     if (error) throw error;
-    p.placa = placaNova; p.modelo = modeloNovo || null;
+    p.placa = placaNova; p.modelo = modeloFinal;
 
     try {
       await supabase.from('historico_status').insert({
@@ -384,30 +442,33 @@ async function _planTrocarVeiculo(pedidoId){
         status_anterior: p.status, status_novo: p.status,
         usuario_nome: usuario,
         usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
-        observacao: `🔄 Veículo trocado: ${placaAntiga||'—'} (${modeloAntigo||'—'}) substituído por ${placaNova} (${modeloNovo||'—'}).`
+        observacao: `🔄 Veículo trocado: ${placaAntiga||'—'} (${modeloAntigo||'—'}) substituído por ${placaNova} (${modeloFinal||'—'}).`
       });
     } catch(_){}
 
-    // se a carga já foi ao fiscal, ele precisa saber que a composição mudou
     if (typeof notificar === 'function' && (p.numeroCte || p.numero_cte)){
       try { await notificar({ perfil:'fiscal', tipo:'status', pedidoId: parseInt(pedidoId),
         titulo:'🔄 Veículo trocado em pedido com CT-e',
-        mensagem:`#${pedidoId}: ${placaAntiga} → ${placaNova}. Confira o documento emitido.` }); } catch(_){}
+        mensagem:`#${pedidoId}: ${placaAntiga} (${modeloAntigo||'—'}) → ${placaNova} (${modeloFinal||'—'}). Confira o documento emitido.` }); } catch(_){}
     }
 
-    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`🔄 Veículo trocado para ${placaNova}.`);
-    // redesenha o modal aberto com o dado novo
-    const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(p.corredorManualId)) || null;
-    if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
+    if (typeof _rmToastConfirmacao === 'function')
+      _rmToastConfirmacao(`🔄 Veículo trocado: ${placaNova}${modeloFinal?' · '+modeloFinal:''}.`);
+
+    if (typeof recarregarPedidos === 'function') await recarregarPedidos();
     if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+    // a tabela da viagem mostra placa E modelo — precisa redesenhar as duas
+    if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento();
+
+    // se o modal de criar viagem estiver aberto, atualiza a linha nele
     const linha = document.querySelector(`.plan-viagem-ped[value="${pedidoId}"]`)?.closest('label');
     if (linha){
       const span = linha.querySelector('span');
-      if (span) span.innerHTML = `<strong>${placaNova}</strong> · ${modeloNovo||''} · ${p.cliente||''} <span class="text-muted">${p.patioAtual||p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span>`;
+      if (span) span.innerHTML = `<strong>${placaNova}</strong> · ${modeloFinal||''} · ${p.cliente||''} <span class="text-muted">${p.patioAtual||p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span>`;
     }
   } catch(e){ alert('Erro ao trocar o veículo: '+(e.message||e)); }
 }
-window._planTrocarVeiculo = _planTrocarVeiculo;
+window._confirmarTrocaVeiculo = _confirmarTrocaVeiculo;
 
 async function _planConfirmarViagem(corId){
   if (window._criandoViagem){ return; } // trava anti-duplo-clique
@@ -1502,6 +1563,18 @@ function _cgAgrupar(lista){
   return resultado.sort((a,b)=>a._ord-b._ord);
 }
 
+// Rota + quando a viagem saiu. O comercial precisa responder "saiu quando?"
+// sem abrir o pedido nem ligar para a logística.
+function _cgRotaComInicio(rota){
+  if (!rota) return '—';
+  const nome = rota.nome || ('R-' + rota.id);
+  if (!rota.iniciada_em)
+    return `${nome}<div class="cg-rota-inicio cg-rota-naoiniciada" title="A viagem ainda não saiu">🕗 não iniciada</div>`;
+  const d = new Date(rota.iniciada_em);
+  return `${nome}<div class="cg-rota-inicio" title="Viagem iniciada em ${d.toLocaleString('pt-BR')}">🛫 ${d.toLocaleDateString('pt-BR')}</div>`;
+}
+window._cgRotaComInicio = _cgRotaComInicio;
+
 function renderizarComercialPedidos(){
   const cont = document.getElementById('comercialPedidosConteudo');
   if (!cont) return;
@@ -1572,7 +1645,7 @@ function renderizarComercialPedidos(){
                 <td>${p.cidadeOrigem||'—'}</td>
                 <td>${p.cidadeDestino||'—'}</td>
                 <td class="cg-corr-cel">${_cgCorredorDoPedido(p)}</td>
-                <td>${rota ? (rota.nome||('R-'+rota.id)) : '—'}</td>
+                <td>${_cgRotaComInicio(rota)}</td>
                 <td>${_cgStatusPill(p)}</td>
                 <td class="cg-sub">${_dataLancamentoFmt(p)}</td>
                 <td class="cg-acoes-cel" onclick="event.stopPropagation()">
@@ -1595,7 +1668,7 @@ function renderizarComercialPedidos(){
                 <td>${p0.cidadeOrigem||'—'}</td>
                 <td>${p0.cidadeDestino||'—'}</td>
                 <td class="cg-corr-cel">${_cgCorredorDoPedido(p0)}</td>
-                <td>${rota0 ? (rota0.nome||('R-'+rota0.id)) : '—'}</td>
+                <td>${_cgRotaComInicio(rota0)}</td>
                 <td><span class="cg-sub">${itens.length} veíc.</span></td>
                 <td class="cg-sub">${_dataLancamentoFmt(p0)}</td>
                 <td class="cg-acoes-cel"></td>
@@ -1739,6 +1812,15 @@ async function _cgAbrirRastreio(pedidoId){
         <button class="btn btn-primary btn-sm" style="background:#22c55e" onclick="_aprovarPedidoComercial(${p.id})">✅ Aprovar pedido</button>
       </div>` : ''}
 
+      ${(() => {
+        const _r = (rotasGlobais||[]).find(r => String(r.id)===String(p.rotaId||p.rota_id));
+        if (!_r) return '';
+        return `<div class="cg-info-viagem">🚛 <strong>${_r.nome||('R-'+_r.id)}</strong> · ${
+          _r.iniciada_em
+            ? `🛫 iniciada em <strong>${new Date(_r.iniciada_em).toLocaleString('pt-BR')}</strong>`
+            : '<span class="cg-rota-naoiniciada">🕗 viagem ainda não iniciada</span>'}</div>`;
+      })()}
+
       ${!['Entregue','Cancelado','Ocorrência'].includes(p.status) ? `<div class="cg-acoes-rapidas">
         <button class="btn btn-sm btn-secondary" onclick="_abrirModalAlterarDestino(${p.id}, (rotasGlobais||[]).find(r=>String(r.id)===String(${p.rotaId||p.rota_id||0})))">📍 Alterar destino</button>
       </div>` : ''}
@@ -1849,6 +1931,9 @@ function renderizarComercialViagens(){
             <span>👤 ${r.motorista_1||'—'}</span>
             <span>🚛 ${np} pedido(s)</span>
           </div>
+          <div class="cg-vc-data">${r.iniciada_em
+            ? `🛫 Saiu em <strong>${new Date(r.iniciada_em).toLocaleDateString('pt-BR')}</strong> às ${new Date(r.iniciada_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`
+            : '<span class="cg-vc-data-pend">🕗 Ainda não iniciada</span>'}</div>
           <div class="cg-vc-selos">${cteBadge}</div>
           ${r.placa_cegonha?`<div class="cg-vc-cegonha">${r.placa_cegonha}</div>`:''}
         </div>`;
@@ -1885,7 +1970,7 @@ function _cgViagensConcluidasHTML(){
       ${concluidas.length === 0 ? '<p class="text-muted" style="padding:1rem;font-size:.85rem">Nenhuma viagem concluída no período.</p>' : `
       <div class="cg-tabela-wrap">
         <table class="cg-tabela">
-          <thead><tr><th>Rota</th><th>Corredor</th><th>Motorista</th><th>Pedidos</th><th>Concluída em</th></tr></thead>
+          <thead><tr><th>Rota</th><th>Corredor</th><th>Motorista</th><th>Pedidos</th><th>Iniciada em</th><th>Concluída em</th></tr></thead>
           <tbody>
             ${concluidas.map(r => {
               const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(r.corredor_id));
@@ -1895,6 +1980,7 @@ function _cgViagensConcluidasHTML(){
                 <td>${cor?cor.nome:'—'}</td>
                 <td>${r.motorista_1||'—'}</td>
                 <td>${np}</td>
+                <td class="cg-sub">${r.iniciada_em ? _cgFmtData(r.iniciada_em) : '—'}</td>
                 <td class="cg-sub">${_cgFmtData(r.concluida_em||r.updated_at)}</td>
               </tr>`;
             }).join('')}
