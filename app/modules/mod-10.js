@@ -433,8 +433,11 @@ function _histOrigemValorLabel(origem){
 
 // ABA LINHA DO TEMPO — agrega os eventos reais (historico_status) de todos os pedidos da viagem
 function _histAbaTimeline(v){
-  // dispara a busca async e renderiza quando chegar
-  _histCarregarTimeline(v);
+  // A busca precisa rodar DEPOIS que este HTML entrar no DOM. Chamada direta
+  // aqui, _histCarregarTimeline procurava por #histvTimeline antes do
+  // elemento existir, não achava, e saía calada — a aba ficava eternamente
+  // em "Carregando linha do tempo...".
+  setTimeout(() => _histCarregarTimeline(v), 0);
   return `<div class="histv-timeline" id="histvTimeline"><p class="text-muted" style="padding:2rem;text-align:center">Carregando linha do tempo...</p></div>`;
 }
 
@@ -451,9 +454,15 @@ function _histEventoVisual(ev){
   return { ic:'🟢', cls:'ev-cinza', titulo:'Evento' };
 }
 
-async function _histCarregarTimeline(v){
+async function _histCarregarTimeline(v, _tentativa){
   const alvo = document.getElementById('histvTimeline');
-  if (!alvo) return;
+  if (!alvo){
+    // o container ainda não entrou no DOM — tenta de novo algumas vezes em
+    // vez de desistir em silêncio, que era o que deixava a aba vazia
+    const n = (_tentativa || 0) + 1;
+    if (n <= 10) setTimeout(() => _histCarregarTimeline(v, n), 60);
+    return;
+  }
   const ids = v.pedidos.map(p => parseInt(p.id));
   let eventos = [];
 
@@ -463,7 +472,8 @@ async function _histCarregarTimeline(v){
 
   try {
     if (ids.length){
-      const { data } = await supabase.from('historico_status').select('*').in('pedido_id', ids).order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('historico_status').select('*').in('pedido_id', ids).order('created_at', { ascending: true });
+      if (error) throw error;
       (data||[]).forEach(ev => {
         // ignora ruído: eventos sem observação e sem mudança real
         if (!ev.observacao && ev.status_anterior === ev.status_novo) return;
@@ -471,7 +481,17 @@ async function _histCarregarTimeline(v){
         eventos.push({ created_at: ev.created_at, ic:vis.ic, cls:vis.cls, titulo:vis.titulo, obs: ev.observacao || ev.status_novo || '', quem: ev.usuario_nome || '', pedido: ev.pedido_id });
       });
     }
-  } catch(e){ /* silencioso */ }
+  } catch(e){
+    // Falha de rede aqui não pode ser silenciosa: o financeiro precisa saber
+    // que está vendo uma linha do tempo incompleta, não uma viagem sem eventos.
+    console.warn('linha do tempo:', e);
+    alvo.innerHTML = `<div class="histv-tl-erro">
+      ⚠️ Não foi possível carregar os eventos desta viagem.<br>
+      <span style="font-size:.8rem">${(e && e.message) ? e.message : 'falha de conexão'}</span><br>
+      <button class="btn btn-sm btn-secondary" style="margin-top:10px" onclick="_histRenderDetalhe()">↻ Tentar de novo</button>
+    </div>`;
+    return;
+  }
 
   if (eventos.length === 0){
     alvo.innerHTML = '<p class="text-muted" style="padding:2rem;text-align:center">Nenhum evento registrado nesta viagem ainda.<br><span style="font-size:.8rem">Os eventos aparecem conforme a operação executa as ações (coleta, transbordo, entrega...).</span></p>';
@@ -568,7 +588,14 @@ function _histAbaCarga(v){
               <td>${p.modelo||'—'}</td>
               <td>${p.cliente||'—'}</td>
               <td>${p.cidadeOrigem||'—'}</td>
-              <td>${p.cidadeDestino||'—'}${transb?`<br><span style="font-size:.7rem;color:#a855f7">🔀 transbordado</span>`:''}</td>
+              <td>${p.cidadeDestino||'—'}${transb?(() => {
+                // "transbordado" solto embaixo do destino fazia parecer que o
+                // transbordo tinha sido lá. O carro saiu da carga NO MEIO do
+                // caminho — o lugar certo é o pátio onde ele desceu.
+                const onde = vinc.cidade_transbordo || p.cidadeTransbordo || '';
+                const quando = vinc.saiu_em ? new Date(vinc.saiu_em).toLocaleDateString('pt-BR') : '';
+                return `<br><span style="font-size:.7rem;color:#a855f7">🔀 saiu da carga${onde?` em ${String(onde).split('/')[0]}`:''}${quando?` · ${quando}`:''}</span>`;
+              })():''}</td>
               <td>R$ ${Number(p.valorFrete||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
               <td>${temCte?'<span class="histv-ok">✅ OK</span>':'<span class="histv-pend">— </span>'}</td>
               <td>${p.status==='Entregue'?'<span class="histv-ok">✅ OK</span>':'<span class="text-muted">—</span>'}</td>
