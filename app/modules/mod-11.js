@@ -1026,6 +1026,8 @@ function _viagemDetalheHTML(rota, carros){
     <button class="jv-acao jv-acao-transbordo" onclick="_viagemAcao(${rota.id},'transbordo')">🔁 Registrar Transbordo</button>
     <button class="jv-acao jv-acao-ocorrencia" onclick="_viagemAcao(${rota.id},'ocorrencia')">⚠️ Registrar Ocorrência</button>
     <button class="jv-acao jv-acao-retirar" onclick="_viagemAcao(${rota.id},'retirar')">➖ Tirar carro da viagem</button>
+    <button class="jv-acao jv-acao-trocaveic" onclick="_viagemAcao(${rota.id},'trocarveiculo')">🔄 Trocar veículo</button>
+    <button class="jv-acao jv-acao-destino" onclick="_viagemAcao(${rota.id},'destino')">📍 Alterar destino</button>
     <button class="jv-acao jv-acao-romaneio" onclick="abrirFecharEnviarCarga(${rota.id})">📋 Romaneio da carga (enviar ao motorista)</button>
     <button class="jv-acao jv-acao-fiscal" onclick="_viagemEnviarFiscal(${rota.id})">📄 Enviar carga ao fiscal (espelho/CTe)</button>
     <button class="jv-acao jv-acao-finalizar" onclick="_viagemAcao(${rota.id},'finalizar')">🏁 Finalizar Viagem</button>
@@ -1063,6 +1065,8 @@ async function _viagemAcao(rotaId, acao){
   if (acao === 'transbordo')  return _viagemRegistrarTransbordo(rota, carros);
   if (acao === 'ocorrencia')  return _viagemRegistrarOcorrencia(rota, carros);
   if (acao === 'retirar')     return _viagemRetirarCarro(rota, carros);
+  if (acao === 'trocarveiculo') return _viagemTrocarVeiculo(rota, carros);
+  if (acao === 'destino')     return _viagemAlterarDestino(rota, carros);
   if (acao === 'finalizar')   return _viagemFinalizar(rota, carros);
   if (acao === 'cancelar')    return _viagemCancelar(rota, carros);
 }
@@ -1453,6 +1457,8 @@ async function _confirmarOcorrencia(pedidoIds, descricao, rota, opcoes){
       }
     }
 
+    // o Acompanhamento guarda as ocorrências abertas em cache — invalida
+    if (typeof _carregarOcorrenciasAbertas === 'function') await _carregarOcorrenciasAbertas(true);
     if (typeof _rmToastConfirmacao === 'function')
       _rmToastConfirmacao(`⚠️ Ocorrência registrada — ${alvos.length} carro(s) fora do fluxo, vaga(s) liberada(s).`);
     if (typeof recarregarPedidos === 'function') await recarregarPedidos();
@@ -1561,6 +1567,7 @@ async function _confirmarReverterOcorrencia(pedidoId){
         titulo:'↩️ Ocorrência resolvida', mensagem:`#${pedidoId} (${p.placa||''}) voltou ao planejamento.` }); } catch(_){}
     }
 
+    if (typeof _carregarOcorrenciasAbertas === 'function') await _carregarOcorrenciasAbertas(true);
     document.getElementById('modalReverterOcor')?.remove();
     if (typeof _cgFecharRastreio === 'function') _cgFecharRastreio();
     if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao('↩️ Carro devolvido ao planejamento.');
@@ -1703,6 +1710,220 @@ async function _confirmarRetirarCarro(ids, rota, motivo, obs){
   } catch(e){ alert('Erro ao retirar o carro da viagem: '+(e.message||e)); }
 }
 window._confirmarRetirarCarro = _confirmarRetirarCarro;
+
+/* TROCA DE VEÍCULO na viagem já planejada (item 8).
+   Existe também no modal de criar viagem, mas o caso real é este: a carga
+   já está montada e, na hora de embarcar, o carro é outro. */
+async function _viagemTrocarVeiculo(rota, carros){
+  const elegiveis = carros.filter(c => !['Entregue','Cancelado'].includes(c.status));
+  if (elegiveis.length === 0){ alert('Nenhum carro nesta viagem.'); return; }
+  const trocar = (ids) => {
+    if (typeof _planTrocarVeiculo === 'function') _planTrocarVeiculo(ids[0]);
+    else alert('Função de troca indisponível.');
+  };
+  if (elegiveis.length === 1){ trocar([elegiveis[0].id]); return; }
+  // Troca é um-a-um por natureza: cada carro vira um veículo diferente.
+  _viagemModalCarros('🔄 Trocar veículo', 'Selecione o carro que será substituído (um por vez — cada troca é de um veículo por outro).', elegiveis, '#38bdf8', '➡️ Continuar', (ids) => {
+    document.getElementById('modalViagemAcao')?.remove();
+    trocar(ids);
+  });
+}
+
+/* ALTERAR DESTINO — o cliente mudou de ideia no meio do caminho.
+   Caso típico: carro de Londrina para Ampére, o cliente desiste e vai
+   retirar em Cascavel. Não é ocorrência (nada deu errado) nem retirada da
+   viagem (o carro continua indo): é o destino que mudou, e com ele o frete
+   e o CT-e. */
+async function _viagemAlterarDestino(rota, carros){
+  const elegiveis = carros.filter(c => !['Cancelado'].includes(c.status));
+  if (elegiveis.length === 0){ alert('Nenhum carro nesta viagem.'); return; }
+  if (elegiveis.length === 1){ _abrirModalAlterarDestino(elegiveis[0].id, rota); return; }
+  _viagemModalCarros('📍 Alterar destino', 'Selecione o carro cujo destino mudou (um por vez — cada um tem seu frete).', elegiveis, '#22d3ee', '➡️ Continuar', (ids) => {
+    document.getElementById('modalViagemAcao')?.remove();
+    _abrirModalAlterarDestino(ids[0], rota);
+  });
+}
+
+function _abrirModalAlterarDestino(pedidoId, rota){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const temCte = !!(p.numeroCte || p.numero_cte);
+  const freteAtual = Number(p.valorFrete || 0);
+  const old = document.getElementById('modalAlterarDestino'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalAlterarDestino';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100060';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:540px;width:94%;max-height:90vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 6px">📍 Alterar destino — #${p.id}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">
+        <strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''}<br>
+        Hoje: ${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}${p.ufDestino?'/'+p.ufDestino:''}</strong>
+        ${p.patioAtual?` · consta em ${p.patioAtual}`:''}
+      </p>
+
+      <div class="form-row" style="display:flex;gap:10px">
+        <div class="form-group" style="flex:2">
+          <label>Novo destino (cidade)</label>
+          <input type="text" id="destNovaCidade" placeholder="Ex: Cascavel" value="${(p.patioAtual||'').split('/')[0]||''}">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>UF</label>
+          <input type="text" id="destNovaUf" maxlength="2" placeholder="PR" value="${(p.patioAtual||'').split('/')[1]||''}">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Motivo</label>
+        <select id="destMotivo">
+          <option value="cliente_retira">🏢 Cliente vai retirar neste ponto</option>
+          <option value="mudanca_endereco">🏠 Cliente mudou o endereço de entrega</option>
+          <option value="redirecionamento">↪️ Redirecionamento comercial</option>
+          <option value="outro">❓ Outro</option>
+        </select>
+      </div>
+
+      <label class="dest-check">
+        <input type="checkbox" id="destRetiraPatio" checked>
+        <span>O cliente retira no pátio (entra no fluxo de retirada ao chegar)</span>
+      </label>
+
+      <div class="form-row" style="display:flex;gap:10px;margin-top:6px">
+        <div class="form-group" style="flex:1">
+          <label>Frete atual</label>
+          <input type="text" value="R$ ${freteAtual.toLocaleString('pt-BR',{minimumFractionDigits:2})}" disabled>
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>Novo frete</label>
+          <input type="number" id="destNovoFrete" step="0.01" value="${freteAtual}">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Como o fiscal/financeiro resolve o documento?</label>
+        <select id="destTratativa">
+          <option value="reemitir">🧾 Reemitir CT-e com o novo destino</option>
+          <option value="desconto">💰 Manter o CT-e e dar desconto no faturamento</option>
+          <option value="sem_cte">— ainda não há CT-e emitido —</option>
+        </select>
+        ${temCte ? `<p class="dest-cte-aviso">📄 Este pedido já tem CT-e ${p.numeroCte||p.numero_cte}. O fiscal será avisado da escolha acima.</p>` : ''}
+      </div>
+
+      <div class="form-group">
+        <label>Observação (opcional)</label>
+        <input type="text" id="destObs" placeholder="Detalhe da negociação, se houver">
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#22d3ee;color:#04262b;font-weight:800" id="btnConfirmDestino">📍 Alterar destino</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalAlterarDestino').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  if (!temCte){ const sel = document.getElementById('destTratativa'); if (sel) sel.value = 'sem_cte'; }
+  document.getElementById('btnConfirmDestino').onclick = () => {
+    const cidade = document.getElementById('destNovaCidade')?.value.trim() || '';
+    const uf = (document.getElementById('destNovaUf')?.value.trim() || '').toUpperCase();
+    if (!cidade){ alert('Informe a cidade do novo destino.'); return; }
+    const dados = {
+      cidade, uf,
+      motivo: document.getElementById('destMotivo')?.value || 'outro',
+      retira: !!document.getElementById('destRetiraPatio')?.checked,
+      frete: parseFloat(document.getElementById('destNovoFrete')?.value || '0') || 0,
+      tratativa: document.getElementById('destTratativa')?.value || 'sem_cte',
+      obs: document.getElementById('destObs')?.value.trim() || ''
+    };
+    document.getElementById('modalAlterarDestino').remove();
+    _confirmarAlterarDestino(p.id, dados, rota);
+  };
+}
+window._abrirModalAlterarDestino = _abrirModalAlterarDestino;
+
+async function _confirmarAlterarDestino(pedidoId, d, rota){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const destinoAntes = `${p.cidadeDestino||'—'}${p.ufDestino?'/'+p.ufDestino:''}`;
+  const destinoDepois = `${d.cidade}${d.uf?'/'+d.uf:''}`;
+  const freteAntes = Number(p.valorFrete||0);
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  // O carro já está no pátio do novo destino? Então a viagem dele acabou aqui.
+  const chegou = !!p.patioAtual && n(String(p.patioAtual).split('/')[0]) === n(d.cidade);
+
+  const rotulos = {
+    cliente_retira:'cliente vai retirar neste ponto', mudanca_endereco:'cliente mudou o endereço',
+    redirecionamento:'redirecionamento comercial', outro:'outro motivo'
+  };
+  const tratativas = {
+    reemitir:'CT-e a reemitir com o novo destino',
+    desconto:'CT-e mantido, desconto no faturamento',
+    sem_cte:'sem CT-e emitido'
+  };
+
+  try {
+    const upd = {
+      cidade_destino: d.cidade,
+      uf_destino: d.uf || p.ufDestino || null,
+      valor_frete: d.frete,
+      tipo_entrega: d.retira ? 'patio' : (p.tipoEntrega || 'domicilio')
+    };
+    // Chegou ao novo destino: o transporte deste pedido terminou aqui. Ele
+    // sai da carga e passa a aguardar o cliente — não faz sentido continuar
+    // na viagem rumo a um destino que não é mais o dele.
+    if (chegou){
+      upd.rota_id = null;
+      upd.placa_cegonha = null;
+      upd.status = 'Em Transporte';
+      upd.status_planilha = 'Em transporte';
+      if (d.retira) upd.aguardando_retirada = true;
+    }
+    await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    Object.assign(p, {
+      cidadeDestino: d.cidade, ufDestino: d.uf || p.ufDestino,
+      valorFrete: d.frete, tipoEntrega: upd.tipo_entrega,
+      ...(chegou ? { rotaId:null, rota_id:null, placaCegonha:null, aguardandoRetirada: !!d.retira } : {})
+    });
+
+    if (chegou && rota?.id && typeof _marcarSaidaTransbordo === 'function'){
+      try { await _marcarSaidaTransbordo(rota.id, p.id, `destino alterado para ${destinoDepois}`, p.patioAtual || null); } catch(_){}
+    }
+
+    const linha = `📍 Destino alterado de ${destinoAntes} para ${destinoDepois} — ${rotulos[d.motivo]||'outro motivo'}`
+      + ` — frete de R$ ${freteAntes.toLocaleString('pt-BR',{minimumFractionDigits:2})} para R$ ${Number(d.frete).toLocaleString('pt-BR',{minimumFractionDigits:2})}`
+      + ` — ${tratativas[d.tratativa]||''}`
+      + (chegou ? ` — pedido encerrado em ${d.cidade}${d.retira?', aguardando retirada pelo cliente':''}` : '')
+      + (d.obs ? `. ${d.obs}` : '') + '.';
+    await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: upd.status || p.status,
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: linha
+    });
+
+    if (typeof notificar === 'function'){
+      const quem = `#${p.id} (${p.placa||''})`;
+      try {
+        notificar({ perfil:'comercial', tipo:'status', pedidoId: parseInt(pedidoId),
+          titulo:'📍 Destino alterado', mensagem:`${quem}: ${destinoAntes} → ${destinoDepois}. Frete agora R$ ${Number(d.frete).toLocaleString('pt-BR',{minimumFractionDigits:2})}.` });
+        if (d.tratativa !== 'sem_cte'){
+          notificar({ perfil:'fiscal', tipo:'status', pedidoId: parseInt(pedidoId),
+            titulo: d.tratativa === 'reemitir' ? '🧾 CT-e precisa ser reemitido' : '💰 CT-e mantido com desconto',
+            mensagem:`${quem}: destino ${destinoAntes} → ${destinoDepois}. ${tratativas[d.tratativa]}.` });
+        }
+        if (Number(d.frete) !== freteAntes){
+          notificar({ perfil:'financeiro', tipo:'status', pedidoId: parseInt(pedidoId),
+            titulo:'💰 Frete alterado', mensagem:`${quem}: R$ ${freteAntes.toLocaleString('pt-BR',{minimumFractionDigits:2})} → R$ ${Number(d.frete).toLocaleString('pt-BR',{minimumFractionDigits:2})} (${rotulos[d.motivo]||''}).` });
+        }
+      } catch(_){}
+    }
+
+    if (typeof _rmToastConfirmacao === 'function')
+      _rmToastConfirmacao(chegou ? `📍 Destino alterado — pedido encerrado em ${d.cidade}.` : `📍 Destino alterado para ${destinoDepois}.`);
+    if (typeof recarregarPedidos === 'function') await recarregarPedidos();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+    if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento();
+  } catch(e){ alert('Erro ao alterar o destino: '+(e.message||e)); }
+}
+window._confirmarAlterarDestino = _confirmarAlterarDestino;
 
 async function _viagemRegistrarTransbordo(rota, carros){
   const elegiveis = carros.filter(c => !['Entregue','Cancelado','Transbordo'].includes(c.status));
