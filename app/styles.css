@@ -9822,3 +9822,35 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
 .vd-aviso { font-size:.76rem; line-height:1.4; margin:9px 0 0; padding:8px 10px; border-radius:7px;
   color:#fbbf24; background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.3); }
 .vd-ok { font-size:.76rem; margin:9px 0 0; color:#4ade80; }
+
+/* ============================================================
+   EXTRATO DE PÁTIOS — versão enxuta e recolhível
+   A lista ficava sempre aberta com 15 linhas de texto corrido,
+   dominando a tela. Agora é um cabeçalho clicável e cada linha
+   cabe numa só, com o texto completo no tooltip.
+   ============================================================ */
+.patios-movs-tit {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    background: none; border: none; cursor: pointer; color: inherit;
+    padding: 4px 0; font-size: .92rem; font-weight: 700; text-align: left;
+}
+.patios-movs-tit:hover { opacity: .8; }
+.patios-movs-seta { font-size: .7rem; opacity: .6; }
+#patiosMovsLista.oculto { display: none; }
+
+/* sobrescreve o layout antigo das linhas */
+.patio-mov {
+    display: grid;
+    grid-template-columns: 22px minmax(90px, 1fr) minmax(80px, 1.2fr) auto;
+    gap: .6rem; align-items: center; flex-wrap: nowrap;
+    padding: .34rem .5rem; margin-bottom: .2rem; font-size: .78rem;
+    cursor: help;
+}
+.patio-mov .mov-tipo { font-size: .8rem; padding: 0; background: none !important; text-align: center; }
+.mov-carro { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mov-patio { color: var(--text-secondary, #b6bcc6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mov-quando { font-size: .7rem; color: var(--text-tertiary, #8b93a1); white-space: nowrap; text-align: right; }
+@media (max-width: 640px) {
+    .patio-mov { grid-template-columns: 20px 1fr auto; }
+    .mov-patio { display: none; }
+}
