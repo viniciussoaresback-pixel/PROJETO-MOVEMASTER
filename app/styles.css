@@ -9794,3 +9794,31 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
 /* Data de saída nos cards de viagem (aba Viagens do comercial) */
 .cg-vc-data { font-size:.72rem; color:#60a5fa; font-weight:600; margin-top:6px; }
 .cg-vc-data-pend { color:var(--text-tertiary,#8b93a1); font-weight:600; }
+
+/* Viagem direta a partir de "Sem rota" */
+.vd-lista { display:flex; flex-direction:column; gap:6px; max-height:230px; overflow:auto;
+  border:1px solid var(--border,rgba(255,255,255,.1)); border-radius:10px; padding:8px; }
+.vd-item { display:flex; gap:9px; align-items:flex-start; padding:7px 8px; border-radius:7px;
+  font-size:.83rem; cursor:pointer; transition:background .15s; }
+.vd-item:hover { background:var(--surface-2,rgba(255,255,255,.04)); }
+.vd-item input { margin-top:3px; width:17px; height:17px; accent-color:var(--accent,#ff6a00); flex-shrink:0; }
+.vd-item-rota { font-size:.74rem; color:var(--text-tertiary,#8b93a1); margin-top:2px; }
+.vd-resumo { margin-top:12px; padding:11px; border-radius:10px;
+  background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid var(--border,rgba(255,255,255,.1)); }
+.vd-resumo-tit { font-size:.74rem; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--text-tertiary,#8b93a1); margin-bottom:8px; }
+.vd-seq { display:flex; flex-direction:column; gap:4px; }
+.vd-seq-item { display:flex; align-items:center; gap:8px; padding:5px 7px; border-radius:7px;
+  background:var(--surface-1,rgba(255,255,255,.03)); font-size:.82rem; }
+.vd-seq-num { width:20px; height:20px; border-radius:50%; background:var(--accent,#ff6a00); color:#fff;
+  font-size:.68rem; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.vd-seq-cidade { flex:1; }
+.vd-seq-tag { font-size:.62rem; font-weight:800; padding:1px 5px; border-radius:4px;
+  background:rgba(148,163,184,.2); color:#cbd5e1; }
+.vd-seq-tag-fim { background:rgba(74,222,128,.18); color:#4ade80; }
+.vd-seq-btns button { background:none; border:1px solid var(--border,rgba(255,255,255,.14));
+  border-radius:5px; color:inherit; cursor:pointer; font-size:.6rem; padding:2px 5px; }
+.vd-seq-btns button:disabled { opacity:.3; cursor:default; }
+.vd-aviso { font-size:.76rem; line-height:1.4; margin:9px 0 0; padding:8px 10px; border-radius:7px;
+  color:#fbbf24; background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.3); }
+.vd-ok { font-size:.76rem; margin:9px 0 0; color:#4ade80; }
