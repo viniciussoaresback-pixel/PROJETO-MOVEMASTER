@@ -1247,7 +1247,42 @@ function limparFiltrosAcompanhamento() {
     renderizarAcompanhamento();
 }
 
+/* Ocorrências abertas por pedido, para marcar discretamente o Acompanhamento.
+   Uma consulta só, guardada em memória — a tabela é pequena e a tela
+   redesenha muitas vezes. */
+let _ocorAbertasPorPedido = null;
+async function _carregarOcorrenciasAbertas(forcar){
+  if (_ocorAbertasPorPedido && !forcar) return _ocorAbertasPorPedido;
+  const mapa = {};
+  try {
+    const { data, error } = await supabase.from('ocorrencias')
+      .select('pedido_id, descricao, created_at, usuario_nome, dados_extras')
+      .eq('tipo', 'ocorrencia').eq('status', 'aberta')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    (data||[]).forEach(o => { if (!mapa[o.pedido_id]) mapa[o.pedido_id] = o; });
+  } catch(e){ console.warn('ocorrências abertas:', e.message); }
+  _ocorAbertasPorPedido = mapa;
+  return mapa;
+}
+window._carregarOcorrenciasAbertas = _carregarOcorrenciasAbertas;
+
+// Selo discreto: só aparece quando o pedido tem ocorrência aberta.
+function _seloOcorrencia(p){
+  const o = _ocorAbertasPorPedido ? _ocorAbertasPorPedido[p.id] : null;
+  if (!o && p.status !== 'Ocorrência') return '';
+  const desc = (o?.descricao || '').replace(/"/g,'&quot;').slice(0,120);
+  const quando = o?.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '';
+  return `<span class="selo-ocor" title="Ocorrência aberta${quando?' em '+quando:''}${desc?': '+desc:''}">⚠️ ocorrência</span>`;
+}
+window._seloOcorrencia = _seloOcorrencia;
+
 function renderizarAcompanhamento() {
+    // carrega uma vez e redesenha quando os dados chegarem
+    if (_ocorAbertasPorPedido === null){
+      _ocorAbertasPorPedido = {};
+      _carregarOcorrenciasAbertas(true).then(() => renderizarAcompanhamento());
+    }
     const corpo = document.getElementById('corpoTabelaAcompanhamento');
     if (!corpo) return;
 
@@ -1274,6 +1309,12 @@ function renderizarAcompanhamento() {
         lista = lista.filter(p => !['Entregue', 'Cancelado'].includes(p.status)); // Em andamento
     } else if (fStatus === 'Cancelado') {
         lista = lista.filter(p => p.status === 'Cancelado');
+    } else if (fStatus === '__ocorrencia_aberta') {
+        // Tudo que tem ocorrência sem resolução — inclusive pedidos que já
+        // seguiram viagem. "Status Ocorrência" é o carro parado agora;
+        // "ocorrência em aberto" é o problema ainda sem desfecho.
+        lista = lista.filter(p => p.status === 'Ocorrência'
+            || (_ocorAbertasPorPedido && _ocorAbertasPorPedido[p.id]));
     } else if (fStatus !== '__todos') {
         lista = lista.filter(p => statusPlanilhaDoPedido(p) === fStatus);
     }
@@ -1320,7 +1361,7 @@ function renderizarAcompanhamento() {
                 const n = pedidosGlobais.filter(x => x.grupoId === p.grupoId).length;
                 return n > 1 ? ` <span class="badge-carga-fechada" title="${nomenclaturaCarga(n)}: ${n} carros do mesmo pedido">📦 ${n}</span>` : '';
             })()}<br><span class="ocup-resp" title="Responsável comercial">🧑‍💼 ${p.responsavelComercial || '—'}</span></td>
-            <td style="font-size:0.78rem">${p.modelo || ''}<br><strong>${p.placa || ''}</strong></td>
+            <td style="font-size:0.78rem">${p.modelo || ''}<br><strong>${p.placa || ''}</strong>${_seloOcorrencia(p)}</td>
             <td style="font-size:0.75rem">${p.cidadeOrigem || ''}/${p.ufOrigem || ''}${p.cidadeTransbordo ? ` → 🔁 ${p.cidadeTransbordo}` : ''} → ${p.cidadeDestino || ''}/${p.ufDestino || ''}</td>
             <td style="font-size:0.82rem">
                 ${p.placaCegonha ? `<strong>${p.placaCegonha}</strong>` : '<span class="tag-adefinir">A DEFINIR</span>'}
