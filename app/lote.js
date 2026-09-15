@@ -65,6 +65,11 @@ async function mmAtualizarPedidos(ids, patch, aplicarNaMemoria) {
       });
       ok += itens.length;
 
+      // Invalida o dedupe de leitura: sem isto, uma releitura disparada nos
+      // 2,5 s seguintes devolve a resposta anterior a esta gravação e a tela
+      // volta a mostrar o estado antigo de parte dos carros.
+      if (typeof window !== 'undefined' && typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+
     } catch (e) {
       falhas.push((e && e.message) || 'erro ao gravar');
       console.error('mmAtualizarPedidos:', e);
