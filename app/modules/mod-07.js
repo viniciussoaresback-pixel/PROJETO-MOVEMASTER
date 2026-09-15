@@ -311,7 +311,17 @@ async function registrarEspelhoFiscal({ placaCegonha, pedidos, totalFrete, usuar
         pedidos_ids: pedidos.map(p => p.id),
         numero_doc: numeroDoc,
         snapshot,
-        gerado_em: new Date().toISOString()
+        gerado_em: new Date().toISOString(),
+        // A data de INÍCIO DA VIAGEM é a informação que o fiscal e o comercial
+        // usam para responder ao cliente. Gravamos junto do espelho porque o
+        // vínculo com a rota pode mudar depois (transbordo, troca de carga) e
+        // o documento precisa refletir a viagem daquele momento.
+        rota_id: (pedidos[0]?.rotaId || pedidos[0]?.rota_id || null),
+        viagem_iniciada_em: (() => {
+            const rid = pedidos[0]?.rotaId || pedidos[0]?.rota_id || null;
+            const r = rid ? (rotasGlobais||[]).find(x => String(x.id)===String(rid)) : null;
+            return r?.iniciada_em || null;
+        })()
     });
     const descricao = `Espelho de carga — Cegonha ${placaCegonha} — ${pedidos.length} veículo(s)`;
 
