@@ -806,6 +806,13 @@ function renderizarPainelConfirmacoes() {
                 &nbsp;·&nbsp; 👤 ${p.motorista1 ? p.motorista1 : '<span class="tag-adefinir">A DEFINIR</span>'}
                 &nbsp;·&nbsp; 📅 Coleta: ${p.dataPrevColeta ? new Date(p.dataPrevColeta).toLocaleString('pt-BR') : '—'}
             </div>
+            ${(() => {
+                // Quando a viagem saiu — o comercial precisa disso para
+                // responder ao cliente sem ter que perguntar à logística.
+                const _r = (rotasGlobais||[]).find(r => String(r.id) === String(p.rotaId || p.rota_id));
+                if (!_r || !_r.iniciada_em) return '';
+                return `<div class="conf-card-linha conf-card-saida">🛫 Viagem iniciada em <strong>${new Date(_r.iniciada_em).toLocaleString('pt-BR')}</strong></div>`;
+            })()}
             <div class="conf-card-acoes">${botaoHTML}</div>
         </div>`;
     };
