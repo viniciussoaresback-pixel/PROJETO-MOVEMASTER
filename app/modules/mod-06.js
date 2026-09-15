@@ -1014,10 +1014,14 @@ async function renderizarPainelPatios() {
     // Um carro Em Transporte costuma ter patio_atual preenchido com a cidade
     // de DESTINO (reserva de onde ele vai parar). Aceitar isso criava pátios
     // fantasma — Ubiratã, Nova Laranjeiras — com carros que estão na estrada.
+    // "Em Transporte" fica de fora porque o patio_atual desses é reserva do
+    // destino — o carro está na estrada, não no pátio.
+    // "Transbordo" NÃO pode ficar de fora: esse carro está fisicamente parado
+    // no pátio esperando a próxima perna. Era exatamente quem sumia da tela.
     const carros = pedidosGlobais.filter(p =>
         p.patioAtual
         && !['Entregue', 'Cancelado'].includes(p.status)
-        && !['Em Transporte', 'Transbordo'].includes(p.status)
+        && p.status !== 'Em Transporte'
     );
 
     // Agrupar por pátio — SOMENTE pátios fixos (evita "pátios fantasma"
@@ -1040,6 +1044,24 @@ async function renderizarPainelPatios() {
         const chave = fixo || '📍 Outros locais';
         (grupos[chave] = grupos[chave] || []).push(p);
     });
+
+    // Por que este carro está no pátio? A tela precisa responder isso de
+    // relance — o mesmo pátio guarda carro esperando cegonha, esperando o
+    // cliente retirar e esperando a equipe entregar, e cada um exige uma
+    // ação diferente de quem olha.
+    const _motivoPatio = (p) => {
+        if (p.status === 'Ocorrência')
+            return { ico:'⚠️', txt:'Parado por ocorrência', cor:'#ef4444' };
+        if (p.status === 'Transbordo' || p.aguardandoTransbordo)
+            return { ico:'🔁', txt: p.corredorManualId ? 'Transbordo · corredor definido' : 'Transbordo · aguardando corredor', cor:'#fb923c' };
+        if (p.aguardandoRetirada)
+            return { ico:'🏢', txt:'Aguardando retirada do cliente', cor:'#22c55e' };
+        if (p.entregaEquipeId || p.precisaEquipeEntrega)
+            return { ico:'👥', txt:'Aguardando equipe de entrega', cor:'#a855f7' };
+        if (_norm(p.cidadeDestino||'') === _norm(String(p.patioAtual||'').split('/')[0]))
+            return { ico:'🏁', txt:'No destino · a entregar', cor:'#4ade80' };
+        return { ico:'📥', txt:'Aguardando carga/cegonha', cor:'#60a5fa' };
+    };
 
     // Alerta de permanência: 48h+ no pátio merece atenção
     const LIMITE_ALERTA_H = 48;
@@ -1080,6 +1102,9 @@ async function renderizarPainelPatios() {
                     <div class="carro-patio-cliente">${p.cliente || '—'}</div>
                     <div class="carro-patio-veiculo">🚗 ${p.modelo || ''} · <strong>${p.placa || ''}</strong></div>
                     <div class="carro-patio-rota">${rotaComTransbordoHTML(p)}</div>
+                    ${(() => { const m = _motivoPatio(p);
+                      return `<div class="carro-patio-motivo" style="color:${m.cor};background:${m.cor}18;border:1px solid ${m.cor}38">${m.ico} ${m.txt}</div>`;
+                    })()}
                 </div>`;
             }).join('');
 
@@ -1099,18 +1124,17 @@ async function renderizarPainelPatios() {
             </div>
             ${(() => {
                 if (lista.length === 0) return '';
-                const cidadePatio = _norm(String(patio).split('/')[0]);
-                const entregar = lista.filter(p => _norm(p.cidadeDestino||'') === cidadePatio).length;
-                const transbordando = lista.length - entregar;
+                // Conta pelo motivo real de cada carro. Antes era "todo carro
+                // que não entrega aqui está transbordando", o que jogava no
+                // balde do transbordo quem só esperava cegonha.
+                const cont = {};
+                lista.forEach(p => { const t = _motivoPatio(p).txt; cont[t] = (cont[t]||0)+1; });
+                const ordem = lista.map(p => _motivoPatio(p)).filter((m,i,arr) => arr.findIndex(x=>x.txt===m.txt)===i);
                 return `<div class="patio-discern">
-                    <div class="patio-discern-chip patio-discern-entregar">
-                        <span class="pd-ico">🏁</span>
-                        <span class="pd-txt"><strong>${entregar}</strong> p/ entregar aqui</span>
-                    </div>
-                    <div class="patio-discern-chip patio-discern-transb">
-                        <span class="pd-ico">🔀</span>
-                        <span class="pd-txt"><strong>${transbordando}</strong> transbordando</span>
-                    </div>
+                    ${ordem.map(m => `<div class="patio-discern-chip" style="color:${m.cor};background:${m.cor}15;border:1px solid ${m.cor}35">
+                        <span class="pd-ico">${m.ico}</span>
+                        <span class="pd-txt"><strong>${cont[m.txt]}</strong> ${m.txt.toLowerCase()}</span>
+                    </div>`).join('')}
                 </div>`;
             })()}
             <div class="patio-carros">${carrosHTML}</div>
