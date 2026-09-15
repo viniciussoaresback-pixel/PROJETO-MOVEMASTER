@@ -9771,3 +9771,26 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
   font-size:.64rem; font-weight:700; letter-spacing:.2px; vertical-align:middle;
   background:rgba(251,191,36,.15); color:#fbbf24; border:1px solid rgba(251,191,36,.35);
   cursor:help; white-space:nowrap; }
+
+/* Local cru quando o pátio não casa com a lista fixa (diagnóstico) */
+.carro-patio-local-cru { margin-top:4px; font-size:.66rem; color:var(--text-tertiary,#8b93a1);
+  cursor:help; word-break:break-word; }
+
+/* Data de início da viagem — comercial e fiscal */
+.cg-rota-inicio { font-size:.68rem; color:#60a5fa; font-weight:700; margin-top:2px; white-space:nowrap; }
+.cg-rota-naoiniciada { color:var(--text-tertiary,#8b93a1); font-weight:600; }
+.cg-info-viagem { margin:10px 0; padding:9px 12px; border-radius:9px; font-size:.82rem;
+  background:rgba(96,165,250,.09); border:1px solid rgba(96,165,250,.28); }
+.fiscal-inicio-viagem { color:#60a5fa; font-weight:700; font-size:.72rem; white-space:nowrap; }
+.fiscal-inicio-pend { color:var(--text-tertiary,#8b93a1); font-size:.72rem; white-space:nowrap; }
+
+/* Modal de troca de veículo */
+.troca-veic-grid { display:flex; gap:10px; flex-wrap:wrap; }
+.troca-veic-grid .form-group { flex:1 1 180px; }
+.troca-veic-dica { font-size:.76rem; line-height:1.4; margin:.2rem 0 .6rem;
+  padding:8px 10px; border-radius:8px; color:#fbbf24;
+  background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.3); }
+
+/* Data de saída nos cards de viagem (aba Viagens do comercial) */
+.cg-vc-data { font-size:.72rem; color:#60a5fa; font-weight:600; margin-top:6px; }
+.cg-vc-data-pend { color:var(--text-tertiary,#8b93a1); font-weight:600; }
