@@ -18,7 +18,12 @@
      - só /rest/v1/ (dados; login e storage passam direto)
      - janela de 2,5 s — junta a rajada do login e nada além disso
    Ou seja: não é cache de verdade. Dois segundos depois, tudo volta a
-   consultar o banco normalmente. Não há risco de mostrar dado velho.
+   consultar o banco normalmente.
+
+   E toda escrita (POST/PATCH/PUT/DELETE) invalida na hora o que estiver
+   guardado daquela tabela — senão a releitura logo após um update recebe a
+   foto anterior à gravação, e a tela mostra menos carros do que realmente
+   foram alterados.
    ========================================================================= */
 
 (() => {
@@ -37,7 +42,29 @@
         && !url.includes('/auth/v1/')
         && !url.includes('/storage/v1/');
 
-      if (!elegivel) return fetchOriginal.apply(this, arguments);
+      if (!elegivel) {
+        // ESCRITA: invalida o que foi guardado da tabela afetada.
+        //
+        // Sem isto, a releitura que vem logo depois de um update cai dentro
+        // da janela de 2,5 s e recebe a resposta ANTERIOR à gravação. Foi o
+        // que fazia "coletei 11 e só 4 apareceram" e "criei a viagem com 11
+        // carros e só 6 entraram": o dado estava certo no banco, a tela é
+        // que recebia a foto velha e só corrigia na próxima leitura, depois
+        // de a janela expirar. O comentário original dizia "não há risco de
+        // mostrar dado velho" — havia, justamente quando nós mesmos
+        // acabávamos de mudar o dado.
+        if (/^(POST|PATCH|PUT|DELETE)$/.test(metodo) && url.includes('/rest/v1/')) {
+          const tabela = (url.split('/rest/v1/')[1] || '').split('?')[0];
+          if (tabela) {
+            emVoo.forEach((_, chave) => {
+              if (chave.includes('/rest/v1/' + tabela)) emVoo.delete(chave);
+            });
+          } else {
+            emVoo.clear();
+          }
+        }
+        return fetchOriginal.apply(this, arguments);
+      }
 
       const agora = Date.now();
       const anterior = emVoo.get(url);
