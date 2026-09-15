@@ -524,6 +524,8 @@ function _aColetarDaEquipe(eq){
     // Planejamento. Só o direcionamento da logística coloca o serviço aqui.
     if (p.coletaMotorista) return false;                 // foi para um motorista
     if (!p.coletaEquipeId) return false;                 // ninguém direcionou ainda
+    // Mesmo escopo por cidade da entrega: coleta de outra cidade não aparece.
+    if (!_cidadeIgual(p.cidadeOrigem, eq.cidade_base)) return false;
     return String(p.coletaEquipeId) === String(eq.id);
   });
 }
@@ -533,6 +535,13 @@ function _aEntregarDaEquipe(eq){
   return (pedidosGlobais||[]).filter(p => {
     if (p.status === 'Cancelado') return false;
     if (p.entregaEquipeEm) return false;          // já entregue por equipe
+
+    // ESCOPO POR CIDADE: a equipe de Cascavel só enxerga carro de Cascavel.
+    // Vale inclusive para direcionamento — se alguém mandar por engano um
+    // carro de outra cidade, ele não entra na lista de quem está na rua.
+    const _minhaCidade = _cidadeIgual(p.cidadeDestino, eq.cidade_base)
+                      || (p.patioAtual && _cidadeIgual(p.patioAtual, eq.cidade_base));
+    if (!_minhaCidade) return false;
 
     // (a) DIRECIONAMENTO EXPLÍCITO da Central de Operações.
     //     Antes o filtro só olhava o pátio, e ignorava entregaEquipeId —
@@ -1797,14 +1806,22 @@ function _confAtualizarDiferencasFrete(){
    se não estiver na tela, então chamar todos é barato e evita esquecer um.
    ========================================================================= */
 function _propagarMudancaOperacional(){
+  // ATENÇÃO ao editar esta lista: um nome errado aqui não dá erro nenhum,
+  // a tela simplesmente não é redesenhada e o usuário vê dado velho até
+  // apertar F5. Era o caso de 'renderizarCentralOperacoes' (no plural), que
+  // nunca existiu — a função é renderizarCentralOperacao, no singular.
+  // Também faltavam as telas de corredores/planejamento, que é justamente
+  // onde se move carro de um corredor para outro.
   [
-    'renderizarCentralOperacoes', 'renderizarEquipesPainel',
+    'renderizarCentralOperacao', 'renderizarEquipesPainel',
     'renderizarViagensAndamento', 'renderizarCentralConferencia',
     'renderizarColetasDirecionadas', 'renderizarRomaneiosMotorista',
     'carregarPedidosMotorista', 'renderizarOcupacao', 'renderizarKanban',
     'renderizarPainelCegonhas', 'renderizarPedidosComercial',
     'renderizarComercialPedidos', 'carregarDadosFiscal',
-    'renderizarAcompanhamento', 'renderizarCobranca'
+    'renderizarAcompanhamento', 'renderizarCobranca',
+    'renderizarPainelCorredores', 'renderizarPlanejamentoRotas',
+    'renderizarPainelPatios', 'renderizarVagasPorRota'
   ].forEach(fn => {
     if (typeof window[fn] === 'function') {
       try { window[fn](); } catch(e){ console.warn(fn, e); }
