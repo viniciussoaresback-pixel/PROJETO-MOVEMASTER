@@ -1212,6 +1212,12 @@ async function _viagemMudarStatusCarros(ids, statusInterno, statusPlanilha, obs)
       alvos.forEach(p => { p.status = statusInterno; p.statusPlanilha = statusPlanilha; });
       ok = alvos.length;
 
+      // Cinto e suspensório: qualquer releitura disparada por outra tela nos
+      // próximos segundos precisa ir ao banco, não à resposta guardada antes
+      // desta gravação — senão ela sobrescreve a memória com a foto velha e
+      // a tela "perde" os carros que acabamos de atualizar.
+      if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+
       try {
         await supabase.from('historico_status').insert(
           alvos.map(p => ({
