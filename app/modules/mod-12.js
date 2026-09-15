@@ -32,7 +32,7 @@ function _planSelAprovacao(){ _planCorredorSel = '__aprovacao__'; renderizarPlan
 // Lista de pedidos aguardando aprovação — com botão aprovar
 function _planAprovacaoListaHTML(){
   try {
-    const pedidos = _planPedidosAguardandoAprovacao();
+    const pedidos = (typeof _planFiltraBusca==='function') ? _planFiltraBusca(_planPedidosAguardandoAprovacao()) : _planPedidosAguardandoAprovacao();
     if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando aprovação.</p>';
     return pedidos.map(p => {
       let datasHTML = '';
@@ -74,7 +74,7 @@ async function _aprovarPedido(pedidoId, corredorId){
 // Lista de pedidos aguardando transbordo — com linha do tempo e comando de próxima ação
 function _planTransbordoListaHTML(){
   try {
-    const pedidos = _planPedidosAguardandoTransbordo();
+    const pedidos = (typeof _planFiltraBusca==='function') ? _planFiltraBusca(_planPedidosAguardandoTransbordo()) : _planPedidosAguardandoTransbordo();
     if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido aguardando transbordo.</p>';
     return pedidos.map(p => {
       const patio = p.patioAtual || p.cidadeTransbordo || '—';
@@ -126,7 +126,7 @@ function _linhaDoTempoPedidoHTML(p){
 
 // Lista os pedidos "sem rota" — arrastáveis para qualquer corredor
 function _planSemRotaListaHTML(){
-  const pedidos = _planPedidosSemRota();
+  const pedidos = (typeof _planFiltraBusca==='function') ? _planFiltraBusca(_planPedidosSemRota()) : _planPedidosSemRota();
   if (pedidos.length === 0) return '<p class="text-muted" style="padding:1rem;text-align:center;font-size:.85rem">🎉 Nenhum pedido sem rota. Todos encaixaram em algum corredor.</p>';
   return _planAgruparErenderizar(pedidos);
 }
@@ -259,6 +259,8 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
         ${pedidos.length === 0 ? '<p class="text-muted" style="font-size:.82rem">Nenhum pedido neste corredor ainda. Você pode criar a rota vazia e arrastar pedidos depois.</p>' : pedidos.map(p => `<label class="jv-sel-linha">
           <input type="checkbox" class="plan-viagem-ped" value="${p.id}" ${rotaVazia ? '' : 'checked'}>
           <span><strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''} <span class="text-muted">${p.patioAtual||p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span></span>
+          <button type="button" class="plan-trocar-veic" title="Trocar o veículo deste pedido"
+                  onclick="event.preventDefault();event.stopPropagation();_planTrocarVeiculo(${p.id})">🔄</button>
         </label>`).join('')}
       </div>
       <div class="form-group">
@@ -271,6 +273,14 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
       </div>
       <div class="form-group">
         <label>Cegonha / Guincho</label>
+        <div class="plan-cegonha-busca">
+          <span class="plan-busca-ic">🔍</span>
+          <input type="text" id="planCegonhaBusca"
+                 placeholder="Digite a placa ou o nome do motorista..."
+                 oninput="_planFiltrarCegonhaPorTexto()"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();_planSelecionarPrimeiraCegonha();}">
+          <span class="plan-cegonha-cont" id="planCegonhaCont"></span>
+        </div>
         <select id="planViagemCegonha" onchange="_planViagemPreencheMot()">
           <option value="">— a definir —</option>
           ${cegonhas.map(v => { const prop = (v.propriedade==='terceiro')?'terceiro':'propria'; return `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${prop}">${prop==='terceiro'?'🤝 ':'🚛 '}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`; }).join('')}
@@ -293,16 +303,45 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
 function _planFiltrarCegonhas(btn, tipo){
   document.querySelectorAll('.plan-vtipo-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  // Delega para o filtro de texto, que já combina tipo + busca — assim os
+  // dois filtros se somam em vez de um desfazer o outro.
+  _planFiltrarCegonhaPorTexto();
+}
+
+// Busca por texto na lista de cegonhas: casa placa, modelo e motorista
+// padrão. Digitando a placa, a lista reduz e o Enter já seleciona a única
+// que sobrou — sem precisar caçar a opção no meio de dezenas.
+function _planFiltrarCegonhaPorTexto(){
+  const txt = (document.getElementById('planCegonhaBusca')?.value || '').trim();
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const alvo = n(txt);
+  const sel = document.getElementById('planViagemCegonha');
+  const cont = document.getElementById('planCegonhaCont');
+  if (!sel) return;
+  // respeita também o filtro de tipo (própria/terceiro) que estiver ativo
+  const tipo = document.querySelector('.plan-vtipo-btn.active')?.getAttribute('data-vtipo') || 'todos';
+  let visiveis = 0, primeira = null;
+  [...sel.options].forEach(op => {
+    if (!op.value){ op.hidden = false; return; }
+    const prop = op.getAttribute('data-prop') || 'propria';
+    const okTipo = (tipo === 'todos') || (prop === tipo);
+    const okTxt = !alvo || n(`${op.value} ${op.textContent} ${op.getAttribute('data-mot')||''}`).includes(alvo);
+    op.hidden = !(okTipo && okTxt);
+    if (!op.hidden){ visiveis++; if (!primeira) primeira = op; }
+  });
+  if (cont) cont.textContent = alvo ? `${visiveis} veículo(s)` : '';
+  // uma só sobrou: seleciona sozinho e já puxa o motorista padrão
+  if (alvo && visiveis === 1 && primeira){ sel.value = primeira.value; _planViagemPreencheMot(); }
+  else if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden){ sel.value = ''; _planViagemPreencheMot(); }
+}
+function _planSelecionarPrimeiraCegonha(){
   const sel = document.getElementById('planViagemCegonha');
   if (!sel) return;
-  [...sel.options].forEach(op => {
-    if (!op.value){ op.hidden = false; return; } // "a definir" sempre visível
-    const prop = op.getAttribute('data-prop') || 'propria';
-    op.hidden = (tipo === 'todos') ? false : (prop !== tipo);
-  });
-  // se a opção selecionada ficou escondida, volta pra "a definir"
-  if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden){ sel.value = ''; _planViagemPreencheMot(); }
+  const op = [...sel.options].find(o => o.value && !o.hidden);
+  if (op){ sel.value = op.value; _planViagemPreencheMot(); sel.focus(); }
 }
+window._planFiltrarCegonhaPorTexto = _planFiltrarCegonhaPorTexto;
+window._planSelecionarPrimeiraCegonha = _planSelecionarPrimeiraCegonha;
 
 function _planViagemPreencheMot(){
   const sel = document.getElementById('planViagemCegonha');
@@ -310,6 +349,65 @@ function _planViagemPreencheMot(){
   const inp = document.getElementById('planViagemMotorista');
   if (inp) inp.value = opt?.getAttribute('data-mot') || '';
 }
+
+// TROCA DE VEÍCULO de um pedido, direto no modal de criar viagem.
+// É raro, mas acontece: o carro que ia embarcar não é o que está ali.
+// Não é correção de digitação — é outro veículo — então a troca fica
+// registrada no histórico, senão some o rastro de qual carro estava na
+// carga quando o CT-e foi emitido.
+async function _planTrocarVeiculo(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const placaAntiga = p.placa || '';
+  const modeloAntigo = p.modelo || '';
+
+  const placaNova = (prompt(`Trocar o veículo do pedido #${p.id}\n\nPlaca atual: ${placaAntiga||'—'}\n\nNova placa:`, placaAntiga) || '').trim().toUpperCase();
+  if (!placaNova || placaNova === placaAntiga.toUpperCase()){
+    if (placaNova && placaNova === placaAntiga.toUpperCase()) alert('A placa é a mesma — nada foi alterado.');
+    return;
+  }
+  const modeloNovo = (prompt(`Modelo do veículo ${placaNova}:`, modeloAntigo) || '').trim();
+
+  if (!confirm(`Confirmar a TROCA de veículo no pedido #${p.id}?\n\nDe:   ${placaAntiga||'—'} · ${modeloAntigo||'—'}\nPara: ${placaNova} · ${modeloNovo||'—'}\n\nIsso altera o pedido no sistema inteiro e fica registrado no histórico.`)) return;
+
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  try {
+    const { error } = await supabase.from('pedidos')
+      .update({ placa: placaNova, modelo: modeloNovo || null })
+      .eq('id', parseInt(pedidoId));
+    if (error) throw error;
+    p.placa = placaNova; p.modelo = modeloNovo || null;
+
+    try {
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId),
+        status_anterior: p.status, status_novo: p.status,
+        usuario_nome: usuario,
+        usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+        observacao: `🔄 Veículo trocado: ${placaAntiga||'—'} (${modeloAntigo||'—'}) substituído por ${placaNova} (${modeloNovo||'—'}).`
+      });
+    } catch(_){}
+
+    // se a carga já foi ao fiscal, ele precisa saber que a composição mudou
+    if (typeof notificar === 'function' && (p.numeroCte || p.numero_cte)){
+      try { await notificar({ perfil:'fiscal', tipo:'status', pedidoId: parseInt(pedidoId),
+        titulo:'🔄 Veículo trocado em pedido com CT-e',
+        mensagem:`#${pedidoId}: ${placaAntiga} → ${placaNova}. Confira o documento emitido.` }); } catch(_){}
+    }
+
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`🔄 Veículo trocado para ${placaNova}.`);
+    // redesenha o modal aberto com o dado novo
+    const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(p.corredorManualId)) || null;
+    if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+    const linha = document.querySelector(`.plan-viagem-ped[value="${pedidoId}"]`)?.closest('label');
+    if (linha){
+      const span = linha.querySelector('span');
+      if (span) span.innerHTML = `<strong>${placaNova}</strong> · ${modeloNovo||''} · ${p.cliente||''} <span class="text-muted">${p.patioAtual||p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span>`;
+    }
+  } catch(e){ alert('Erro ao trocar o veículo: '+(e.message||e)); }
+}
+window._planTrocarVeiculo = _planTrocarVeiculo;
 
 async function _planConfirmarViagem(corId){
   if (window._criandoViagem){ return; } // trava anti-duplo-clique
@@ -343,8 +441,12 @@ async function _planConfirmarViagem(corId){
 
     // Transbordados voltam a "em transporte" ao entrar na nova viagem —
     // por isso vão num update separado dos demais.
-    const transb = alvos.filter(p => p.status === 'Transbordo');
-    const comuns = alvos.filter(p => p.status !== 'Transbordo');
+    // Carro com OCORRÊNCIA entra na mesma regra: se está sendo carregado de
+    // novo, o problema foi resolvido — senão ele viajaria com o status
+    // travado em "Ocorrência" e apareceria como parado no sistema inteiro.
+    const _reentrada = ['Transbordo','Ocorrência'];
+    const transb = alvos.filter(p => _reentrada.includes(p.status));
+    const comuns = alvos.filter(p => !_reentrada.includes(p.status));
 
     const base = { rota_id: rota.id };
     if (cegonha) base.placa_cegonha = cegonha;
@@ -917,12 +1019,16 @@ async function _centralConfirmarEquipeEntrega(ids){
   if (!equipeId){ alert('Selecione uma equipe.'); return; }
   const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(equipeId));
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
-  // Em lote. entrega_equipe_em é o campo que tira o pedido da fila —
-  // faltava ser gravado, e por isso a contagem não baixava.
+  // Em lote. Grava o DIRECIONAMENTO (entrega_direcionada_em), nunca a
+  // conclusão (entrega_equipe_em) — esse último significa "a equipe já
+  // entregou" e é o que tira o pedido da lista da equipe. Gravá-lo aqui
+  // fazia o serviço nascer concluído: sumia da Central e nunca chegava na
+  // equipe. Quem tira da fila da Central é o entrega_equipe_id.
   const _agoraEnt = new Date().toISOString();
   await mmAtualizarPedidos(ids,
-    { entrega_equipe_id: parseInt(equipeId), precisa_equipe_entrega: true, entrega_equipe_em: _agoraEnt },
-    (p) => { p.entregaEquipeId = parseInt(equipeId); p.precisaEquipeEntrega = true; p.entregaEquipeEm = _agoraEnt; }
+    { entrega_equipe_id: parseInt(equipeId), precisa_equipe_entrega: true,
+      entrega_direcionada_em: _agoraEnt, entrega_direcionada_por: usuario },
+    (p) => { p.entregaEquipeId = parseInt(equipeId); p.precisaEquipeEntrega = true; p.entregaDirecionadaEm = _agoraEnt; }
   );
   await mmRegistrarHistorico((ids||[]).map(id => {
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
@@ -1633,6 +1739,15 @@ async function _cgAbrirRastreio(pedidoId){
         <button class="btn btn-primary btn-sm" style="background:#22c55e" onclick="_aprovarPedidoComercial(${p.id})">✅ Aprovar pedido</button>
       </div>` : ''}
 
+      ${p.status === 'Ocorrência' ? `<div class="cg-ocor-bloco">
+        <div class="cg-ocor-tit">⚠️ Pedido parado por ocorrência</div>
+        <div class="cg-ocor-txt">
+          O carro foi retirado da viagem e está fora do planejamento${p.patioAtual?` — consta em <strong>${p.patioAtual}</strong>`:''}.
+          Resolvido o problema, devolva-o ao fluxo escolhendo o corredor da próxima perna.
+        </div>
+        <button class="btn btn-sm" style="background:#22c55e;color:#08130c;font-weight:700" onclick="_reverterOcorrencia(${p.id})">↩️ Reverter ocorrência e devolver ao fluxo</button>
+      </div>` : ''}
+
       ${(p.qtdTransbordos>0 || p.aguardandoTransbordo || p.status==='Transbordo') ? `<div style="margin:12px 0;padding:12px;border-radius:10px;background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.3)">
         <div style="font-size:.85rem;margin-bottom:8px;color:#fb923c">🔀 Este pedido está marcado como <strong>transbordo</strong>${p.cidadeTransbordo?` em ${p.cidadeTransbordo}`:''}. Se foi por engano, desfaça abaixo.</div>
         <button class="btn btn-sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.4)" onclick="_desfazerTransbordo(${p.id})">↩️ Não é transbordo (desfazer)</button>
@@ -1833,7 +1948,11 @@ function _cgViagemDetalheHTML(rota){
               <td>${p.cidadeDestino||'—'}</td>
               <td class="cg-sub" style="white-space:nowrap">${_dataLancamentoFmt(p)}</td>
               <td>${p.numeroCte?`<span style="color:#22c55e;font-size:.75rem;white-space:nowrap">🧾 ${p.numeroCte}</span>`:'<span class="text-muted" style="font-size:.72rem">—</span>'}</td>
-              <td>${transbordou ? `<span style="color:#a855f7;font-size:.75rem">🔀 ${v.motivo_saida||'transbordado'}</span>` : _cgStatusPill(p)}</td>
+              <td>${transbordou ? (() => {
+                // mesma correção da tabela de carga: diz ONDE o carro saiu
+                const onde = v.cidade_transbordo || p.cidadeTransbordo || '';
+                return `<span style="color:#a855f7;font-size:.75rem" title="${v.motivo_saida||'transbordo'}">🔀 saiu${onde?` em ${String(onde).split('/')[0]}`:' da carga'}</span>`;
+              })() : _cgStatusPill(p)}</td>
             </tr>`;
             }).join('')}
           </tbody>
@@ -1905,16 +2024,17 @@ function _centralEntregasPorViagem(entregas){
         </div>
       </div>
       <div class="central-viagem-itens">
-        ${itens.map(p => `<div class="cvb-item">
+        ${itens.map(p => { const _tag = _centralTagDirecionado(p, 'entrega'); return `<div class="cvb-item ${_tag?'cvb-item-enviado':''}">
           <div class="cvb-item-info">
             <strong>#${p.id}</strong> ${p.placa||'—'} · ${p.cliente||'—'}
             <div class="cvb-item-rota">${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}${_centralDataLancamento(p).replace(/<[^>]+>/g,' ')}</div>
+            ${_tag}
           </div>
           <div class="cvb-item-acoes">
             <button class="central-btn-mini" onclick="_centralModalMotorista([${p.id}])" title="Só este carro para um motorista">👤</button>
             <button class="central-btn-mini" onclick="_centralModalEquipeEntrega([${p.id}])" title="Só este carro para uma equipe">👥</button>
           </div>
-        </div>`).join('')}
+        </div>`; }).join('')}
       </div>
     </div>`;
   }).join('') + `</div>`;
@@ -1929,6 +2049,25 @@ window._centralEntregasPorViagem = _centralEntregasPorViagem;
    justamente esperando entrar numa. Por isso o agrupamento é:
      • por viagem, quando já alocado (a cegonha está reservada, é prioridade)
      • num bloco "aguardando alocação" para o restante */
+// Para onde este carro já foi direcionado (equipe ou motorista) e quando.
+// Sem isto, um carro já enviado ficava visualmente igual a um que ninguém
+// tocou — e a logística acabava direcionando duas vezes o mesmo veículo.
+function _centralTagDirecionado(p, tipo){
+  const ehColeta = tipo !== 'entrega';
+  const motorista = ehColeta ? p.coletaMotorista : p.entregaMotorista;
+  const equipeId  = ehColeta ? p.coletaEquipeId  : p.entregaEquipeId;
+  const quando    = ehColeta ? p.coletaDirecionadaEm : p.entregaDirecionadaEm;
+  let quem = '';
+  if (motorista) quem = `👤 ${motorista}`;
+  else if (equipeId){
+    const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(equipeId));
+    quem = `👥 equipe ${eq ? eq.nome : '—'}${eq && eq.cidade_base ? ' · '+eq.cidade_base : ''}`;
+  }
+  if (!quem) return '';
+  const dt = quando ? ` · ${new Date(quando).toLocaleDateString('pt-BR')}` : '';
+  return `<span class="cvb-tag-enviado" title="Já direcionado — aguardando confirmação">📤 Enviado para ${quem}${dt}</span>`;
+}
+
 function _centralColetasPorViagem(coletas){
   const grupos = {};
   coletas.forEach(p => {
@@ -1955,6 +2094,8 @@ function _centralColetasPorViagem(coletas){
           <div class="cvb-sub">${livre
             ? itens.length + ' carro(s) sem carga definida'
             : '👤 ' + motorista + ' · ' + itens.length + ' carro(s) · <span style="color:#fbbf24">a cegonha espera</span>'}
+            ${(() => { const enviados = itens.filter(p => p.coletaMotorista || p.coletaEquipeId).length;
+               return enviados ? `<span class="cvb-sub-enviados">📤 ${enviados} de ${itens.length} já direcionado(s)</span>` : ''; })()}
             ${_centralPeriodoLancamento(itens)}</div>
         </div>
         <div class="cvb-acoes" onclick="event.stopPropagation()">
@@ -1963,16 +2104,17 @@ function _centralColetasPorViagem(coletas){
         </div>
       </div>
       <div class="central-viagem-itens">
-        ${itens.map(p => `<div class="cvb-item">
+        ${itens.map(p => { const _tag = _centralTagDirecionado(p, 'coleta'); return `<div class="cvb-item ${_tag?'cvb-item-enviado':''}">
           <div class="cvb-item-info">
             <strong>#${p.id}</strong> ${p.placa||'—'} · ${p.cliente||'—'}
             <div class="cvb-item-rota">${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}${_centralDataLancamento(p).replace(/<[^>]+>/g,' ')}</div>
+            ${_tag}
           </div>
           <div class="cvb-item-acoes">
             <button class="central-btn-mini" onclick="_centralModalMotoristaColeta([${p.id}])" title="Só este carro para um motorista">👤</button>
             <button class="central-btn-mini" onclick="_centralModalEquipe([${p.id}])" title="Só este carro para uma equipe">👥</button>
           </div>
-        </div>`).join('')}
+        </div>`; }).join('')}
       </div>
     </div>`;
   }).join('') + `</div>`;
