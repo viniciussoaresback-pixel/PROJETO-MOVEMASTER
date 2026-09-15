@@ -1025,6 +1025,7 @@ function _viagemDetalheHTML(rota, carros){
     <button class="jv-acao jv-acao-entrega" onclick="_viagemAcao(${rota.id},'entrega')">📥 Registrar Entrega</button>
     <button class="jv-acao jv-acao-transbordo" onclick="_viagemAcao(${rota.id},'transbordo')">🔁 Registrar Transbordo</button>
     <button class="jv-acao jv-acao-ocorrencia" onclick="_viagemAcao(${rota.id},'ocorrencia')">⚠️ Registrar Ocorrência</button>
+    <button class="jv-acao jv-acao-retirar" onclick="_viagemAcao(${rota.id},'retirar')">➖ Tirar carro da viagem</button>
     <button class="jv-acao jv-acao-romaneio" onclick="abrirFecharEnviarCarga(${rota.id})">📋 Romaneio da carga (enviar ao motorista)</button>
     <button class="jv-acao jv-acao-fiscal" onclick="_viagemEnviarFiscal(${rota.id})">📄 Enviar carga ao fiscal (espelho/CTe)</button>
     <button class="jv-acao jv-acao-finalizar" onclick="_viagemAcao(${rota.id},'finalizar')">🏁 Finalizar Viagem</button>
@@ -1061,6 +1062,7 @@ async function _viagemAcao(rotaId, acao){
   if (acao === 'entrega')     return _viagemRegistrarEntrega(rota, carros);
   if (acao === 'transbordo')  return _viagemRegistrarTransbordo(rota, carros);
   if (acao === 'ocorrencia')  return _viagemRegistrarOcorrencia(rota, carros);
+  if (acao === 'retirar')     return _viagemRetirarCarro(rota, carros);
   if (acao === 'finalizar')   return _viagemFinalizar(rota, carros);
   if (acao === 'cancelar')    return _viagemCancelar(rota, carros);
 }
@@ -1302,50 +1304,405 @@ async function _viagemEntregaParaEquipe(rotaId, ids){
 async function _viagemRegistrarOcorrencia(rota, carros){
   const elegiveis = carros.filter(c => !['Entregue','Cancelado'].includes(c.status));
   if (elegiveis.length === 0){ alert('Nenhum carro elegível para registrar ocorrência.'); return; }
-  const escolher = (ids) => {
-    const pedidoId = ids[0];
-    const desc = prompt('Descreva a ocorrência com este carro:\n(ex: pane mecânica, avaria, atraso, sinistro...)');
-    if (desc === null || !desc.trim()) return;
-    _confirmarOcorrencia(pedidoId, desc.trim(), rota);
-  };
+  const escolher = (ids) => _abrirModalOcorrencia(ids, rota);
   if (elegiveis.length === 1){ escolher([elegiveis[0].id]); return; }
-  _viagemModalCarros('⚠️ Registrar Ocorrência', 'Selecione o carro que teve a ocorrência.', elegiveis, '#ef4444', '➡️ Continuar', (ids) => {
+  _viagemModalCarros('⚠️ Registrar Ocorrência', 'Selecione os carros que tiveram a ocorrência.', elegiveis, '#ef4444', '➡️ Continuar', (ids) => {
     document.getElementById('modalViagemAcao')?.remove();
     escolher(ids);
   });
 }
 
-async function _confirmarOcorrencia(pedidoId, descricao, rota){
-  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
-  if (!p) return;
+/* Ocorrência com DESTINO definido.
+
+   Antes a ocorrência era um beco sem saída: travava o carro no status
+   "Ocorrência" e pronto — a vaga continuava ocupada na cegonha, ninguém
+   podia encaixar outro carro no lugar, e não havia ação nenhuma a tomar.
+   Agora, ao registrar, decide-se o que acontece com o carro. */
+function _abrirModalOcorrencia(ids, rota){
+  const alvos = (ids||[]).map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  if (alvos.length === 0) return;
+  const old = document.getElementById('modalOcorrencia'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalOcorrencia';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:540px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 6px">⚠️ Registrar ocorrência</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 .8rem">
+        ${alvos.length === 1 ? `Carro <strong>${alvos[0].placa||('#'+alvos[0].id)}</strong>` : `<strong>${alvos.length} carros</strong> selecionados`} — a ocorrência fica registrada no histórico do pedido.
+      </p>
+      ${alvos.length > 1 ? `<div class="ocor-lista">${alvos.map(c => `<div class="ocor-lista-item"><strong>#${c.id}</strong> · ${c.placa||'—'} · ${c.cliente||''}</div>`).join('')}</div>` : ''}
+
+      <div class="form-group">
+        <label>O que aconteceu?</label>
+        <textarea id="ocorDescricao" rows="3" placeholder="Ex: pane mecânica no eixo, avaria no para-choque, sinistro na BR-277..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="ocorTipo">
+          <option value="mecanica">🔧 Pane / problema mecânico</option>
+          <option value="avaria">💥 Avaria no veículo</option>
+          <option value="sinistro">🚨 Sinistro / acidente</option>
+          <option value="atraso">⏰ Atraso</option>
+          <option value="documentacao">📄 Documentação</option>
+          <option value="outro">❓ Outro</option>
+        </select>
+      </div>
+
+      <div class="ocor-aviso">
+        ⚠️ O carro <strong>sai da viagem e de todo o fluxo</strong>: solta da cegonha, libera a vaga
+        e deixa de aparecer no planejamento. Fica em <strong>Pedidos</strong> com status
+        <strong>Ocorrência</strong>, esperando decisão — e de lá dá para reverter.
+      </div>
+
+      <div class="form-group">
+        <label>Onde o carro ficou?</label>
+        <select id="ocorPatio">
+          <option value="">— não informado —</option>
+          ${(typeof PATIOS_FIXOS !== 'undefined' ? PATIOS_FIXOS : []).map(pt => `<option value="${pt}">${pt}</option>`).join('')}
+        </select>
+        <p class="text-muted" style="font-size:.76rem;margin:.35rem 0 0">
+          Registra apenas a localização física do veículo — é o que vai orientar o corredor na hora de reverter.
+        </p>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1;background:#ef4444" id="btnConfirmOcor">⚠️ Registrar ocorrência</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalOcorrencia').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  document.getElementById('btnConfirmOcor').onclick = () => {
+    const desc = document.getElementById('ocorDescricao')?.value.trim() || '';
+    if (!desc){ alert('Descreva o que aconteceu.'); return; }
+    const tipo = document.getElementById('ocorTipo')?.value || 'outro';
+    const patio = document.getElementById('ocorPatio')?.value || '';
+    document.getElementById('modalOcorrencia').remove();
+    _confirmarOcorrencia(alvos.map(a => a.id), desc, rota, { tipo, patio });
+  };
+}
+window._abrirModalOcorrencia = _abrirModalOcorrencia;
+
+async function _confirmarOcorrencia(pedidoIds, descricao, rota, opcoes){
+  const ids = Array.isArray(pedidoIds) ? pedidoIds : [pedidoIds];
+  const alvos = ids.map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  if (alvos.length === 0) return;
+  const { tipo = 'outro', patio = '' } = (opcoes || {});
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
-  const statusAntes = p.status;
+
   try {
-    // trava o pedido no status Ocorrência
-    await supabase.from('pedidos').update({ status: 'Ocorrência', status_planilha: 'Ocorrência' }).eq('id', parseInt(pedidoId));
-    p.status = 'Ocorrência'; p.statusPlanilha = 'Ocorrência';
-    // registra a ocorrência (tabela ocorrencias) e no histórico
-    await supabase.from('ocorrencias').insert({
-      tipo: 'ocorrencia', pedido_id: parseInt(pedidoId), descricao,
-      usuario_nome: usuario, status: 'aberta',
-      dados_extras: JSON.stringify({ placa: p.placa, cliente: p.cliente, rota_id: rota?.id, cegonha: rota?.placa_cegonha })
-    });
-    await supabase.from('historico_status').insert({
-      pedido_id: parseInt(pedidoId), status_anterior: statusAntes, status_novo: 'Ocorrência',
-      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
-      observacao: `⚠️ Ocorrência: ${descricao}`
-    });
-    // notifica comercial e logística
-    if (typeof notificar === 'function'){
-      notificar({ perfil:'logistica', tipo:'ocorrencia', pedidoId: parseInt(pedidoId),
-        titulo:'⚠️ Ocorrência registrada', mensagem:`#${pedidoId} (${p.placa||''}): ${descricao}` });
-      notificar({ perfil:'comercial', tipo:'ocorrencia', pedidoId: parseInt(pedidoId),
-        titulo:'⚠️ Ocorrência num pedido', mensagem:`#${pedidoId} (${p.cliente||''}): ${descricao}` });
+    for (const p of alvos){
+      const statusAntes = p.status;
+      const _rotaOrigem = p.rotaId || p.rota_id || null;
+
+      // O carro com ocorrência SAI DE TUDO: viagem, cegonha, motorista e
+      // corredor. Não é planejável enquanto o problema não for resolvido —
+      // ele fica só em Pedidos, com status Ocorrência, esperando decisão.
+      // A vaga na cegonha abre na hora para outro carro entrar.
+      const upd = {
+        status: 'Ocorrência', status_planilha: 'Ocorrência',
+        rota_id: null, placa_cegonha: null,
+        motorista_1: null, motorista_2: null,
+        corredor_manual_id: null,
+        aguardando_transbordo: false
+      };
+      // Onde o carro ficou fisicamente — só localização, não muda o destino.
+      if (patio){ upd.patio_atual = patio; upd.patio_desde = new Date().toISOString(); }
+
+      await supabase.from('pedidos').update(upd).eq('id', parseInt(p.id));
+      Object.assign(p, {
+        status:'Ocorrência', statusPlanilha:'Ocorrência',
+        rotaId:null, rota_id:null, placaCegonha:null,
+        motorista1:null, motorista2:null,
+        corredorManualId:null, aguardandoTransbordo:false,
+        ...(patio ? { patioAtual: patio } : {})
+      });
+
+      // preserva o vínculo histórico com a viagem de origem
+      if (_rotaOrigem && typeof _marcarSaidaTransbordo === 'function'){
+        try { await _marcarSaidaTransbordo(_rotaOrigem, p.id, `ocorrência: ${descricao}`, patio || null); } catch(_){}
+      }
+
+      await supabase.from('ocorrencias').insert({
+        tipo: 'ocorrencia', pedido_id: parseInt(p.id), descricao,
+        usuario_nome: usuario, status: 'aberta',
+        dados_extras: JSON.stringify({
+          placa: p.placa, cliente: p.cliente, rota_id: rota?.id, cegonha: rota?.placa_cegonha,
+          categoria: tipo, patio: patio || null
+        })
+      });
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(p.id), status_anterior: statusAntes, status_novo: 'Ocorrência',
+        usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+        observacao: `⚠️ Ocorrência (${tipo}): ${descricao} — carro retirado da viagem${rota?.placa_cegonha?' '+rota.placa_cegonha:''}${patio?`, ficou em ${patio}`:''}. Aguardando decisão.`
+      });
     }
-    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao('⚠️ Ocorrência registrada — carro travado.');
+
+    if (typeof notificar === 'function'){
+      const quem = alvos.length === 1 ? `#${alvos[0].id} (${alvos[0].placa||''})` : `${alvos.length} carros`;
+      notificar({ perfil:'logistica', tipo:'ocorrencia', pedidoId: parseInt(alvos[0].id),
+        titulo:'⚠️ Ocorrência registrada', mensagem:`${quem}: ${descricao} — fora do fluxo até alguém reverter.` });
+      notificar({ perfil:'comercial', tipo:'ocorrencia', pedidoId: parseInt(alvos[0].id),
+        titulo:'⚠️ Ocorrência num pedido', mensagem:`${quem}: ${descricao}` });
+      // Carro com CT-e emitido saindo da carga: o fiscal precisa saber.
+      if (alvos.some(p => p.numeroCte || p.numero_cte)){
+        notificar({ perfil:'fiscal', tipo:'ocorrencia', pedidoId: parseInt(alvos[0].id),
+          titulo:'⚠️ Carro com CT-e saiu da carga',
+          mensagem:`${quem} saiu da viagem por ocorrência. Confira o documento emitido.` });
+      }
+    }
+
+    if (typeof _rmToastConfirmacao === 'function')
+      _rmToastConfirmacao(`⚠️ Ocorrência registrada — ${alvos.length} carro(s) fora do fluxo, vaga(s) liberada(s).`);
+    if (typeof recarregarPedidos === 'function') await recarregarPedidos();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
     if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento();
   } catch(e){ alert('Erro ao registrar ocorrência: '+(e.message||e)); }
 }
+
+/* REVERTER OCORRÊNCIA — devolve o carro ao fluxo.
+   Fica no painel de rastreio do pedido (Pedidos → clique no pedido), que é
+   onde se olha quando alguém pergunta "e aquele carro que deu problema?".
+   Só existe para ocorrência: tirar carro da viagem por mudança de plano é
+   outro caminho, que não trava o pedido. */
+async function _reverterOcorrencia(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  if (p.status !== 'Ocorrência'){ alert('Este pedido não está com ocorrência aberta.'); return; }
+
+  // Corredores que fazem sentido a partir de onde o carro está parado.
+  const ondeEsta = p.patioAtual || p.cidadeOrigem || '';
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const cidadeAtual = n(String(ondeEsta).split('/')[0]);
+  const todos = (corredoresGlobais||[]);
+  const sugeridos = todos.filter(c => {
+    const paradas = (c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino];
+    return paradas.some(cid => n(String(cid||'').split('/')[0]) === cidadeAtual);
+  });
+
+  const old = document.getElementById('modalReverterOcor'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalReverterOcor';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100060';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:500px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 6px">↩️ Reverter ocorrência — #${p.id}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">
+        <strong>${p.placa||'—'}</strong> · ${p.modelo||''} · destino ${p.cidadeDestino||'—'}.
+        ${ondeEsta ? `Consta parado em <strong>${ondeEsta}</strong>.` : 'Localização não registrada.'}
+        O carro volta a ser planejável.
+      </p>
+
+      <div class="form-group">
+        <label>Direcionar para qual corredor?</label>
+        <select id="reverterCorredor">
+          <option value="">— deixar o sistema encaixar pela geografia —</option>
+          ${sugeridos.length ? `<optgroup label="Partem de ${String(ondeEsta).split('/')[0]||'onde o carro está'}">
+            ${sugeridos.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
+          </optgroup>` : ''}
+          ${todos.filter(c => !sugeridos.includes(c)).length ? `<optgroup label="Demais corredores">
+            ${todos.filter(c => !sugeridos.includes(c)).map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
+          </optgroup>` : ''}
+        </select>
+        ${sugeridos.length ? `<p class="text-muted" style="font-size:.76rem;margin:.35rem 0 0">💡 ${sugeridos.length} corredor(es) passam por onde o carro está.</p>` : ''}
+      </div>
+
+      <div class="form-group">
+        <label>O que foi resolvido? (fica no histórico)</label>
+        <textarea id="reverterObs" rows="2" placeholder="Ex: guincho trocou o pneu, veículo liberado pela seguradora..."></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#22c55e" onclick="_confirmarReverterOcorrencia(${p.id})">✅ Devolver ao fluxo</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalReverterOcor').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+window._reverterOcorrencia = _reverterOcorrencia;
+
+async function _confirmarReverterOcorrencia(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p) return;
+  const corredorId = document.getElementById('reverterCorredor')?.value || null;
+  const obs = document.getElementById('reverterObs')?.value.trim() || '';
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const cor = corredorId ? (corredoresGlobais||[]).find(c => String(c.id)===String(corredorId)) : null;
+
+  try {
+    // Volta ao fluxo normal. Se o carro está num pátio do meio do caminho,
+    // ele já foi coletado — por isso não volta para "Pendente", que faria a
+    // Central pedir uma coleta que já aconteceu.
+    const novoStatus = p.patioAtual ? 'Em Coleta' : 'Pendente';
+    const upd = {
+      status: novoStatus,
+      status_planilha: null,
+      corredor_manual_id: corredorId ? parseInt(corredorId) : null
+    };
+    await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    Object.assign(p, { status: novoStatus, statusPlanilha: null,
+      corredorManualId: corredorId ? parseInt(corredorId) : null });
+
+    await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: 'Ocorrência', status_novo: novoStatus,
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+      observacao: `↩️ Ocorrência revertida — carro devolvido ao planejamento${cor?` (corredor ${cor.nome})`:''}${obs?`. ${obs}`:''}.`
+    });
+    // fecha a ocorrência aberta deste pedido
+    try {
+      await supabase.from('ocorrencias')
+        .update({ status: 'resolvida' })
+        .eq('pedido_id', parseInt(pedidoId)).eq('status', 'aberta');
+    } catch(_){}
+
+    if (typeof notificar === 'function'){
+      try { notificar({ perfil:'comercial', tipo:'status', pedidoId: parseInt(pedidoId),
+        titulo:'↩️ Ocorrência resolvida', mensagem:`#${pedidoId} (${p.placa||''}) voltou ao planejamento.` }); } catch(_){}
+    }
+
+    document.getElementById('modalReverterOcor')?.remove();
+    if (typeof _cgFecharRastreio === 'function') _cgFecharRastreio();
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao('↩️ Carro devolvido ao planejamento.');
+    if (typeof recarregarPedidos === 'function') await recarregarPedidos();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+  } catch(e){ alert('Erro ao reverter a ocorrência: '+(e.message||e)); }
+}
+window._confirmarReverterOcorrencia = _confirmarReverterOcorrencia;
+
+/* TIRAR CARRO DA VIAGEM — mudança de planejamento, não problema.
+
+   Diferente da ocorrência de propósito: aqui não aconteceu nada de errado
+   com o veículo, só mudou o plano (cliente desistiu, carro não ficou
+   pronto, trocaram por outro). Por isso NÃO entra na tabela de ocorrências
+   — senão o relatório de ocorrências vira um amontoado de decisões
+   comerciais. O carro volta direto para o corredor, disponível para a
+   próxima carga. */
+async function _viagemRetirarCarro(rota, carros){
+  const elegiveis = carros.filter(c => !['Entregue','Cancelado'].includes(c.status));
+  if (elegiveis.length === 0){ alert('Nenhum carro para retirar desta viagem.'); return; }
+  const abrir = (ids) => _abrirModalRetirarCarro(ids, rota);
+  if (elegiveis.length === 1){ abrir([elegiveis[0].id]); return; }
+  _viagemModalCarros('➖ Tirar carro da viagem', 'Selecione os carros que não vão mais nesta viagem.', elegiveis, '#94a3b8', '➡️ Continuar', (ids) => {
+    document.getElementById('modalViagemAcao')?.remove();
+    abrir(ids);
+  });
+}
+
+function _abrirModalRetirarCarro(ids, rota){
+  const alvos = (ids||[]).map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  if (alvos.length === 0) return;
+  const comCte = alvos.filter(p => p.numeroCte || p.numero_cte);
+  const old = document.getElementById('modalRetirarCarro'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalRetirarCarro';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:520px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 6px">➖ Tirar da viagem</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 .8rem">
+        ${alvos.length === 1 ? `Carro <strong>${alvos[0].placa||('#'+alvos[0].id)}</strong>` : `<strong>${alvos.length} carros</strong>`}
+        — sai da cegonha${rota?.placa_cegonha?' '+rota.placa_cegonha:''}, a vaga é liberada e ele
+        <strong>volta para o corredor</strong>, pronto para outra carga.
+      </p>
+      ${alvos.length > 1 ? `<div class="ocor-lista">${alvos.map(c => `<div class="ocor-lista-item"><strong>#${c.id}</strong> · ${c.placa||'—'} · ${c.cliente||''}</div>`).join('')}</div>` : ''}
+
+      <div class="form-group">
+        <label>Por que está saindo?</label>
+        <select id="retirarMotivo">
+          <option value="cliente_desistiu">🙅 Cliente desistiu / cancelou o embarque</option>
+          <option value="nao_pronto">🔧 Carro não ficou pronto a tempo</option>
+          <option value="trocado">🔄 Trocado por outro carro</option>
+          <option value="erro_planejamento">📋 Erro de planejamento</option>
+          <option value="outro">❓ Outro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Observação (opcional)</label>
+        <input type="text" id="retirarObs" placeholder="Detalhe, se quiser">
+      </div>
+
+      ${comCte.length ? `<div class="retirar-alerta">
+        📄 ${comCte.length} carro(s) já tem CT-e emitido. O fiscal será avisado de que saiu da carga.
+      </div>` : ''}
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;background:#64748b" id="btnConfirmRetirar">➖ Tirar da viagem</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalRetirarCarro').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  document.getElementById('btnConfirmRetirar').onclick = () => {
+    const motivo = document.getElementById('retirarMotivo')?.value || 'outro';
+    const obs = document.getElementById('retirarObs')?.value.trim() || '';
+    document.getElementById('modalRetirarCarro').remove();
+    _confirmarRetirarCarro(alvos.map(a => a.id), rota, motivo, obs);
+  };
+}
+window._abrirModalRetirarCarro = _abrirModalRetirarCarro;
+
+async function _confirmarRetirarCarro(ids, rota, motivo, obs){
+  const alvos = (ids||[]).map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  if (alvos.length === 0) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const rotulos = {
+    cliente_desistiu: 'cliente desistiu do embarque',
+    nao_pronto: 'carro não ficou pronto a tempo',
+    trocado: 'trocado por outro carro',
+    erro_planejamento: 'erro de planejamento',
+    outro: 'outro motivo'
+  };
+  const rotuloMotivo = rotulos[motivo] || 'outro motivo';
+
+  try {
+    for (const p of alvos){
+      const statusAntes = p.status;
+      const _rotaOrigem = p.rotaId || p.rota_id || null;
+      // Sai da cegonha e volta a ser planejável. O corredor_manual_id é
+      // PRESERVADO: se o carro tinha um corredor fixado, volta para o mesmo.
+      const upd = {
+        rota_id: null, placa_cegonha: null,
+        motorista_1: null, motorista_2: null,
+        percent_motorista_1: null, percent_motorista_2: null,
+        // já coletado volta como "Em Coleta"; ainda não coletado volta a Pendente
+        status: p.patioAtual ? 'Em Coleta' : 'Pendente',
+        status_planilha: null
+      };
+      await supabase.from('pedidos').update(upd).eq('id', parseInt(p.id));
+      Object.assign(p, { rotaId:null, rota_id:null, placaCegonha:null,
+        motorista1:null, motorista2:null,
+        status: upd.status, statusPlanilha: null });
+
+      if (_rotaOrigem && typeof _marcarSaidaTransbordo === 'function'){
+        try { await _marcarSaidaTransbordo(_rotaOrigem, p.id, `retirado da viagem: ${rotuloMotivo}`, p.patioAtual || null); } catch(_){}
+      }
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(p.id), status_anterior: statusAntes, status_novo: upd.status,
+        usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
+        observacao: `➖ Retirado da viagem${rota?.placa_cegonha?' '+rota.placa_cegonha:''} — ${rotuloMotivo}${obs?`. ${obs}`:''}. Voltou ao corredor.`
+      });
+    }
+
+    if (typeof notificar === 'function'){
+      const quem = alvos.length === 1 ? `#${alvos[0].id} (${alvos[0].placa||''})` : `${alvos.length} carros`;
+      try { notificar({ perfil:'comercial', tipo:'status', pedidoId: parseInt(alvos[0].id),
+        titulo:'➖ Carro saiu da viagem', mensagem:`${quem}: ${rotuloMotivo}. Voltou para o planejamento.` }); } catch(_){}
+      const comCte = alvos.filter(p => p.numeroCte || p.numero_cte);
+      if (comCte.length){
+        try { notificar({ perfil:'fiscal', tipo:'status', pedidoId: parseInt(comCte[0].id),
+          titulo:'📄 Carro com CT-e saiu da carga',
+          mensagem:`${comCte.length} carro(s) com CT-e emitido saíram da viagem${rota?.placa_cegonha?' '+rota.placa_cegonha:''} (${rotuloMotivo}). Confira os documentos.` }); } catch(_){}
+      }
+    }
+
+    if (typeof _rmToastConfirmacao === 'function')
+      _rmToastConfirmacao(`➖ ${alvos.length} carro(s) fora da viagem — vaga(s) liberada(s).`);
+    if (typeof recarregarPedidos === 'function') await recarregarPedidos();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+    if (typeof renderizarViagensAndamento === 'function') renderizarViagensAndamento();
+  } catch(e){ alert('Erro ao retirar o carro da viagem: '+(e.message||e)); }
+}
+window._confirmarRetirarCarro = _confirmarRetirarCarro;
 
 async function _viagemRegistrarTransbordo(rota, carros){
   const elegiveis = carros.filter(c => !['Entregue','Cancelado','Transbordo'].includes(c.status));
@@ -1482,6 +1839,9 @@ function _planPedidosDoCorredor(c){
   const paradasStr = seq.filter(Boolean);
   const vivos = (pedidosGlobais||[]).filter(p => {
     if (['Entregue','Cancelado'].includes(p.status||'')) return false;
+    // Ocorrência sai do planejamento inteiro: o carro está parado esperando
+    // decisão humana. Ele volta a aparecer aqui ao ser revertido em Pedidos.
+    if (p.status === 'Ocorrência') return false;
     if (p.aprovado === false) return false;
     // aguardando transbordo tem área própria (não entra nos corredores por encaixe)
     if (p.aguardandoTransbordo) return false;
@@ -1521,7 +1881,8 @@ function _planRotasDoCorredor(c){
 function _planPedidosSemRota(){
   const corredores = corredoresGlobais || [];
   const vivos = (pedidosGlobais||[]).filter(p =>
-    !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha
+    !['Entregue','Cancelado','Ocorrência'].includes(p.status||'')  // ocorrência espera decisão, fora do planejamento
+    && !p.rotaId && !p.rota_id && !p.placaCegonha
     && !p.aguardandoTransbordo   // aguardando transbordo tem área própria
     && p.aprovado !== false);    // não-aprovados têm área própria
   return vivos.filter(p => {
@@ -1541,6 +1902,28 @@ function _planPedidosAguardandoTransbordo(){
   return (pedidosGlobais||[]).filter(p =>
     !['Entregue','Cancelado'].includes(p.status||'') && p.aguardandoTransbordo);
 }
+
+// Busca do Planejamento de Rotas — filtra a coluna de pedidos por cliente,
+// placa, ID, referência, cidade, cegonha e motorista.
+let _planBusca = '';
+function _planFiltraBusca(lista){
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const b = n(_planBusca||'');
+  if (!b) return lista || [];
+  return (lista||[]).filter(p => n(`${p.cliente||''} ${p.placa||''} ${p.modelo||''} ${p.referencia||''} ${p.placaCegonha||''} ${p.motorista1||''} ${p.cidadeOrigem||''} ${p.ufOrigem||''} ${p.cidadeDestino||''} ${p.ufDestino||''} #${p.id} ${p.id}`).includes(b));
+}
+function _planSetBusca(){
+  const el0 = document.getElementById('planBusca');
+  _planBusca = el0?.value || '';
+  const pos = el0?.selectionStart ?? null;
+  renderizarPlanejamentoRotas();
+  const el = document.getElementById('planBusca');
+  if (el){ el.focus(); if (pos !== null){ try { el.setSelectionRange(pos,pos); } catch(_){} } }
+}
+function _planLimparBusca(){ _planBusca = ''; renderizarPlanejamentoRotas(); }
+window._planSetBusca = _planSetBusca;
+window._planLimparBusca = _planLimparBusca;
+window._planFiltraBusca = _planFiltraBusca;
 
 function renderizarPlanejamentoRotas(){
   const cont = document.getElementById('painelViewPlanejamento');
@@ -1562,7 +1945,7 @@ function renderizarPlanejamentoRotas(){
   const modoTransbordo = String(_planCorredorSel) === '__transbordo__';
   const modoAprovacao = String(_planCorredorSel) === '__aprovacao__';
   const cor = (modoSemRota||modoTransbordo||modoAprovacao) ? null : corredores.find(c => String(c.id)===String(_planCorredorSel));
-  const pedidosCol = modoSemRota ? _planPedidosSemRota() : modoTransbordo ? _planPedidosAguardandoTransbordo() : modoAprovacao ? _planPedidosAguardandoAprovacao() : _planPedidosDoCorredor(cor);
+  const pedidosCol = _planFiltraBusca(modoSemRota ? _planPedidosSemRota() : modoTransbordo ? _planPedidosAguardandoTransbordo() : modoAprovacao ? _planPedidosAguardandoAprovacao() : _planPedidosDoCorredor(cor));
   const semRotaLista = _planPedidosSemRota();
   const transbordoLista = _planPedidosAguardandoTransbordo();
   const aprovacaoLista = _planPedidosAguardandoAprovacao();
@@ -1616,6 +1999,14 @@ function renderizarPlanejamentoRotas(){
         <div class="plan-col-tit">
           <span>${tituloCol} <span class="plan-col-badge">${pedidosCol.length}</span></span>
           ${(modoSemRota||modoTransbordo||modoAprovacao) ? '' : `<button class="plan-criar-viagem" onclick="_planCriarViagem(${cor.id})">🚛 Criar viagem</button>`}
+        </div>
+        <div class="plan-busca">
+          <span class="plan-busca-ic">🔍</span>
+          <input type="text" id="planBusca"
+                 placeholder="Cliente, placa, ID, referência, cidade, cegonha..."
+                 value="${String(_planBusca).replace(/"/g,'&quot;')}"
+                 oninput="_mmDeb('planBusca', _planSetBusca)">
+          ${_planBusca ? `<button class="plan-busca-x" onclick="_planLimparBusca()" title="Limpar">✕</button>` : ''}
         </div>
         <div id="planPedidosLista" class="plan-pedidos-lista">
           ${modoSemRota ? _planSemRotaListaHTML() : modoTransbordo ? _planTransbordoListaHTML() : modoAprovacao ? _planAprovacaoListaHTML() : _planPedidosListaHTML(cor)}
@@ -1740,7 +2131,7 @@ async function _rotaLivreConfirmar(){
 }
 
 function _planPedidosListaHTML(cor){
-  const pedidos = _planPedidosDoCorredor(cor);
+  const pedidos = _planFiltraBusca(_planPedidosDoCorredor(cor));
   if (pedidos.length === 0){
     // diagnóstico: por que está vazio?
     const semRotaGeral = (pedidosGlobais||[]).filter(p => !['Entregue','Cancelado'].includes(p.status||'') && !p.rotaId && !p.rota_id && !p.placaCegonha).length;
@@ -1851,10 +2242,14 @@ function renderizarColetasDirecionadas(){
   const minhas = [];
   (pedidosGlobais || []).forEach(p => {
     if (['Entregue','Cancelado'].includes(p.status)) return;
-    if (p.coletaMotorista && nomes.has(normNomeMotorista(p.coletaMotorista))) {
+    // O serviço sai da lista quando o motorista CONFIRMA, não quando o
+    // status muda. A coleta confirmada vira "Em Transporte", que não é um
+    // status final — por isso o card continuava aparecendo depois de
+    // confirmado e dava a impressão de que nada tinha acontecido.
+    if (p.coletaMotorista && !p.coletaConfirmadaEm && nomes.has(normNomeMotorista(p.coletaMotorista))) {
       minhas.push({ p, tipo: 'coleta' });
     }
-    if (p.entregaMotorista && nomes.has(normNomeMotorista(p.entregaMotorista))) {
+    if (p.entregaMotorista && !p.entregaConfirmadaEm && nomes.has(normNomeMotorista(p.entregaMotorista))) {
       minhas.push({ p, tipo: 'entrega' });
     }
   });
@@ -1863,7 +2258,23 @@ function renderizarColetasDirecionadas(){
   if (minhas.length === 0){ card.style.display = 'none'; return; }
   card.style.display = '';
 
-  cont.innerHTML = minhas.map(({ p, tipo }) => {
+  const nColetas = minhas.filter(m => m.tipo === 'coleta').length;
+  const nEntregas = minhas.filter(m => m.tipo === 'entrega').length;
+  const barraLote = `
+    <div class="mav-lote">
+      <div class="mav-lote-topo">
+        <label class="mav-lote-todos">
+          <input type="checkbox" id="mavTodos" onchange="_mavMarcarTodos(this.checked)"> Selecionar todos
+        </label>
+        <span class="mav-lote-cont" id="mavContagem">${minhas.length} serviço(s)</span>
+      </div>
+      <div class="mav-lote-btns">
+        ${nColetas ? `<button class="btn-motorista-acao mav-btn-coleta" onclick="confirmarServicosAvulsosLote('coleta')">✅ Confirmar coletas marcadas</button>` : ''}
+        ${nEntregas ? `<button class="btn-motorista-acao mav-btn-entrega" onclick="confirmarServicosAvulsosLote('entrega')">🏁 Confirmar entregas marcadas</button>` : ''}
+      </div>
+    </div>`;
+
+  cont.innerHTML = barraLote + minhas.map(({ p, tipo }) => {
     const ehColeta = tipo === 'coleta';
     const cor      = ehColeta ? '#38bdf8' : '#a855f7';
     const rotulo   = ehColeta ? '📍 Coleta avulsa' : '🏁 Entrega avulsa';
@@ -1872,6 +2283,9 @@ function renderizarColetasDirecionadas(){
     return `
     <div class="motorista-pedido-card" style="--mp-cor:${cor}">
       <div class="mpedido-header">
+        <label class="mav-chk-wrap" title="Marcar para confirmar em lote">
+          <input type="checkbox" class="mav-chk" data-tipo="${tipo}" value="${p.id}" onchange="_mavAtualizarContagem()">
+        </label>
         <span class="mpedido-id">#${p.id}</span>
         <span class="mpedido-status" style="color:${cor};background:${cor}20;border:1px solid ${cor}40">${rotulo}</span>
       </div>
@@ -1953,6 +2367,89 @@ async function confirmarServicoAvulso(pedidoId, tipo){
 }
 
 window.confirmarServicoAvulso = confirmarServicoAvulso;
+
+/* Seleção em lote dos serviços avulsos (coletas/entregas direcionadas).
+   O motorista costuma receber vários carros do mesmo cliente de uma vez —
+   confirmar um por um, com um confirm() em cada, é inviável na rua. */
+function _mavMarcarTodos(marcar){
+  document.querySelectorAll('.mav-chk').forEach(c => { c.checked = !!marcar; });
+  _mavAtualizarContagem();
+}
+function _mavAtualizarContagem(){
+  const marcados = document.querySelectorAll('.mav-chk:checked').length;
+  const total = document.querySelectorAll('.mav-chk').length;
+  const el = document.getElementById('mavContagem');
+  if (el) el.textContent = marcados ? `${marcados} de ${total} marcado(s)` : `${total} serviço(s)`;
+  const todos = document.getElementById('mavTodos');
+  if (todos) todos.checked = (total > 0 && marcados === total);
+}
+window._mavMarcarTodos = _mavMarcarTodos;
+window._mavAtualizarContagem = _mavAtualizarContagem;
+
+// Confirma de uma vez todos os serviços marcados de um tipo (coleta ou entrega).
+async function confirmarServicosAvulsosLote(tipo){
+  const ids = [...document.querySelectorAll(`.mav-chk:checked[data-tipo="${tipo}"]`)]
+    .map(c => parseInt(c.value)).filter(n => !isNaN(n));
+  if (ids.length === 0){
+    alert(`Marque ao menos um card de ${tipo === 'coleta' ? 'coleta' : 'entrega'} para confirmar.`);
+    return;
+  }
+  const ehColeta = tipo === 'coleta';
+  const alvos = ids.map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
+  const placas = alvos.map(p => p.placa || ('#'+p.id)).join(', ');
+  if (!confirm(`Confirmar ${ehColeta ? 'a COLETA' : 'a ENTREGA'} de ${ids.length} veículo(s)?\n\n${placas}`)) return;
+
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Motorista';
+  const agora = new Date().toISOString();
+  const upd = ehColeta
+    ? { status: 'Em Transporte', status_planilha: 'Coletado',
+        coleta_confirmada_em: agora, coleta_confirmada_por: usuario }
+    : { status: 'Entregue', status_planilha: 'Entregue',
+        entrega_confirmada_em: agora, entrega_confirmada_por: usuario,
+        patio_atual: null, patio_desde: null };
+
+  try {
+    if (typeof mmAtualizarPedidos === 'function'){
+      // mmAtualizarPedidos NÃO lança exceção: devolve { ok, falhas }. Se a
+      // gravação falhar e ninguém olhar o retorno, o motorista vê "confirmado"
+      // sem nada ter sido gravado — o pior erro possível neste fluxo.
+      const res = await mmAtualizarPedidos(ids, upd, (p) => {
+        if (ehColeta){ p.status='Em Transporte'; p.statusPlanilha='Coletado'; p.coletaConfirmadaEm=agora; p.coletaConfirmadaPor=usuario; }
+        else { p.status='Entregue'; p.statusPlanilha='Entregue'; p.entregaConfirmadaEm=agora; p.entregaConfirmadaPor=usuario; p.patioAtual=null; }
+      });
+      if (res && res.falhas && res.falhas.length){
+        throw new Error(res.falhas.join(' · '));
+      }
+      if (res && res.ok === 0){
+        throw new Error('Nenhum registro foi gravado.');
+      }
+    } else {
+      const { error } = await supabase.from('pedidos').update(upd).in('id', ids);
+      if (error) throw error;
+    }
+    // histórico, um registro por carro
+    try {
+      const linhas = alvos.map(p => ({
+        pedido_id: parseInt(p.id),
+        status_anterior: (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status,
+        status_novo: ehColeta ? 'Coletado' : 'Entregue',
+        usuario_nome: usuario,
+        usuario_perfil: (typeof perfilAtual!=='undefined' ? perfilAtual : 'motorista'),
+        observacao: `${ehColeta ? '🚚 Coleta avulsa' : '🏁 Entrega avulsa'} confirmada pelo motorista (em lote, ${ids.length} veículos).`
+      }));
+      if (typeof mmRegistrarHistorico === 'function') await mmRegistrarHistorico(linhas);
+      else await supabase.from('historico_status').insert(linhas);
+    } catch(_){}
+
+    if (typeof mmToast === 'function') mmToast(`✅ ${ids.length} ${ehColeta ? 'coleta(s)' : 'entrega(s)'} confirmada(s)!`);
+    if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
+    renderizarColetasDirecionadas();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
+  } catch(e){
+    alert('Não foi possível confirmar: ' + (e.message||e));
+  }
+}
+window.confirmarServicosAvulsosLote = confirmarServicosAvulsosLote;
 
 
 /* =========================================================================
