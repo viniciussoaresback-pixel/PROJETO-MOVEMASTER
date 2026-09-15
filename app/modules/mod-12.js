@@ -1739,6 +1739,10 @@ async function _cgAbrirRastreio(pedidoId){
         <button class="btn btn-primary btn-sm" style="background:#22c55e" onclick="_aprovarPedidoComercial(${p.id})">✅ Aprovar pedido</button>
       </div>` : ''}
 
+      ${!['Entregue','Cancelado','Ocorrência'].includes(p.status) ? `<div class="cg-acoes-rapidas">
+        <button class="btn btn-sm btn-secondary" onclick="_abrirModalAlterarDestino(${p.id}, (rotasGlobais||[]).find(r=>String(r.id)===String(${p.rotaId||p.rota_id||0})))">📍 Alterar destino</button>
+      </div>` : ''}
+
       ${p.status === 'Ocorrência' ? `<div class="cg-ocor-bloco">
         <div class="cg-ocor-tit">⚠️ Pedido parado por ocorrência</div>
         <div class="cg-ocor-txt">
@@ -2009,6 +2013,12 @@ function _centralEntregasPorViagem(entregas){
     const cegonha   = r?.placa_cegonha || itens[0]?.placaCegonha || '—';
     const titulo    = chave === 'sem-viagem' ? 'Sem viagem vinculada' : (r?.nome || ('Viagem #' + chave));
     const ids       = itens.map(p => p.id);
+    // Corredor e rota são coisas diferentes: o corredor é o eixo planejado
+    // (Cascavel x Foz), a rota é a viagem real que esse carro pegou. Mostrar
+    // só um dos dois deixava quem olha sem saber por onde o carro andou.
+    const _corId = itens[0]?.corredorManualId || r?.corredor_id || null;
+    const _cor = _corId ? (corredoresGlobais||[]).find(c => String(c.id)===String(_corId)) : null;
+    const _trajeto = r ? [r.origem, r.destino].filter(Boolean).join(' → ') : '';
 
     return `<div class="central-viagem-bloco">
       <div class="central-viagem-cab" onclick="this.parentNode.classList.toggle('aberto')">
@@ -2016,6 +2026,10 @@ function _centralEntregasPorViagem(entregas){
         <div class="cvb-info">
           <div class="cvb-tit">👤 ${motorista}</div>
           <div class="cvb-sub">🚛 ${cegonha} · ${itens.length} carro(s) · ${titulo}</div>
+          <div class="cvb-sub cvb-sub-rota">
+            ${_trajeto ? `<span class="cvb-chip-rota">🛣️ ${_trajeto}</span>` : ''}
+            ${_cor ? `<span class="cvb-chip-corredor">🧭 ${_cor.nome}</span>` : ''}
+          </div>
           ${_centralInicioViagem(r)}
         </div>
         <div class="cvb-acoes" onclick="event.stopPropagation()">
