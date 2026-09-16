@@ -557,3 +557,19 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, .14) !important;
 }
 [data-tema="claro"] .mm-faixa-versao button.mm-depois { color: #6b7280 !important; }
+
+/* Origem do número no relatório: fechado (oficial) ou em aberto (calculado) */
+.relat-origem {
+  font-size: .82rem;
+  padding: .6rem .9rem;
+  border-radius: 8px;
+  margin: 10px 0 4px;
+}
+.relat-origem-fechado {
+  background: rgba(34, 197, 94, .1);
+  border: 1px solid rgba(34, 197, 94, .3);
+}
+.relat-origem-aberto {
+  background: rgba(245, 158, 11, .1);
+  border: 1px solid rgba(245, 158, 11, .3);
+}
