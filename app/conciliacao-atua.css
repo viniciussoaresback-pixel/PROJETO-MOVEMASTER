@@ -1,0 +1,49 @@
+/* Conciliação com o ATUA */
+.atua-overlay {
+  position: fixed; inset: 0; z-index: 10000; display: flex;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(3px); padding: 1rem;
+}
+.atua-painel {
+  background: var(--surface-1,#14161b); border: 1px solid var(--border,rgba(255,255,255,.14));
+  border-radius: 12px; width: min(900px, 96vw); max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.atua-topo {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .9rem 1.1rem; border-bottom: 1px solid var(--border,rgba(255,255,255,.12));
+}
+.atua-fechar { background:none; border:none; color:inherit; font-size:1.05rem; cursor:pointer; opacity:.7; }
+.atua-corpo { padding: 1.1rem; overflow: auto; }
+.atua-ajuda { font-size: .78rem; opacity: .6; margin: .3rem 0 .7rem; }
+
+.atua-periodo { display: flex; gap: 12px; margin: .6rem 0 1rem; font-size: .82rem; }
+.atua-periodo label { display: flex; flex-direction: column; gap: 3px; }
+
+.atua-resumo {
+  font-size: .85rem; padding: .7rem .9rem; margin-bottom: 1rem;
+  border-radius: 8px; background: rgba(59,130,246,.1);
+  border: 1px solid rgba(59,130,246,.28); line-height: 1.7;
+}
+
+.atua-bloco {
+  border: 1px solid var(--border,rgba(255,255,255,.1));
+  border-radius: 8px; padding: .8rem .9rem; margin-bottom: .7rem;
+}
+.atua-bloco-tit { font-weight: 700; font-size: .86rem; margin-bottom: 6px; }
+.atua-qtd {
+  font-size: .7rem; padding: 1px 7px; border-radius: 20px;
+  background: rgba(255,255,255,.1); margin-left: 4px;
+}
+
+.atua-tabela { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.atua-tabela th {
+  text-align: left; padding: 5px 8px; font-size: .68rem;
+  text-transform: uppercase; opacity: .6;
+}
+.atua-tabela td { padding: 5px 8px; border-top: 1px solid var(--border,rgba(255,255,255,.07)); }
+.atua-tabela .right { text-align: right; }
+
+.atua-acoes { display: flex; justify-content: flex-end; margin-top: 1rem; }
+
+[data-tema="claro"] .atua-painel { background: #fff; border-color: rgba(15,17,21,.12); }
