@@ -19,12 +19,22 @@
    das colunas varia entre relatórios.
    ========================================================================= */
 
+// Nomes de coluna aceitos, em ordem de preferência.
+// Ajustado sobre o relatório real do ATUA ("resultado detalhado"), que usa
+// nr_ctrc, vl_frete_empresa e dt_cancelamento — nenhum deles seria
+// reconhecido pelos termos genéricos que eu supunha no começo.
 const ATUA_COLUNAS = {
-  numero:    ['cte', 'ct-e', 'numero', 'número', 'nro', 'documento', 'num_cte'],
-  valor:     ['valor', 'total', 'frete', 'vl_total', 'valor_total', 'vlr'],
-  situacao:  ['situacao', 'situação', 'status', 'cancelado'],
-  cliente:   ['tomador', 'cliente', 'destinatario', 'destinatário'],
-  emissao:   ['emissao', 'emissão', 'data', 'dt_emissao']
+  numero:   ['nr_ctrc', 'ctrc', 'nr_cte', 'num_cte', 'ct-e', 'cte', 'numero', 'número', 'nro', 'documento'],
+  // vl_frete_empresa é o VALOR DO FRETE cobrado do cliente.
+  // Cuidado com vl_resultado: é a margem depois dos impostos, não o frete —
+  // usá-lo daria divergência em todas as linhas.
+  valor:    ['vl_frete_empresa', 'frete_empresa', 'vl_frete', 'valor_frete', 'vl_total', 'valor_total', 'valor', 'frete'],
+  // No relatório real o cancelamento é uma DATA preenchida, não a palavra
+  // "cancelado" num campo de status. Os dois formatos são aceitos.
+  cancelamento: ['dt_cancelamento', 'data_cancelamento'],
+  situacao: ['situacao', 'situação', 'status'],
+  cliente:  ['nm_pessoa_pagador', 'nm_pessoa_destinatario', 'tomador', 'pagador', 'cliente', 'destinatario', 'destinatário'],
+  emissao:  ['dt_emissao', 'emissao', 'emissão', 'data']
 };
 
 function _atuaNorm(t){
@@ -50,12 +60,17 @@ function _atuaFmt(n){
 /** Descobre qual coluna da planilha corresponde a cada campo. */
 function _atuaMapearColunas(cabecalho){
   const mapa = {};
+  const nomes = cabecalho.map(c => _atuaNorm(c));
+
   Object.keys(ATUA_COLUNAS).forEach(campo => {
-    const idx = cabecalho.findIndex(c => {
-      const n = _atuaNorm(c);
-      return ATUA_COLUNAS[campo].some(termo => n.includes(termo));
-    });
-    if (idx >= 0) mapa[campo] = idx;
+    // Percorre os termos NA ORDEM da lista e, para cada um, tenta primeiro o
+    // nome exato. Sem isso, "valor" casaria com vl_resultado antes de
+    // vl_frete_empresa ser testado — e o valor comparado seria o errado.
+    for (const termo of ATUA_COLUNAS[campo]){
+      let idx = nomes.findIndex(n => n === termo);
+      if (idx < 0) idx = nomes.findIndex(n => n.includes(termo));
+      if (idx >= 0){ mapa[campo] = idx; return; }
+    }
   });
   return mapa;
 }
@@ -123,14 +138,22 @@ async function atuaProcessar(){
   const atua = {};
   for (let i = iCab + 1; i < linhas.length; i++){
     const L = linhas[i] || [];
-    const num = String(L[mapa.numero] ?? '').replace(/\D/g,'');
+    // O número costuma vir como 59458.0 (numérico do Excel)
+    const num = String(L[mapa.numero] ?? '').split('.')[0].replace(/\D/g,'');
     if (!num) continue;
+
+    // Cancelado de duas formas: data de cancelamento preenchida (formato do
+    // ATUA) ou a palavra num campo de status (outros relatórios).
+    const dtCanc = mapa.cancelamento != null ? String(L[mapa.cancelamento]||'').trim() : '';
     const sit = _atuaNorm(mapa.situacao != null ? L[mapa.situacao] : '');
+    const cancelado = !!dtCanc || sit.includes('cancel');
+
     atua[num] = {
       numero: num,
       valor: mapa.valor != null ? _atuaNum(L[mapa.valor]) : null,
       cliente: mapa.cliente != null ? String(L[mapa.cliente]||'') : '',
-      cancelado: sit.includes('cancel')
+      cancelado,
+      canceladoEm: dtCanc || null
     };
   }
 
@@ -179,6 +202,7 @@ async function atuaProcessar(){
   Object.keys(sistema).forEach(num => { if (!atua[num]) soSistema.push(sistema[num]); });
 
   window._atuaResultado = { cancelados };
+  window._atuaColunaValor = (linhas[iCab]||[])[mapa.valor] || '(não encontrada)';
   _atuaRenderizar({ conferem, divergentes, soAtua, soSistema, cancelados, origem });
 }
 
@@ -195,6 +219,7 @@ function _atuaRenderizar(r){
   corpo.innerHTML = `
     <div class="atua-resumo">
       Comparado contra: <strong>${_atuaEsc(r.origem)}</strong><br>
+      Coluna de valor do ATUA: <strong>${_atuaEsc(window._atuaColunaValor||'—')}</strong><br>
       🟢 ${r.conferem.length} conferem · 🟡 ${r.divergentes.length} divergentes ·
       🔴 ${r.soAtua.length} só no ATUA · 🔴 ${r.soSistema.length} só no sistema ·
       📕 ${r.cancelados.length} cancelados
