@@ -1207,6 +1207,12 @@ function _confPainelFechamento(viagens){
           ⚠️ <strong>FECHAMENTO BLOQUEADO</strong> — resolva as pendências antes:
           <ul style="margin:6px 0 0;padding-left:20px">${pendencias.map(p=>`<li>${p}</li>`).join('')}</ul>
         </div>
+        ${(typeof perfilAtual !== 'undefined' && ['admin','financeiro'].includes(perfilAtual)) ? `
+          <button class="btn btn-secondary btn-sm" style="margin-top:8px"
+                  onclick="_confFechamentoExcepcional(${JSON.stringify(JSON.stringify(pendencias))})"
+                  title="Fecha o período mesmo com pendências. Exige justificativa e fica registrado.">
+            ⚠️ Fechamento excepcional
+          </button>` : ''}
       `}
     </div>`;
 }
@@ -1215,14 +1221,95 @@ async function _confLiberarFechamento(){
   const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
   if (!confirm(`Fechar o período de ${_confFiltros.de} a ${_confFiltros.ate}?\n\nAs viagens deste período ficarão travadas para conferência (só reabrindo o fechamento).`)) return;
+  await _confGravarFechamento(usuario, chavePeriodo, false, null, null);
+}
+
+/* Fechamento EXCEPCIONAL — com pendências em aberto.
+   Só admin e financeiro veem o botão, exige justificativa, e tanto a
+   justificativa quanto a lista de pendências ficam gravadas no fechamento. */
+async function _confFechamentoExcepcional(pendenciasJson){
+  let pendencias = [];
+  try { pendencias = JSON.parse(pendenciasJson) || []; } catch(e){}
+
+  const just = prompt(
+    `FECHAMENTO EXCEPCIONAL — ${_confFiltros.de} a ${_confFiltros.ate}\n\n` +
+    `Este período tem pendências em aberto:\n` +
+    pendencias.map(p => '• ' + String(p).replace(/<[^>]+>/g,'')).join('\n') +
+    `\n\nDescreva a justificativa (ficará registrada com seu nome e a data):`
+  );
+  if (just === null) return;
+  const texto = just.trim();
+  if (!texto){ alert('A justificativa é obrigatória no fechamento excepcional.'); return; }
+
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
+  await _confGravarFechamento(usuario, chavePeriodo, true, texto, pendencias);
+}
+
+/* Grava o fechamento E a fotografia dos itens.
+   A fotografia é o que faz o período continuar valendo o mesmo depois:
+   os relatórios passam a ler estes valores em vez de recalcular. */
+async function _confGravarFechamento(usuario, chavePeriodo, excepcional, justificativa, pendencias){
   try {
-    const registro = { periodo_de:_confFiltros.de, periodo_ate:_confFiltros.ate, fechado_por:usuario, fechado_em:new Date().toISOString(), status:'fechado' };
-    await supabase.from('fechamentos').insert(registro);
+    const agora = new Date().toISOString();
+
+    // Monta os itens a partir das viagens do período, usando o MESMO filtro
+    // da tela — assim o que é fotografado é exatamente o que você conferiu.
+    const itens = [];
+    (_confViagensFiltradas() || []).forEach(v => {
+      (v.pedidos||[]).forEach(p => {
+        if ((p.cobrancaStatus||'') === 'cortesia') return;
+        const veic = (veiculosGlobais||[]).find(x => x.placa === (v.cegonha || p.placaCegonha));
+        itens.push({
+          periodo_de: _confFiltros.de, periodo_ate: _confFiltros.ate,
+          pedido_id: p.id,
+          numero_cte: p.numeroCte || null,
+          cte_emitido_em: p.cteEmitidoEm || null,
+          situacao_no_fechamento: p.cteSituacao || 'emitido',
+          cliente: p.cliente || null,
+          motorista: v.motorista || p.motorista1 || null,
+          cegonha: v.cegonha || p.placaCegonha || null,
+          veiculo: `${p.modelo||''}`.trim() || null,
+          placa: p.placa || null,
+          trecho: `${p.cidadeOrigem||'?'} → ${p.cidadeDestino||'?'}`,
+          origem: p.cidadeOrigem || null,
+          destino: p.cidadeDestino || null,
+          executor: veic ? (veic.propriedade === 'terceiro' ? 'terceiro' : 'propria') : null,
+          transportador: veic?.transportador_nome || null,
+          valor_frete: Number(p.valorFrete||0)
+        });
+      });
+    });
+
+    const total = itens.reduce((soma, i) => soma + Number(i.valor_frete||0), 0);
+
+    const { data: cab, error: e1 } = await supabase.from('fechamentos').insert({
+      periodo_de: _confFiltros.de, periodo_ate: _confFiltros.ate,
+      fechado_por: usuario, fechado_em: agora, status: 'fechado',
+      total_faturamento: total, total_itens: itens.length,
+      excepcional: !!excepcional,
+      justificativa: justificativa || null,
+      pendencias_no_fechamento: (pendencias && pendencias.length)
+        ? pendencias.map(x => String(x).replace(/<[^>]+>/g,'')).join(' | ') : null
+    }).select().single();
+    if (e1) throw e1;
+
+    if (itens.length){
+      const comId = itens.map(i => ({ ...i, fechamento_id: cab?.id || null }));
+      const { error: e2 } = await supabase.from('fechamento_itens').insert(comId);
+      if (e2) throw e2;
+    }
+
     window._fechamentosPeriodo = window._fechamentosPeriodo || {};
-    window._fechamentosPeriodo[chavePeriodo] = { por:usuario, em:registro.fechado_em };
-    if (typeof _rmToastConfirmacao==='function') _rmToastConfirmacao('🔒 Período fechado com sucesso!');
+    window._fechamentosPeriodo[chavePeriodo] = { por: usuario, em: agora, total, itens: itens.length, excepcional: !!excepcional };
+
+    if (typeof _rmToastConfirmacao === 'function')
+      _rmToastConfirmacao(`🔒 Período fechado — ${itens.length} serviço(s), R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}`);
     renderizarCentralConferencia();
-  } catch(e){ alert('Erro ao fechar período: '+(e.message||e)); }
+
+  } catch(e){
+    alert('Erro ao fechar período: ' + (e.message||e));
+  }
 }
 
 async function _confReabrirFechamento(){
