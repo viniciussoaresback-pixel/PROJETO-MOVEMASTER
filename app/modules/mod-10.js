@@ -1220,6 +1220,9 @@ function valorMotoristaPedido(p){
 // Cortes: caminhão, motorista, veículo, trecho, cliente, categoria de cliente.
 // ============================================================
 let _relatFatCache = null; // linhas montadas do período
+// Preenchido quando o período consultado já foi FECHADO: nesse caso as
+// linhas vêm da fotografia do fechamento, não de um novo cálculo.
+let _relatFatFechado = null;
 
 // Período padrão: dia 25 do mês anterior → dia 25 do mês atual
 function _periodoPadrao2525(){
@@ -1272,6 +1275,57 @@ async function carregarRelatorioFaturamento(){
   const cont = document.getElementById('relatFatConteudo');
   if (!de || !ate){ alert('Informe o período.'); return; }
   if (cont) cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Carregando...</p>';
+
+  // PERÍODO FECHADO → lê a FOTOGRAFIA, não recalcula.
+  //
+  // É o que faz Central, Relatórios e Diretoria darem o mesmo número: todos
+  // passam a ler as mesmas linhas gravadas no fechamento. E um período já
+  // fechado não muda mais, mesmo que alguém altere um frete depois.
+  try {
+    const { data: fech } = await supabase.from('fechamentos')
+      .select('*').eq('periodo_de', de).eq('periodo_ate', ate)
+      .eq('status', 'fechado').order('fechado_em', { ascending: false }).limit(1);
+
+    if (fech && fech.length){
+      const f = fech[0];
+      const { data: itens } = await supabase.from('fechamento_itens')
+        .select('*').eq('fechamento_id', f.id);
+
+      if (itens && itens.length){
+        _relatFatCache = itens.map(i => ({
+          id: i.pedido_id, cteNumero: i.numero_cte,
+          dataCte: String(i.cte_emitido_em || '').slice(0,10),
+          cliente: i.cliente || '—',
+          tipoCliente: i.categoria_cliente || '—',
+          motorista: i.motorista || '—',
+          cegonha: i.cegonha || '—',
+          veiculo: `${i.veiculo||''} ${i.placa||''}`.trim() || '—',
+          trecho: i.trecho || '—',
+          executor: i.executor === 'terceiro'
+            ? ('Terceiro' + (i.transportador ? ' — ' + i.transportador : ''))
+            : 'Movemaster',
+          frete: Number(i.valor_frete || 0),
+          cobrado: 'sim',
+          cteOk: i.numero_cte ? 'sim' : 'não',
+          situacaoCte: i.situacao_no_fechamento || 'emitido'
+        }));
+
+        _relatFatFechado = {
+          por: f.fechado_por, em: f.fechado_em,
+          total: Number(f.total_faturamento || 0),
+          excepcional: !!f.excepcional, justificativa: f.justificativa
+        };
+        renderizarRelatorioFaturamento();
+        if (typeof renderizarRemuneracaoMotorista === 'function') renderizarRemuneracaoMotorista();
+        return;
+      }
+    }
+    _relatFatFechado = null;
+  } catch(e){
+    console.warn('Fechamento não consultado:', e?.message);
+    _relatFatFechado = null;
+  }
+
   try {
     // FONTE: o próprio pedido.
     //
@@ -1349,6 +1403,24 @@ function _relSubaba(qual, btn){
   }
 }
 
+// Faixa no topo do relatório dizendo de onde veio o número.
+// Sem isso, não dá para saber se está olhando um resultado oficial e
+// congelado ou um cálculo do momento — que é exatamente a confusão que o
+// fechamento veio resolver.
+function _relatFatOrigemHTML(){
+  if (!_relatFatFechado){
+    return `<div class="relat-origem relat-origem-aberto">
+      🟡 <strong>Período em aberto</strong> — valores calculados agora e sujeitos a alteração.
+    </div>`;
+  }
+  const f = _relatFatFechado;
+  return `<div class="relat-origem relat-origem-fechado">
+    🔒 <strong>Período fechado</strong> — resultado oficial, congelado em
+    ${new Date(f.em).toLocaleString('pt-BR')} por ${f.por}.
+    ${f.excepcional ? `<br>⚠️ <strong>Fechamento excepcional</strong>${f.justificativa ? ' — ' + f.justificativa : ''}` : ''}
+  </div>`;
+}
+
 function renderizarRelatorioFaturamento(){
   const cont = document.getElementById('relatFatConteudo');
   const resumo = document.getElementById('relatFatResumo');
@@ -1365,7 +1437,7 @@ function renderizarRelatorioFaturamento(){
   const semCte = linhas.filter(l => l.cteOk === 'não').length;
 
   if (resumo){
-    resumo.innerHTML = `<div class="ocup-resumo" style="margin:14px 0">
+    resumo.innerHTML = _relatFatOrigemHTML() + `<div class="ocup-resumo" style="margin:14px 0">
       <div class="ocup-resumo-card"><span class="ocup-resumo-label">Faturamento total</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
       <div class="ocup-resumo-card"><span class="ocup-resumo-label">Pedidos faturados</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${linhas.length}</span></div></div>
       <div class="ocup-resumo-card ${semCobranca?'patios-resumo-alerta':''}"><span class="ocup-resumo-label">Sem cobrança confirmada</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${semCobranca}</span></div></div>
