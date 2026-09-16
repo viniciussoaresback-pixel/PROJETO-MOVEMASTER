@@ -1547,7 +1547,11 @@ function _confAbaConteudo(v){
         <td>${p.cidadeOrigem||'—'}</td>
         <td>${p.cidadeDestino||'—'}</td>
         <td class="right">${fmt(p.valorFrete)}</td>
-        <td class="center">${(p.numeroCte||cteInfoDoPedido(p.id))?'🟢':'🔴'}</td>
+        <td class="center" style="white-space:nowrap">${
+          p.numeroCte
+            ? `<span style="font-size:.78rem">${p.numeroCte}</span><br>${(typeof cteSituacaoHTML==='function') ? cteSituacaoHTML(p) : ''}`
+            : (cteInfoDoPedido(p.id) ? '🟢' : '<span style="color:#f87171">🔴 sem CT-e</span>')
+        }</td>
         <td class="center"><button class="conf-esp-btn" onclick="abrirTrajetoriaPedido(${p.id})" title="Por onde este carro passou: trechos, caminhões, motoristas e transbordo">🗺️</button></td>
       </tr>`).join('')}</tbody>
       <tfoot><tr><td colspan="6"><strong>Total da viagem</strong></td><td class="right"><strong>${fmt(v.total)}</strong></td><td class="center">${v.comCte}/${v.pedidos.length}</td><td></td></tr></tfoot>
