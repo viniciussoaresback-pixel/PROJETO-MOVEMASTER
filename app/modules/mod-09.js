@@ -1103,6 +1103,7 @@ function renderizarCentralConferencia(){
       <div class="conf-header-acoes">
         <button class="btn btn-secondary btn-sm" onclick="_confExportarCSV()">📊 Exportar Excel/CSV</button>
         <button class="btn btn-secondary btn-sm" onclick="_confExportarPDF()">📄 Exportar PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="atuaAbrirConciliacao()" title="Comparar o período com o relatório do ATUA">🔗 Conciliar ATUA</button>
       </div>
     </div>
 
