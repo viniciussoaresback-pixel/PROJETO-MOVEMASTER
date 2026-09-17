@@ -104,8 +104,11 @@ function atuaAbrirConciliacao(){
         </div>
         <input type="file" id="atuaArquivo" accept=".csv,.xlsx,.xls" onchange="atuaProcessar()">
         <p class="atua-ajuda">Aceita CSV e Excel. O cruzamento é pelo número do CT-e.</p>
-        <button class="btn btn-secondary btn-sm" id="atuaBtnReprocessar" style="display:none;margin-top:8px"
-                onclick="atuaProcessar(true)">↻ Conferir de novo</button>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" id="atuaBtnReprocessar" style="display:none"
+                  onclick="atuaProcessar(true)">↻ Conferir de novo</button>
+          <button class="btn btn-secondary btn-sm" onclick="atuaVerPendencias()">📋 Pendências em aberto</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(div);
@@ -264,9 +267,66 @@ async function _atuaProcessarInterno(arq, corpo){
   });
   Object.keys(sistema).forEach(num => { if (!atua[num]) soSistema.push(sistema[num]); });
 
-  window._atuaResultado = { cancelados };
+  /* ---- Integração com a Central de Conferência ----
+     Até aqui a conciliação era só leitura: mostrava o resultado e o perdia ao
+     fechar o modal. Agora ela sabe a que VIAGEM cada CT-e pertence, e isso
+     permite responder a pergunta que o financeiro realmente faz: esta viagem
+     está conferida ou não? */
+  const _rotaDoPedido = (pedidoId) => {
+    const p = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : [])
+      .find(x => String(x.id) === String(pedidoId));
+    return p ? (p.rotaId || p.rota_id || null) : null;
+  };
+
+  // Marca cada CT-e com a viagem dele, para agrupar depois.
+  [...conferem].forEach(a => { const s = sistema[a.numero]; a.pedidoId = s?.pedidoId; a.rotaId = _rotaDoPedido(s?.pedidoId); });
+  [divergentes, foraTabela, cancelados].forEach(lista =>
+    lista.forEach(d => { d.rotaId = _rotaDoPedido(d.pedidoId); }));
+  soSistema.forEach(d => { d.rotaId = _rotaDoPedido(d.pedidoId); });
+
+  /* Uma viagem só é conferida quando TODOS os CT-es dela bateram. Basta um
+     divergente, fora da tabela ou ausente no ATUA para a viagem inteira ficar
+     pendente — marcar uma rota de 11 carros como conferida porque 10 bateram
+     seria registrar como verdade algo que não foi verificado. */
+  const porRota = {};
+  const _registrar = (rotaId, ok, motivo) => {
+    if (!rotaId) return;
+    const r = porRota[rotaId] = porRota[rotaId] || { rotaId, total: 0, ok: 0, motivos: [] };
+    r.total++;
+    if (ok) r.ok++;
+    else if (motivo && !r.motivos.includes(motivo)) r.motivos.push(motivo);
+  };
+  conferem.forEach(a   => _registrar(a.rotaId, true));
+  divergentes.forEach(d=> _registrar(d.rotaId, false, `CT-e ${d.numero}: valor diverge do ATUA`));
+  foraTabela.forEach(d => _registrar(d.rotaId, false, `CT-e ${d.numero}: fora da tabela de trecho`));
+  cancelados.forEach(d => _registrar(d.rotaId, false, `CT-e ${d.numero}: cancelado no ATUA`));
+  soSistema.forEach(d  => _registrar(d.rotaId, false, `CT-e ${d.numero}: não consta no ATUA`));
+
+  // Viagens que podem ser marcadas como conferidas (e que ainda não estão).
+  const viagensOk = [], viagensPendentes = [];
+  Object.values(porRota).forEach(r => {
+    const rota = (typeof rotasGlobais !== 'undefined' ? rotasGlobais : [])
+      .find(x => String(x.id) === String(r.rotaId));
+    const nome = rota?.nome || ('Viagem #' + r.rotaId);
+    if (r.ok === r.total) {
+      if (!rota?.conferida_em) viagensOk.push({ ...r, nome });
+    } else {
+      viagensPendentes.push({ ...r, nome, jaConferida: !!rota?.conferida_em });
+    }
+  });
+
+  window._atuaResultado = {
+    cancelados, divergentes, foraTabela, soAtua, soSistema, conferem,
+    viagensOk, viagensPendentes, origem, de, ate,
+    arquivo: (document.getElementById('atuaArquivo')?.files?.[0]?.name) || ''
+  };
   window._atuaColunaValor = (linhas[iCab]||[])[mapa.valor] || '(não encontrada)';
-  _atuaRenderizar({ conferem, divergentes, soAtua, soSistema, cancelados, foraTabela, origem });
+  _atuaRenderizar({ conferem, divergentes, soAtua, soSistema, cancelados, foraTabela,
+                    viagensOk, viagensPendentes, origem });
+
+  // Grava a rodada e as pendências, em segundo plano — se falhar, a tela
+  // continua útil; o aviso vai para o console.
+  _atuaGravarHistorico().catch(e => console.warn('histórico da conciliação:', e?.message||e));
   const btn = document.getElementById('atuaBtnReprocessar');
   if (btn) btn.style.display = '';
 }
@@ -323,6 +383,27 @@ function _atuaRenderizar(r){
       <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Cliente</th><th class="right">Valor</th></tr></thead>
       <tbody>${r.soSistema.map(a => `<tr><td>${_atuaEsc(a.numero)}</td><td>${_atuaEsc(a.cliente)}</td><td class="right">${_atuaFmt(a.valor)}</td></tr>`).join('')}</tbody></table>`)}
 
+    ${(r.viagensOk||[]).length ? `
+      <div class="atua-bloco atua-bloco-conferir">
+        <div class="atua-bloco-tit">✅ Viagens prontas para conferir <span class="atua-qtd">${r.viagensOk.length}</span></div>
+        <p class="atua-ajuda">Todos os CT-es destas viagens bateram com o ATUA. Marcar registra data, usuário e a origem "Conciliação ATUA".</p>
+        <table class="atua-tabela"><thead><tr><th>Viagem</th><th class="right">CT-es</th></tr></thead>
+        <tbody>${r.viagensOk.map(v => `<tr><td>${_atuaEsc(v.nome)}</td><td class="right">${v.total}</td></tr>`).join('')}</tbody></table>
+        <button class="btn btn-primary btn-sm" id="atuaBtnConferir" style="margin-top:8px" onclick="atuaMarcarConferidas()">✅ Marcar ${r.viagensOk.length} viagem(ns) como conferida(s)</button>
+      </div>` : ''}
+
+    ${(r.viagensPendentes||[]).length ? `
+      <div class="atua-bloco">
+        <div class="atua-bloco-tit">⏳ Viagens que seguem pendentes <span class="atua-qtd">${r.viagensPendentes.length}</span></div>
+        <p class="atua-ajuda">Basta um CT-e com problema para a viagem inteira não ser conferida — marcar uma rota porque a maioria bateu seria registrar como verificado algo que não foi.</p>
+        <table class="atua-tabela"><thead><tr><th>Viagem</th><th class="right">OK</th><th>Motivo</th></tr></thead>
+        <tbody>${r.viagensPendentes.map(v => `<tr>
+          <td>${_atuaEsc(v.nome)}${v.jaConferida?' <span class="atua-qtd">já conferida</span>':''}</td>
+          <td class="right">${v.ok}/${v.total}</td>
+          <td>${_atuaEsc(v.motivos.join(' · '))}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>` : ''}
+
     ${bloco('📕','Cancelados no ATUA', r.cancelados, `
       <p class="atua-ajuda">Estes CT-es constam como cancelados na fonte oficial. Aplicar atualiza a situação fiscal no sistema (etapa B) e registra o evento com origem <strong>atua</strong>.</p>
       <table class="atua-tabela"><thead><tr><th>CT-e</th><th class="right">Valor no sistema</th></tr></thead>
@@ -330,9 +411,159 @@ function _atuaRenderizar(r){
       <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="atuaAplicarCancelados()">📕 Aplicar cancelamentos</button>`)}
 
     <div class="atua-acoes">
+      <button class="btn btn-secondary btn-sm" onclick="atuaVerPendencias()">📋 Pendências em aberto</button>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalAtua').remove()">Fechar</button>
     </div>`;
 }
+
+/* ===========================================================================
+   HISTÓRICO E PENDÊNCIAS
+   Grava a rodada (quem fez, quando, com que resultado) e cada divergência
+   como pendência aberta. Sem isso, fechar o modal apagava o trabalho: era
+   preciso rodar tudo de novo só para lembrar o que estava errado.
+   =========================================================================== */
+async function _atuaGravarHistorico(){
+  const r = window._atuaResultado;
+  if (!r) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+
+  const { data, error } = await supabase.from('conciliacoes_atua').insert({
+    periodo_de: r.de || null,
+    periodo_ate: r.ate || null,
+    usuario_nome: usuario,
+    arquivo_nome: r.arquivo || null,
+    origem_comparacao: r.origem || null,
+    total_atua: r.conferem.length + r.divergentes.length + r.foraTabela.length + r.soAtua.length + r.cancelados.length,
+    qt_conferem: r.conferem.length,
+    qt_divergentes: r.divergentes.length,
+    qt_fora_tabela: r.foraTabela.length,
+    qt_so_atua: r.soAtua.length,
+    qt_so_sistema: r.soSistema.length,
+    qt_cancelados: r.cancelados.length,
+    viagens_conferidas: 0
+  }).select();
+  if (error) throw error;
+  const conc = data && data[0];
+  if (!conc) return;
+  window._atuaConciliacaoId = conc.id;
+
+  // Uma pendência por divergência. O índice único no banco evita duplicar
+  // quando a mesma conciliação é rodada duas vezes.
+  const pend = [];
+  const base = { conciliacao_id: conc.id, periodo_de: r.de || null, periodo_ate: r.ate || null };
+  r.divergentes.forEach(d => pend.push({ ...base, tipo:'divergente', numero_cte:String(d.numero),
+    pedido_id:d.pedidoId||null, rota_id:d.rotaId||null, cliente:d.cliente||null,
+    valor_sistema:d.sistema, valor_atua:d.atua,
+    motivo:`Sistema ${_atuaFmt(d.sistema)} x ATUA ${_atuaFmt(d.atua)}` }));
+  r.foraTabela.forEach(d => pend.push({ ...base, tipo:'fora_tabela', numero_cte:String(d.numero),
+    pedido_id:d.pedidoId||null, rota_id:d.rotaId||null, cliente:d.cliente||null,
+    valor_sistema:d.cobrado, valor_tabela:d.tabela,
+    motivo:`Cobrado ${_atuaFmt(d.cobrado)} x tabela ${_atuaFmt(d.tabela)}` }));
+  r.soAtua.forEach(d => pend.push({ ...base, tipo:'so_atua', numero_cte:String(d.numero),
+    cliente:d.cliente||null, valor_atua:d.valor,
+    motivo:'Emitido no ATUA sem pedido correspondente no sistema' }));
+  r.soSistema.forEach(d => pend.push({ ...base, tipo:'so_sistema', numero_cte:String(d.numero),
+    pedido_id:d.pedidoId||null, rota_id:d.rotaId||null, cliente:d.cliente||null,
+    valor_sistema:d.valor, motivo:'Consta no sistema e não foi encontrado no ATUA' }));
+
+  if (pend.length){
+    // upsert com ignoreDuplicates: o índice único cuida da repetição
+    const { error: e2 } = await supabase.from('conciliacao_pendencias')
+      .upsert(pend, { onConflict: 'numero_cte,tipo', ignoreDuplicates: true });
+    if (e2) console.warn('pendências:', e2.message);
+  }
+}
+
+/* Marca como conferidas as viagens em que TODOS os CT-es bateram. */
+async function atuaMarcarConferidas(){
+  const lista = (window._atuaResultado?.viagensOk) || [];
+  if (!lista.length){ alert('Nenhuma viagem elegível: ou já estão conferidas, ou têm alguma pendência.'); return; }
+  if (!confirm(
+    `Marcar ${lista.length} viagem(ns) como conferida(s)?\n\n` +
+    lista.slice(0,10).map(v => `• ${v.nome} (${v.total} CT-e)`).join('\n') +
+    (lista.length > 10 ? `\n... e mais ${lista.length-10}` : '') +
+    `\n\nSão viagens em que todos os CT-es bateram com o ATUA.`
+  )) return;
+
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const agora = new Date().toISOString();
+  let ok = 0; const falhas = [];
+
+  for (const v of lista){
+    try {
+      const { error } = await supabase.from('rotas_planejadas').update({
+        conferida_em: agora, conferida_por: usuario, conferida_origem: 'atua'
+      }).eq('id', v.rotaId);
+      if (error) throw error;
+      const rota = (rotasGlobais||[]).find(x => String(x.id)===String(v.rotaId));
+      if (rota){ rota.conferida_em = agora; rota.conferida_por = usuario; rota.conferida_origem = 'atua'; }
+      ok++;
+    } catch(e){ falhas.push(`${v.nome}: ${e.message||e}`); }
+  }
+
+  if (window._atuaConciliacaoId){
+    try { await supabase.from('conciliacoes_atua')
+      .update({ viagens_conferidas: ok }).eq('id', window._atuaConciliacaoId); } catch(_){}
+  }
+  if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+
+  if (falhas.length) alert(`Algumas viagens não puderam ser marcadas:\n\n• ${falhas.join('\n• ')}`);
+  if (typeof mmToast === 'function') mmToast(`✅ ${ok} viagem(ns) conferida(s) pela conciliação`);
+  if (typeof renderizarCentralConferencia === 'function') renderizarCentralConferencia();
+  if (typeof _confRenderPainel === 'function') _confRenderPainel();
+
+  const btn = document.getElementById('atuaBtnConferir');
+  if (btn){ btn.disabled = true; btn.textContent = `✅ ${ok} viagem(ns) marcada(s)`; }
+}
+window.atuaMarcarConferidas = atuaMarcarConferidas;
+
+/* Pendências abertas de conciliações anteriores. */
+async function atuaVerPendencias(){
+  const corpo = document.getElementById('atuaCorpo');
+  if (!corpo) return;
+  corpo.innerHTML = '<p class="atua-ajuda">⏳ Buscando pendências...</p>';
+  try {
+    const { data, error } = await supabase.from('conciliacao_pendencias')
+      .select('*').eq('status','aberta').order('criada_em', { ascending:false }).limit(300);
+    if (error) throw error;
+    const rotulos = { divergente:'🟡 Valor divergente', fora_tabela:'🟠 Fora da tabela',
+                      so_atua:'🔴 Só no ATUA', so_sistema:'🔴 Só no sistema' };
+    corpo.innerHTML = `
+      <div class="atua-resumo">${(data||[]).length} pendência(s) em aberto de conciliações anteriores.</div>
+      ${!(data||[]).length ? '<p class="atua-ajuda">Nada pendente.</p>' : `
+      <table class="atua-tabela">
+        <thead><tr><th>CT-e</th><th>Tipo</th><th>Cliente</th><th>Motivo</th><th>Quando</th><th></th></tr></thead>
+        <tbody>${data.map(p => `<tr>
+          <td>${_atuaEsc(p.numero_cte)}</td>
+          <td>${rotulos[p.tipo]||p.tipo}</td>
+          <td>${_atuaEsc(p.cliente||'—')}</td>
+          <td>${_atuaEsc(p.motivo||'')}</td>
+          <td>${p.criada_em ? new Date(p.criada_em).toLocaleDateString('pt-BR') : ''}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="atuaResolverPendencia(${p.id})">✓ Resolver</button></td>
+        </tr>`).join('')}</tbody>
+      </table>`}
+      <div class="atua-acoes">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalAtua').remove()">Fechar</button>
+      </div>`;
+  } catch(e){
+    corpo.innerHTML = `<p style="color:#f87171">Não consegui buscar as pendências: ${_atuaEsc(e.message||e)}</p>`;
+  }
+}
+window.atuaVerPendencias = atuaVerPendencias;
+
+async function atuaResolverPendencia(id){
+  const nota = prompt('O que foi feito? (fica registrado)');
+  if (nota === null) return;
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  try {
+    await supabase.from('conciliacao_pendencias').update({
+      status:'resolvida', resolvida_em:new Date().toISOString(),
+      resolvida_por: usuario, resolucao_nota: nota || null
+    }).eq('id', id);
+    atuaVerPendencias();
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+window.atuaResolverPendencia = atuaResolverPendencia;
 
 /** Atualiza a situação fiscal dos CT-es que o ATUA aponta como cancelados. */
 async function atuaAplicarCancelados(){
