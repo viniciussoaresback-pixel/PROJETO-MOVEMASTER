@@ -1218,6 +1218,9 @@ function mostrarViewPainel(view, btn){
     if (typeof renderizarPainelPatios === 'function') renderizarPainelPatios();
   }
   if (view === 'vagas'){ vagas.innerHTML = `<div class="carteira-topo"><input type="text" id="vagasBusca" class="ocup-busca" placeholder="🔍 Filtrar por rota, cegonha, motorista..." oninput="_mmDeb('renderizarVagasPorRota', renderizarVagasPorRota)"><span class="text-muted">onde há vaga para vender</span></div><div id="vagasPorRotaWrap"></div>`; renderizarVagasPorRota(); }
+  // Telas que não foram redesenhadas enquanto estavam escondidas ficam
+  // pendentes; ao aparecer, entram em dia aqui.
+  if (typeof _mmAtualizarPendentes === 'function') _mmAtualizarPendentes();
   document.querySelectorAll('.painel-subtabs .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
   if (btn) btn.classList.add('ativo');
   // toque de "surgir" na view que ficou visível
@@ -1696,10 +1699,10 @@ function _atualizarContadorCorredor(corredorId){
   const cont = document.getElementById('corrCont_' + corredorId);
   if (!cont) return;
   const marcados = _checksCorredor(corredorId).filter(c => c.checked).length;
-  const cap = 11; // referência da cegonha (guincho pode ser menos) — só aviso
+  const cap = 11; // referência; a trava real usa a capacidade do veículo escolhido
   const excede = marcados > cap;
   cont.innerHTML = `<strong class="${excede ? 'cont-excede' : ''}">${marcados}</strong> carro(s) selecionado(s)` +
-    (excede ? ` <span class="cont-excede">⚠️ acima de ${cap} (capacidade da cegonha) — pode criar mesmo assim</span>` : '');
+    (excede ? ` <span class="cont-excede">⚠️ acima de ${cap} carros — confira a capacidade da cegonha antes de criar</span>` : '');
 }
 function _selecTodosCorredor(corredorId, valor){
   _checksCorredor(corredorId).forEach(c => { c.checked = valor; });
