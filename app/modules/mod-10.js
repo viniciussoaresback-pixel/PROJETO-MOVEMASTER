@@ -574,7 +574,11 @@ function _histAbaConferencia(v){
 function _histAbaCarga(v){
   return `<div class="histv-carga">
     <div class="histv-veiculos">
-      <div class="histv-sec-tit">VEÍCULOS TRANSPORTADOS (${v.pedidos.length})</div>
+      <div class="histv-sec-tit">
+        <span>VEÍCULOS TRANSPORTADOS (${v.pedidos.length})</span>
+        <button class="histv-btn-separar" onclick="_histAbrirSeparar(${v.id})"
+                title="Quando transportes diferentes acabaram registrados como uma viagem só">✂️ Separar carros</button>
+      </div>
       <table class="histv-tab">
         <thead><tr><th>PEDIDO</th><th>PLACA</th><th>MODELO</th><th>CLIENTE</th><th>ORIGEM</th><th>DESTINO</th><th>FRETE</th><th>CTe</th><th>ENTREGA</th></tr></thead>
         <tbody>
