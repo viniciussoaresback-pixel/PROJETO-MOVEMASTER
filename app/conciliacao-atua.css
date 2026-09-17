@@ -137,3 +137,56 @@
 .rp-tl-data { color:var(--text-tertiary,#8b93a1); white-space:nowrap; }
 .rp-tl-txt { flex:1; }
 .rp-tl-quem { color:var(--text-tertiary,#8b93a1); white-space:nowrap; }
+
+/* ============================================================
+   RESULTADO — KPIs clicáveis + tabela única
+   ============================================================ */
+.atua-topo { display:flex; justify-content:space-between; align-items:center; gap:14px;
+  flex-wrap:wrap; margin-bottom:14px; }
+.atua-topo-info strong { display:block; font-size:.95rem; }
+.atua-topo-info span { font-size:.76rem; color:var(--text-tertiary,#8b93a1); }
+
+.atua-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
+.atua-kpi { display:flex; flex-direction:column; gap:2px; align-items:flex-start; text-align:left;
+  padding:13px 15px; border-radius:12px; cursor:pointer; color:inherit;
+  background:var(--surface-2,rgba(255,255,255,.04));
+  border:1.5px solid var(--border,rgba(255,255,255,.1));
+  transition:border-color .15s, background .15s, transform .1s; }
+.atua-kpi:hover { transform:translateY(-1px); }
+.atua-kpi.sel { background:rgba(255,106,0,.08); }
+.atua-kpi-ico { font-size:1.05rem; }
+.atua-kpi-rot { font-size:.68rem; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--text-tertiary,#8b93a1); font-weight:700; }
+.atua-kpi-num { font-size:1.6rem; font-weight:800; line-height:1.1; }
+.atua-kpi-val { font-size:.76rem; color:var(--text-secondary,#b6bcc6); }
+.atua-kpi-ok.sel   { border-color:#22c55e; }
+.atua-kpi-pend.sel { border-color:#f59e0b; }
+.atua-kpi-erro.sel { border-color:#ef4444; }
+.atua-kpi-todos.sel{ border-color:var(--accent,#ff6a00); }
+.atua-kpi-ok   .atua-kpi-num { color:#22c55e; }
+.atua-kpi-pend .atua-kpi-num { color:#f59e0b; }
+.atua-kpi-erro .atua-kpi-num { color:#ef4444; }
+
+.atua-filtro-linha { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+.atua-busca { flex:1; padding:8px 12px; font-size:.84rem; border-radius:9px;
+  border:1px solid var(--border,rgba(255,255,255,.14));
+  background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.atua-busca:focus { outline:none; border-color:var(--accent,#ff6a00); }
+.atua-contagem { font-size:.74rem; color:var(--text-tertiary,#8b93a1); white-space:nowrap; }
+
+.atua-tabela-principal td { vertical-align:middle; }
+.atua-col-rota, .atua-col-det { font-size:.76rem; color:var(--text-secondary,#b6bcc6); }
+.atua-vazio { text-align:center; padding:2rem; color:var(--text-tertiary,#8b93a1); font-size:.85rem; }
+
+.atua-pill { display:inline-block; padding:2px 9px; border-radius:999px;
+  font-size:.68rem; font-weight:700; white-space:nowrap; }
+.atua-pill-ok    { background:rgba(34,197,94,.15);  color:#22c55e; }
+.atua-pill-div   { background:rgba(245,158,11,.15); color:#f59e0b; }
+.atua-pill-fora  { background:rgba(251,146,60,.15); color:#fb923c; }
+.atua-pill-erro  { background:rgba(239,68,68,.15);  color:#ef4444; }
+.atua-pill-cinza { background:rgba(148,163,184,.15);color:#94a3b8; }
+
+.atua-viagens-pend { margin-bottom:14px; padding:10px 13px; border-radius:10px;
+  background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border,rgba(255,255,255,.1)); }
+.atua-viagens-pend summary { font-size:.84rem; font-weight:700; cursor:pointer; color:#f59e0b; }
+.atua-viagens-pend table { margin-top:10px; }
