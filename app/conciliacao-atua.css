@@ -56,3 +56,84 @@
 .atua-resolver { display:flex; gap:5px; flex-wrap:wrap; }
 .atua-resolver .btn { font-size:.68rem; padding:3px 7px; white-space:nowrap; }
 .atua-resolvido { font-size:.7rem; font-weight:700; color:#4ade80; white-space:nowrap; }
+
+/* ============================================================
+   TELA DO PENDENTE — decidir vendo o que está sendo decidido
+   ============================================================ */
+.pend-box { background:var(--surface-1,#1a1c20); width:min(760px,96vw); max-height:92vh;
+  border-radius:14px; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+.pend-cab { display:flex; align-items:flex-start; gap:14px; padding:18px 20px;
+  border-bottom:1px solid var(--border,rgba(255,255,255,.1)); }
+.pend-cte { font-size:1.15rem; font-weight:800; letter-spacing:.3px; }
+.pend-sub { font-size:.82rem; color:var(--text-secondary,#b6bcc6); margin-top:3px; }
+.pend-valor { margin-left:auto; text-align:right; }
+.pend-valor span { display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--text-tertiary,#8b93a1); }
+.pend-valor strong { font-size:1.3rem; color:#22c55e; }
+.pend-corpo { padding:16px 20px; overflow-y:auto; flex:1; }
+.pend-frase { font-size:.9rem; line-height:1.5; margin-bottom:12px; }
+.pend-tab { width:100%; border-collapse:collapse; font-size:.84rem; }
+.pend-tab th { text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--text-tertiary,#8b93a1); padding:6px 8px; border-bottom:1px solid var(--border,rgba(255,255,255,.12)); }
+.pend-tab td { padding:8px; border-bottom:1px solid var(--border,rgba(255,255,255,.06)); }
+.pend-tab .right, .pend-tab th.right { text-align:right; }
+.pend-tab-total td { font-weight:800; border-bottom:none; }
+.pend-aviso { font-size:.8rem; line-height:1.45; margin-top:12px; padding:10px 12px; border-radius:9px;
+  color:#fbbf24; background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.3); }
+.pend-opcoes { display:flex; gap:12px; padding:16px 20px; flex-wrap:wrap;
+  border-top:1px solid var(--border,rgba(255,255,255,.1)); background:var(--surface-2,rgba(255,255,255,.03)); }
+.pend-opt { flex:1 1 260px; display:flex; flex-direction:column; gap:4px; align-items:flex-start;
+  padding:14px 16px; border-radius:11px; border:1px solid transparent; cursor:pointer; text-align:left;
+  transition:filter .15s, transform .1s; color:#fff; }
+.pend-opt:hover:not(:disabled) { filter:brightness(1.1); }
+.pend-opt:active:not(:disabled) { transform:scale(.99); }
+.pend-opt:disabled { opacity:.4; cursor:not-allowed; }
+.pend-opt-integral { background:#16a34a; }
+.pend-opt-trechos { background:#2563eb; }
+.pend-opt-tit { font-size:.92rem; font-weight:800; }
+.pend-opt-sub { font-size:.74rem; opacity:.9; }
+.atua-btn-abrir { white-space:nowrap; font-size:.72rem; padding:4px 10px; }
+
+/* ============================================================
+   RASTREIO POR PLACA
+   ============================================================ */
+.rp-barra { margin:14px 0 18px; }
+.rp-busca { display:flex; gap:8px; align-items:center; position:relative; }
+.rp-busca-ic { position:absolute; left:11px; font-size:.82rem; opacity:.55; pointer-events:none; }
+.rp-busca input { flex:1; padding:10px 12px 10px 32px; font-size:.86rem; border-radius:9px;
+  border:1px solid var(--border,rgba(255,255,255,.14)); background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.rp-busca input:focus { outline:none; border-color:var(--accent,#ff6a00); }
+.rp-ajuda, .rp-vazio { font-size:.84rem; color:var(--text-tertiary,#8b93a1); padding:12px 2px; }
+.rp-resumo { display:flex; gap:10px; flex-wrap:wrap; margin:12px 0; }
+.rp-resumo-item { flex:1 1 150px; padding:10px 13px; border-radius:10px;
+  background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid var(--border,rgba(255,255,255,.1)); }
+.rp-resumo-item span { display:block; font-size:.66rem; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--text-tertiary,#8b93a1); }
+.rp-resumo-item strong { font-size:1rem; }
+.rp-verde { color:#22c55e; }
+.rp-pedido { border:1px solid var(--border,rgba(255,255,255,.12)); border-radius:12px;
+  padding:14px 16px; margin-bottom:12px; background:var(--surface-1,rgba(255,255,255,.02)); }
+.rp-pedido-cab { display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  padding-bottom:10px; border-bottom:1px solid var(--border,rgba(255,255,255,.08)); }
+.rp-pedido-sub { font-size:.8rem; color:var(--text-secondary,#b6bcc6); margin-top:3px; }
+.rp-pedido-dir { text-align:right; font-size:.86rem; }
+.rp-pedido-status { font-size:.72rem; color:var(--text-tertiary,#8b93a1); }
+.rp-cte { font-size:.72rem; color:#22c55e; }
+.rp-sec-tit { font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--text-tertiary,#8b93a1); margin:12px 0 6px; }
+.rp-tab { width:100%; border-collapse:collapse; font-size:.8rem; }
+.rp-tab th { text-align:left; font-size:.66rem; text-transform:uppercase; letter-spacing:.4px;
+  color:var(--text-tertiary,#8b93a1); padding:5px 7px; border-bottom:1px solid var(--border,rgba(255,255,255,.1)); }
+.rp-tab td { padding:6px 7px; border-bottom:1px solid var(--border,rgba(255,255,255,.05)); }
+.rp-tab .right, .rp-tab th.right { text-align:right; }
+.rp-tab-total td { font-weight:800; border-bottom:none; }
+.rp-saiu { font-size:.68rem; color:#a855f7; }
+.rp-ainda { font-size:.72rem; color:#4ade80; }
+.rp-det { margin-top:10px; }
+.rp-det summary { font-size:.78rem; cursor:pointer; color:var(--text-secondary,#b6bcc6); }
+.rp-tl { margin-top:8px; display:flex; flex-direction:column; gap:4px; max-height:240px; overflow-y:auto; }
+.rp-tl-item { display:flex; gap:10px; font-size:.75rem; padding:4px 6px; border-radius:6px;
+  background:var(--surface-2,rgba(255,255,255,.03)); }
+.rp-tl-data { color:var(--text-tertiary,#8b93a1); white-space:nowrap; }
+.rp-tl-txt { flex:1; }
+.rp-tl-quem { color:var(--text-tertiary,#8b93a1); white-space:nowrap; }
