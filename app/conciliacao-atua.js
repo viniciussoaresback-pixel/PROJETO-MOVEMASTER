@@ -96,20 +96,49 @@ function atuaAbrirConciliacao(){
           <label>Até <input type="date" id="atuaAte" value="${document.getElementById('confAte')?.value || ''}"></label>
         </div>
         <input type="file" id="atuaArquivo" accept=".csv,.xlsx,.xls" onchange="atuaProcessar()">
-        <p class="atua-ajuda">Aceita CSV e Excel.</p>
+        <p class="atua-ajuda">Aceita CSV e Excel. O cruzamento é pelo número do CT-e.</p>
+        <button class="btn btn-secondary btn-sm" id="atuaBtnReprocessar" style="display:none;margin-top:8px"
+                onclick="atuaProcessar(true)">↻ Conferir de novo</button>
       </div>
     </div>`;
   document.body.appendChild(div);
 }
 
-async function atuaProcessar(){
+/* A leitura ficava presa em "⏳ Lendo o relatório..." e nunca terminava.
+   Causa: só a leitura do arquivo estava dentro de try/catch. Qualquer erro
+   DEPOIS dela — consulta ao banco, uma variável global que ainda não existe,
+   uma linha estranha do relatório — virava uma promessa rejeitada sem dono.
+   Como a função é async e chamada pelo onchange, ninguém recebia o erro: a
+   mensagem de carregando ficava na tela para sempre, sem nada no console
+   apontando para a conciliação.
+   Agora o processamento inteiro está protegido e qualquer falha aparece na
+   tela, com o motivo. */
+async function atuaProcessar(reprocessar){
   const corpo = document.getElementById('atuaCorpo');
   const arq = document.getElementById('atuaArquivo')?.files?.[0];
-  if (!arq) return;
+  if (!arq){
+    if (reprocessar) alert('Escolha o arquivo do ATUA primeiro.');
+    return;
+  }
+  try {
+    await _atuaProcessarInterno(arq, corpo);
+  } catch(e){
+    console.error('conciliação ATUA:', e);
+    corpo.innerHTML = `
+      <p style="color:#f87171"><strong>A conferência parou com um erro.</strong></p>
+      <p class="atua-ajuda">${_atuaEsc(e && e.message ? e.message : e)}</p>
+      <button class="btn btn-secondary btn-sm" onclick="atuaProcessar(true)">↻ Tentar de novo</button>`;
+  }
+}
 
+async function _atuaProcessarInterno(arq, corpo){
   const de  = document.getElementById('atuaDe')?.value || '';
   const ate = document.getElementById('atuaAte')?.value || '';
   corpo.innerHTML = '<p class="atua-ajuda">⏳ Lendo o relatório...</p>';
+
+  if (typeof XLSX === 'undefined'){
+    throw new Error('A biblioteca de leitura de planilhas não carregou. Atualize a página (Ctrl+Shift+R) e tente de novo — ela vem de um servidor externo e pode ter falhado.');
+  }
 
   let linhas = [];
   try {
@@ -118,9 +147,9 @@ async function atuaProcessar(){
     const aba = wb.Sheets[wb.SheetNames[0]];
     linhas = XLSX.utils.sheet_to_json(aba, { header: 1, blankrows: false });
   } catch(e){
-    corpo.innerHTML = `<p style="color:#f87171">Não consegui ler o arquivo: ${_atuaEsc(e.message||e)}</p>`;
-    return;
+    throw new Error('Não consegui ler o arquivo: ' + (e.message||e));
   }
+  if (!linhas.length) throw new Error('O arquivo está vazio ou a primeira aba não tem dados.');
 
   // Acha a linha de cabeçalho: a primeira que tenha uma coluna de CT-e
   let iCab = -1, mapa = {};
@@ -179,7 +208,9 @@ async function atuaProcessar(){
   } catch(e){ console.warn('fechamento não consultado:', e?.message); }
 
   if (!Object.keys(sistema).length){
-    (pedidosGlobais||[]).forEach(p => {
+    const _peds = (typeof pedidosGlobais !== 'undefined' && pedidosGlobais) ? pedidosGlobais : [];
+    if (!_peds.length) throw new Error('Os pedidos ainda não terminaram de carregar. Aguarde a tela terminar de abrir e clique em "Conferir de novo".');
+    _peds.forEach(p => {
       if (!p.numeroCte) return;
       const d = String(p.cteEmitidoEm||'').slice(0,10);
       if (de && d && d < de) return;
@@ -189,21 +220,47 @@ async function atuaProcessar(){
     });
   }
 
-  // Cruza
-  const conferem = [], divergentes = [], soAtua = [], soSistema = [], cancelados = [];
+  /* Cruzamento em duas frentes:
+       1. ATUA  x  sistema   — o documento emitido bate com o registrado?
+       2. sistema x tabela de trecho — o valor cobrado é o combinado?
+     A segunda é a que faltava. Sem ela, um CT-e emitido com valor errado
+     "confere" com o sistema e passa batido: os dois lados estão errados
+     igualmente. A tabela de trecho é a única referência independente. */
+  const conferem = [], divergentes = [], soAtua = [], soSistema = [], cancelados = [], foraTabela = [];
+
+  const _valorEsperado = (pedidoId) => {
+    if (!pedidoId || typeof valorTabelaFretePedido !== 'function') return null;
+    const p = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : []).find(x => String(x.id)===String(pedidoId));
+    if (!p) return null;
+    try { return valorTabelaFretePedido(p); } catch(_) { return null; }
+  };
+
   Object.keys(atua).forEach(num => {
     const a = atua[num], s = sistema[num];
     if (!s){ soAtua.push(a); return; }
     if (a.cancelado){ cancelados.push({ ...a, pedidoId: s.pedidoId, valorSistema: s.valor }); return; }
-    if (a.valor != null && Math.abs(a.valor - s.valor) >= 0.01)
+
+    if (a.valor != null && Math.abs(a.valor - s.valor) >= 0.01){
       divergentes.push({ numero: num, atua: a.valor, sistema: s.valor, cliente: s.cliente, pedidoId: s.pedidoId });
-    else conferem.push(a);
+      return;
+    }
+
+    // ATUA e sistema batem — falta conferir contra o combinado com o cliente.
+    const ref = _valorEsperado(s.pedidoId);
+    if (ref && ref.valor > 0 && Math.abs(ref.valor - s.valor) >= 0.01){
+      foraTabela.push({ numero: num, cliente: s.cliente, cobrado: s.valor,
+                        tabela: ref.valor, pedidoId: s.pedidoId });
+      return;
+    }
+    conferem.push(a);
   });
   Object.keys(sistema).forEach(num => { if (!atua[num]) soSistema.push(sistema[num]); });
 
   window._atuaResultado = { cancelados };
   window._atuaColunaValor = (linhas[iCab]||[])[mapa.valor] || '(não encontrada)';
-  _atuaRenderizar({ conferem, divergentes, soAtua, soSistema, cancelados, origem });
+  _atuaRenderizar({ conferem, divergentes, soAtua, soSistema, cancelados, foraTabela, origem });
+  const btn = document.getElementById('atuaBtnReprocessar');
+  if (btn) btn.style.display = '';
 }
 
 function _atuaRenderizar(r){
@@ -221,8 +278,11 @@ function _atuaRenderizar(r){
       Comparado contra: <strong>${_atuaEsc(r.origem)}</strong><br>
       Coluna de valor do ATUA: <strong>${_atuaEsc(window._atuaColunaValor||'—')}</strong><br>
       🟢 ${r.conferem.length} conferem · 🟡 ${r.divergentes.length} divergentes ·
+      🟠 ${(r.foraTabela||[]).length} fora da tabela ·
       🔴 ${r.soAtua.length} só no ATUA · 🔴 ${r.soSistema.length} só no sistema ·
       📕 ${r.cancelados.length} cancelados
+      ${(r.conferem.length && !r.divergentes.length && !(r.foraTabela||[]).length && !r.soAtua.length && !r.soSistema.length)
+        ? '<br><strong style="color:#4ade80">✅ Nada a tratar neste período.</strong>' : ''}
     </div>
 
     ${bloco('🟢','Conferem', r.conferem,
@@ -235,6 +295,16 @@ function _atuaRenderizar(r){
         <td class="right">${_atuaFmt(d.sistema)}</td>
         <td class="right">${_atuaFmt(d.atua)}</td>
         <td class="right" style="color:#fbbf24">${_atuaFmt(d.atua - d.sistema)}</td>
+      </tr>`).join('')}</tbody></table>`)}
+
+    ${bloco('🟠','Valor fora da tabela de trecho', (r.foraTabela||[]), `
+      <p class="atua-ajuda">O CT-e e o sistema batem entre si, mas o valor cobrado não é o da tabela combinada para o trecho. Os dois lados podem estar errados juntos — por isso a tabela é conferida à parte.</p>
+      <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Cliente</th><th class="right">Cobrado</th><th class="right">Tabela</th><th class="right">Diferença</th></tr></thead>
+      <tbody>${(r.foraTabela||[]).map(d => `<tr>
+        <td>${_atuaEsc(d.numero)}</td><td>${_atuaEsc(d.cliente)}</td>
+        <td class="right">${_atuaFmt(d.cobrado)}</td>
+        <td class="right">${_atuaFmt(d.tabela)}</td>
+        <td class="right" style="color:#fb923c">${_atuaFmt(d.cobrado - d.tabela)}</td>
       </tr>`).join('')}</tbody></table>`)}
 
     ${bloco('🔴','Só no ATUA — emitido fora do sistema', r.soAtua, `
