@@ -51,3 +51,8 @@
 /* Bloco de viagens prontas para conferir */
 .atua-bloco-conferir { border-color: rgba(74,222,128,.35); background: rgba(74,222,128,.06); }
 .atua-bloco-conferir .atua-bloco-tit { color: #4ade80; }
+
+/* Resolução rápida dos pendentes */
+.atua-resolver { display:flex; gap:5px; flex-wrap:wrap; }
+.atua-resolver .btn { font-size:.68rem; padding:3px 7px; white-space:nowrap; }
+.atua-resolvido { font-size:.7rem; font-weight:700; color:#4ade80; white-space:nowrap; }
