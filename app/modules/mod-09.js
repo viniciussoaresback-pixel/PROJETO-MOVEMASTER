@@ -1125,6 +1125,8 @@ function renderizarCentralConferencia(){
       </div>
     </div>
 
+    ${typeof _rpBarraHTML === 'function' ? _rpBarraHTML() : ''}
+
     <div class="conf-kpis">
       <div class="conf-kpi"><div class="conf-kpi-lbl">VIAGENS</div><div class="conf-kpi-num">${totViagens}</div><div class="conf-kpi-hint">Total no período</div></div>
       <div class="conf-kpi"><div class="conf-kpi-lbl">VEÍCULOS</div><div class="conf-kpi-num">${totVeiculos}</div><div class="conf-kpi-hint">Transportados</div></div>
