@@ -467,10 +467,25 @@ async function _atuaGravarHistorico(){
     valor_sistema:d.valor, motivo:'Consta no sistema e não foi encontrado no ATUA' }));
 
   if (pend.length){
-    // upsert com ignoreDuplicates: o índice único cuida da repetição
-    const { error: e2 } = await supabase.from('conciliacao_pendencias')
-      .upsert(pend, { onConflict: 'numero_cte,tipo', ignoreDuplicates: true });
-    if (e2) console.warn('pendências:', e2.message);
+    /* Nada de upsert aqui. O índice que evita duplicidade é PARCIAL
+       (só vale para status='aberta'), e o Postgres só aceita um índice
+       parcial no ON CONFLICT se a instrução repetir a mesma condição —
+       coisa que o upsert do Supabase não tem como fazer. Daí o erro
+       "there is no unique or exclusion constraint matching the ON CONFLICT
+       specification", e nenhuma pendência era gravada.
+       A conferência é feita aqui: lê o que já está aberto e insere só o
+       que falta. */
+    try {
+      const numeros = [...new Set(pend.map(p => p.numero_cte))];
+      const { data: jaAbertas } = await supabase.from('conciliacao_pendencias')
+        .select('numero_cte, tipo').eq('status','aberta').in('numero_cte', numeros);
+      const existe = new Set((jaAbertas||[]).map(p => `${p.numero_cte}|${p.tipo}`));
+      const novas = pend.filter(p => !existe.has(`${p.numero_cte}|${p.tipo}`));
+      if (novas.length){
+        const { error: e2 } = await supabase.from('conciliacao_pendencias').insert(novas);
+        if (e2) console.warn('pendências:', e2.message);
+      }
+    } catch(e){ console.warn('pendências:', e?.message||e); }
   }
 }
 
