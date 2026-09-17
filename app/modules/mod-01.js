@@ -413,6 +413,12 @@ function trocarAba(event) {
         // Sem reinício de animação: a troca de aba é instantânea.
         // O fade estava poluindo a tela e foi desligado no layout-amplo.css.
     }
+    /* A aba que aparece agora pode ter ficado desatualizada enquanto estava
+       escondida — a propagação de mudanças só desenha o que está à vista.
+       Roda antes dos renderizadores específicos abaixo, para não desenhar
+       duas vezes a mesma tela. */
+    if (typeof _mmAtualizarPendentes === 'function') _mmAtualizarPendentes();
+
     if (tabAlvo === 'diretoria') renderizarDiretoria();
     if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
     if (tabAlvo === 'comercialPedidos' && typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
