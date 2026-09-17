@@ -241,63 +241,204 @@ function _planCriarViagem(corId){
   _planAbrirModalViagem(cor, pedidos);
 }
 
+/* Seleção dos carros da viagem.
+
+   O modal era uma caixa de 560px com a lista espremida em 220px de altura.
+   Com 40 carros num corredor, escolher quem embarca virava rolagem às cegas
+   numa fresta. Agora a tela ocupa a largura disponível, os carros aparecem
+   em cartões agrupados por cliente, e há busca, contagem e seleção em bloco.
+   Agrupar por cliente não é enfeite: a cegonha costuma levar a carga de um
+   cliente inteiro, e é assim que a logística raciocina na hora de montar. */
+let _pvPedidos = [];   // universo de pedidos deste modal
+let _pvCor = null;
+let _pvBusca = '';
+
+// Referência de capacidade quando ainda não há cegonha escolhida.
+const _PV_CAP_REF = 11;
+
 function _planAbrirModalViagem(cor, pedidos, rotaVazia){
   const cegonhas = (veiculosGlobais||[]).filter(v => v.ativo !== false && v.placa);
+  _pvPedidos = pedidos || [];
+  /* Marcar todos por padrão só faz sentido quando todos cabem. Com 22 pedidos
+     no corredor e uma cegonha de 11 vagas, a tela vinha com os 22 marcados e
+     um clique criava a viagem inteira — foi como a viagem #137 nasceu com 21
+     carros. Acima da capacidade de referência, nada vem marcado: a escolha
+     passa a ser deliberada. */
+  const _marcarTudo = !rotaVazia && _pvPedidos.length <= _PV_CAP_REF;
+  _pvCor = cor;
+  _pvBusca = '';
   const old = document.getElementById('modalPlanViagem'); if (old) old.remove();
   const div = document.createElement('div');
   div.id = 'modalPlanViagem';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:9999;padding:2vh 1vw';
   div.innerHTML = `
-    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:560px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
-      <h2 style="margin:0 0 4px">${rotaVazia ? '➕ Nova rota para planejar' : '🚛 Criar viagem'} — ${cor.nome}</h2>
-      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${rotaVazia ? 'Crie a rota e escolha o veículo. Você pode marcar pedidos agora ou deixar para arrastar depois.' : 'Selecione os pedidos que vão nesta viagem e escolha o caminhão/motorista.'}</p>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.plan-viagem-ped').forEach(c=>c.checked=true)">Marcar todos</button>
-        <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.plan-viagem-ped').forEach(c=>c.checked=false)">Desmarcar</button>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:220px;overflow:auto">
-        ${pedidos.length === 0 ? '<p class="text-muted" style="font-size:.82rem">Nenhum pedido neste corredor ainda. Você pode criar a rota vazia e arrastar pedidos depois.</p>' : pedidos.map(p => `<label class="jv-sel-linha">
-          <input type="checkbox" class="plan-viagem-ped" value="${p.id}" ${rotaVazia ? '' : 'checked'}>
-          <span><strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''} <span class="text-muted">${p.patioAtual||p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span></span>
-          <button type="button" class="plan-trocar-veic" title="Trocar o veículo deste pedido"
-                  onclick="event.preventDefault();event.stopPropagation();_planTrocarVeiculo(${p.id})">🔄</button>
-        </label>`).join('')}
-      </div>
-      <div class="form-group">
-        <label>Tipo de veículo</label>
-        <div class="plan-vtipo">
-          <button type="button" class="plan-vtipo-btn active" data-vtipo="todos" onclick="_planFiltrarCegonhas(this,'todos')">Todos</button>
-          <button type="button" class="plan-vtipo-btn" data-vtipo="propria" onclick="_planFiltrarCegonhas(this,'propria')">🚛 Frota própria</button>
-          <button type="button" class="plan-vtipo-btn" data-vtipo="terceiro" onclick="_planFiltrarCegonhas(this,'terceiro')">🤝 Terceiros</button>
+    <div class="modal-box pv-box">
+      <div class="pv-cab">
+        <div>
+          <h2 style="margin:0">${rotaVazia ? '➕ Nova rota para planejar' : '🚛 Criar viagem'} — ${cor.nome}</h2>
+          <p class="text-muted" style="font-size:.84rem;margin:.25rem 0 0">${rotaVazia
+            ? 'Crie a rota e escolha o veículo. Pode marcar pedidos agora ou arrastar depois.'
+            : 'Marque os carros que vão nesta viagem e escolha cegonha e motorista.'}</p>
         </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalPlanViagem').remove()">✕</button>
       </div>
-      <div class="form-group">
-        <label>Cegonha / Guincho</label>
-        <div class="plan-cegonha-busca">
-          <span class="plan-busca-ic">🔍</span>
-          <input type="text" id="planCegonhaBusca"
-                 placeholder="Digite a placa ou o nome do motorista..."
-                 oninput="_planFiltrarCegonhaPorTexto()"
-                 onkeydown="if(event.key==='Enter'){event.preventDefault();_planSelecionarPrimeiraCegonha();}">
-          <span class="plan-cegonha-cont" id="planCegonhaCont"></span>
+
+      <div class="pv-corpo">
+        <!-- COLUNA ESQUERDA: os carros -->
+        <div class="pv-carros">
+          <div class="pv-ferramentas">
+            <div class="pv-busca">
+              <span class="pv-busca-ic">🔍</span>
+              <input type="text" id="pvBusca" placeholder="Placa, modelo, cliente, cidade ou #id"
+                     oninput="_pvFiltrar(this.value)">
+            </div>
+            <div class="pv-acoes-sel">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="_pvMarcar(true)">Marcar todos</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="_pvMarcar(false)">Desmarcar</button>
+            </div>
+          </div>
+          ${!_marcarTudo && !rotaVazia && _pvPedidos.length > _PV_CAP_REF
+        ? `<div class="pv-aviso-muitos">⚠️ Este corredor tem <strong>${_pvPedidos.length} carros</strong>, mais do que cabe numa cegonha. Nenhum veio marcado — escolha quais vão nesta viagem.</div>`
+        : ''}
+      <div class="pv-grade" id="pvGrade">${_pvGradeHTML(!_marcarTudo)}</div>
         </div>
-        <select id="planViagemCegonha" onchange="_planViagemPreencheMot()">
-          <option value="">— a definir —</option>
-          ${cegonhas.map(v => { const prop = (v.propriedade==='terceiro')?'terceiro':'propria'; return `<option value="${v.placa}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${prop}">${prop==='terceiro'?'🤝 ':'🚛 '}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`; }).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Motorista</label>
-        <input type="text" id="planViagemMotorista" placeholder="Motorista da viagem" list="listaMotPlanViagem">
-        <datalist id="listaMotPlanViagem">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn btn-primary" style="flex:1" onclick="_planConfirmarViagem(${cor.id})">✅ Criar viagem</button>
-        <button class="btn btn-secondary" onclick="document.getElementById('modalPlanViagem').remove()">Cancelar</button>
+
+        <!-- COLUNA DIREITA: veículo e resumo -->
+        <div class="pv-lateral">
+          <div class="pv-contador" id="pvContador"></div>
+
+          <div class="form-group">
+            <label>Tipo de veículo</label>
+            <div class="plan-vtipo">
+              <button type="button" class="plan-vtipo-btn active" data-vtipo="todos" onclick="_planFiltrarCegonhas(this,'todos')">Todos</button>
+              <button type="button" class="plan-vtipo-btn" data-vtipo="propria" onclick="_planFiltrarCegonhas(this,'propria')">🚛 Própria</button>
+              <button type="button" class="plan-vtipo-btn" data-vtipo="terceiro" onclick="_planFiltrarCegonhas(this,'terceiro')">🤝 Terceiros</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Cegonha / Guincho</label>
+            <div class="plan-cegonha-busca">
+              <span class="plan-busca-ic">🔍</span>
+              <input type="text" id="planCegonhaBusca"
+                     placeholder="Placa ou motorista..."
+                     oninput="_planFiltrarCegonhaPorTexto()"
+                     onkeydown="if(event.key==='Enter'){event.preventDefault();_planSelecionarPrimeiraCegonha();}">
+              <span class="plan-cegonha-cont" id="planCegonhaCont"></span>
+            </div>
+            <select id="planViagemCegonha" onchange="_planViagemPreencheMot()">
+              <option value="">— a definir —</option>
+              ${cegonhas.map(v => { const prop = (v.propriedade==='terceiro')?'terceiro':'propria'; return `<option value="${v.placa}" data-cap="${v.capacidade||''}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${prop}">${prop==='terceiro'?'🤝 ':'🚛 '}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`; }).join('')}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Motorista</label>
+            <input type="text" id="planViagemMotorista" placeholder="Motorista da viagem" list="listaMotPlanViagem">
+            <datalist id="listaMotPlanViagem">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
+          </div>
+
+          <div class="pv-rodape">
+            <button class="btn btn-primary" style="width:100%" onclick="_planConfirmarViagem(${cor.id})">✅ Criar viagem</button>
+            <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalPlanViagem').remove()">Cancelar</button>
+          </div>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(div);
+  _pvAtualizarContador();
 }
+
+// Cartões agrupados por cliente. A busca filtra antes de agrupar.
+function _pvGradeHTML(rotaVazia){
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const b = n(_pvBusca);
+  const lista = b
+    ? _pvPedidos.filter(p => n(`${p.placa||''} ${p.modelo||''} ${p.cliente||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.patioAtual||''} #${p.id} ${p.id}`).includes(b))
+    : _pvPedidos;
+
+  if (lista.length === 0){
+    return `<p class="text-muted" style="padding:2rem;text-align:center;font-size:.86rem">${
+      _pvPedidos.length === 0
+        ? 'Nenhum pedido neste corredor ainda. Dá para criar a rota vazia e arrastar pedidos depois.'
+        : 'Nenhum carro encontrado para essa busca.'}</p>`;
+  }
+
+  const grupos = {};
+  lista.forEach(p => { const c = p.cliente || 'Sem cliente'; (grupos[c] = grupos[c] || []).push(p); });
+
+  return Object.entries(grupos)
+    .sort((a,b2) => b2[1].length - a[1].length)   // cliente com mais carros primeiro
+    .map(([cliente, itens]) => `
+      <div class="pv-grupo">
+        <div class="pv-grupo-cab">
+          <label class="pv-grupo-todos">
+            <input type="checkbox" onchange="_pvMarcarGrupo(this, '${String(cliente).replace(/'/g,"\\'")}')"
+                   ${rotaVazia ? '' : 'checked'}>
+            <span>👤 ${cliente}</span>
+          </label>
+          <span class="pv-grupo-cont">${itens.length} carro(s)</span>
+        </div>
+        <div class="pv-grupo-cards">
+          ${itens.map(p => `
+            <label class="pv-card" data-cliente="${String(cliente).replace(/"/g,'&quot;')}">
+              <input type="checkbox" class="plan-viagem-ped" value="${p.id}" ${rotaVazia ? '' : 'checked'}
+                     onchange="_pvAtualizarContador()">
+              <div class="pv-card-corpo">
+                <div class="pv-card-placa">${p.placa||'—'}</div>
+                <div class="pv-card-modelo">${p.modelo||'—'}</div>
+                <div class="pv-card-rota">${(p.patioAtual||p.cidadeOrigem||'—').split('/')[0]} → ${(p.cidadeDestino||'—').split('/')[0]}</div>
+                <div class="pv-card-id">#${p.id}</div>
+              </div>
+              <button type="button" class="pv-card-trocar" title="Trocar o veículo deste pedido"
+                      onclick="event.preventDefault();event.stopPropagation();_planTrocarVeiculo(${p.id})">🔄</button>
+            </label>`).join('')}
+        </div>
+      </div>`).join('');
+}
+
+function _pvFiltrar(txt){
+  _pvBusca = txt || '';
+  // guarda o que já estava marcado, para a busca não desfazer a seleção
+  const marcados = new Set([...document.querySelectorAll('.plan-viagem-ped:checked')].map(c => c.value));
+  const grade = document.getElementById('pvGrade');
+  if (!grade) return;
+  grade.innerHTML = _pvGradeHTML(false);
+  document.querySelectorAll('.plan-viagem-ped').forEach(c => { c.checked = marcados.has(c.value); });
+  _pvAtualizarContador();
+}
+window._pvFiltrar = _pvFiltrar;
+
+function _pvMarcar(valor){
+  document.querySelectorAll('.plan-viagem-ped').forEach(c => { c.checked = !!valor; });
+  document.querySelectorAll('.pv-grupo-todos input').forEach(c => { c.checked = !!valor; });
+  _pvAtualizarContador();
+}
+window._pvMarcar = _pvMarcar;
+
+function _pvMarcarGrupo(chk, cliente){
+  document.querySelectorAll(`.pv-card[data-cliente="${cliente.replace(/"/g,'&quot;')}"] .plan-viagem-ped`)
+    .forEach(c => { c.checked = chk.checked; });
+  _pvAtualizarContador();
+}
+window._pvMarcarGrupo = _pvMarcarGrupo;
+
+/* Contador com aviso de capacidade. Estourar a cegonha é o erro que só
+   aparece no pátio, na hora de carregar — melhor avisar aqui. */
+function _pvAtualizarContador(){
+  const el = document.getElementById('pvContador');
+  if (!el) return;
+  const marcados = document.querySelectorAll('.plan-viagem-ped:checked').length;
+  const total = _pvPedidos.length;
+  const sel = document.getElementById('planViagemCegonha');
+  const cap = parseInt(sel?.selectedOptions?.[0]?.getAttribute('data-cap') || '', 10);
+  let aviso = '';
+  if (cap && marcados > cap)      aviso = `<div class="pv-cont-alerta">⚠️ ${marcados} carros para ${cap} vagas — ${marcados-cap} a mais</div>`;
+  else if (cap && marcados === cap) aviso = `<div class="pv-cont-ok">✅ Cegonha completa (${cap} vagas)</div>`;
+  else if (cap)                    aviso = `<div class="pv-cont-info">${cap - marcados} vaga(s) livre(s) de ${cap}</div>`;
+  el.innerHTML = `<div class="pv-cont-num"><strong>${marcados}</strong> de ${total} selecionado(s)</div>${aviso}`;
+}
+window._pvAtualizarContador = _pvAtualizarContador;
 
 // Filtra as opções de cegonha por tipo (todos / frota própria / terceiro)
 function _planFiltrarCegonhas(btn, tipo){
@@ -344,6 +485,8 @@ window._planFiltrarCegonhaPorTexto = _planFiltrarCegonhaPorTexto;
 window._planSelecionarPrimeiraCegonha = _planSelecionarPrimeiraCegonha;
 
 function _planViagemPreencheMot(){
+  // a capacidade da cegonha escolhida muda o aviso de vagas
+  if (typeof _pvAtualizarContador === 'function') setTimeout(_pvAtualizarContador, 0);
   const sel = document.getElementById('planViagemCegonha');
   const opt = sel?.options[sel.selectedIndex];
   const inp = document.getElementById('planViagemMotorista');
@@ -477,6 +620,36 @@ async function _planConfirmarViagem(corId){
   const cegonha = document.getElementById('planViagemCegonha')?.value || null;
   const motorista = document.getElementById('planViagemMotorista')?.value.trim() || null;
   if (ids.length === 0 && !cegonha){ alert('Para criar a rota, selecione ao menos um pedido OU escolha o veículo.'); return; }
+
+  /* TRAVA DE CAPACIDADE.
+     Não havia nenhuma validação: a viagem #137 saiu com 21 carros numa
+     cegonha de capacidade menor, e o erro só apareceu quando a carga chegou
+     ao fiscal — com espelho e CT-e já gerados em cima de uma composição
+     impossível. Corrigir depois disso custa cancelamento de documento.
+     Por isso aqui é bloqueio, não aviso. */
+  if (cegonha && ids.length > 0){
+    const veic = (veiculosGlobais||[]).find(v => v.placa === cegonha);
+    const cap = Number(veic?.capacidade) || 0;
+    if (cap > 0 && ids.length > cap){
+      alert(
+        `Não dá para criar esta viagem.\n\n` +
+        `Cegonha ${cegonha}${veic?.modelo ? ' ('+veic.modelo+')' : ''}: ${cap} vaga(s)\n` +
+        `Carros selecionados: ${ids.length}\n` +
+        `Excesso: ${ids.length - cap}\n\n` +
+        `Desmarque ${ids.length - cap} carro(s) ou escolha um veículo maior. ` +
+        `Se a capacidade cadastrada estiver errada, corrija no cadastro do veículo.`
+      );
+      return;
+    }
+    if (!cap){
+      // Sem capacidade cadastrada não dá para validar — avisa uma vez, com o
+      // número na frente, em vez de deixar passar calado.
+      if (!confirm(
+        `A cegonha ${cegonha} está sem capacidade cadastrada, então não consigo conferir se a carga cabe.\n\n` +
+        `Você está criando a viagem com ${ids.length} carro(s).\n\nContinuar mesmo assim?`
+      )) return;
+    }
+  }
   window._criandoViagem = true;
   // desabilita o botão visualmente
   const btnCriar = document.querySelector('#modalPlanViagem .btn-primary, [onclick^="_planConfirmarViagem"]');
@@ -1568,8 +1741,15 @@ function _cgAgrupar(lista){
 function _cgRotaComInicio(rota){
   if (!rota) return '—';
   const nome = rota.nome || ('R-' + rota.id);
-  if (!rota.iniciada_em)
+  if (!rota.iniciada_em){
+    /* Sem data, mas já em andamento: são as viagens iniciadas pelo botão da
+       tela de Viagens antes da correção, que gravava o status e esquecia o
+       iniciada_em. Dizer "não iniciada" nessas é informação errada — o carro
+       está na estrada. */
+    if (rota.status === 'em_andamento' || rota.status === 'concluida')
+      return `${nome}<div class="cg-rota-inicio cg-rota-semdata" title="A viagem saiu, mas a data de início não foi registrada">🛫 em viagem · data não registrada</div>`;
     return `${nome}<div class="cg-rota-inicio cg-rota-naoiniciada" title="A viagem ainda não saiu">🕗 não iniciada</div>`;
+  }
   const d = new Date(rota.iniciada_em);
   return `${nome}<div class="cg-rota-inicio" title="Viagem iniciada em ${d.toLocaleString('pt-BR')}">🛫 ${d.toLocaleDateString('pt-BR')}</div>`;
 }
