@@ -331,110 +331,190 @@ async function _atuaProcessarInterno(arq, corpo){
   if (btn) btn.style.display = '';
 }
 
+/* ===========================================================================
+   RESULTADO DA CONCILIAÇÃO
+
+   Antes eram seis blocos empilhados, cada um com sua tabela e suas colunas —
+   para achar um CT-e era preciso saber de antemão em qual grupo ele tinha
+   caído, e rolar até lá. Agora é o formato que a operação pede: números no
+   topo, uma tabela só com tudo, filtro por situação e busca. O trabalho passa
+   a ser "filtrar pendentes e resolver", não "caçar no bloco certo".
+   =========================================================================== */
+
+let _atuaFiltro = 'pendentes';   // começa no que precisa de ação
+let _atuaBuscaTxt = '';
+
 function _atuaRenderizar(r){
+  window._atuaUltimo = r;
   const corpo = document.getElementById('atuaCorpo');
-  const total = (lista) => lista.reduce((s,x)=> s + Number(x.valor ?? x.sistema ?? 0), 0);
+  if (!corpo) return;
+  corpo.innerHTML = _atuaTelaHTML(r);
+}
 
-  const bloco = (icone, titulo, lista, corpoHTML) => !lista.length ? '' : `
-    <div class="atua-bloco">
-      <div class="atua-bloco-tit">${icone} ${titulo} <span class="atua-qtd">${lista.length}</span></div>
-      ${corpoHTML}
-    </div>`;
+/* Junta os seis grupos numa lista só, cada item sabendo sua situação. É essa
+   unificação que permite a tabela única e o filtro. */
+function _atuaLinhas(r){
+  const linhas = [];
+  const add = (situacao, itens, mapa) => (itens||[]).forEach(d => linhas.push({ situacao, ...mapa(d) }));
 
-  corpo.innerHTML = `
-    <div class="atua-resumo">
-      Comparado contra: <strong>${_atuaEsc(r.origem)}</strong><br>
-      Coluna de valor do ATUA: <strong>${_atuaEsc(window._atuaColunaValor||'—')}</strong><br>
-      🟢 ${r.conferem.length} conferem · 🟡 ${r.divergentes.length} divergentes ·
-      🟠 ${(r.foraTabela||[]).length} fora da tabela ·
-      🔴 ${r.soAtua.length} só no ATUA · 🔴 ${r.soSistema.length} só no sistema ·
-      📕 ${r.cancelados.length} cancelados
-      ${(r.conferem.length && !r.divergentes.length && !(r.foraTabela||[]).length && !r.soAtua.length && !r.soSistema.length)
-        ? '<br><strong style="color:#4ade80">✅ Nada a tratar neste período.</strong>' : ''}
+  add('confere', r.conferem, d => ({
+    numero: d.numero, cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
+    valor: d.valor, detalhe: 'CT-e e sistema batem'
+  }));
+  add('divergente', r.divergentes, d => ({
+    numero: d.numero, cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
+    valor: d.atua, detalhe: `sistema ${_atuaFmt(d.sistema)} · ATUA ${_atuaFmt(d.atua)}`, acao: true
+  }));
+  add('fora_tabela', r.foraTabela, d => ({
+    numero: d.numero, cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
+    valor: d.cobrado, detalhe: `cobrado ${_atuaFmt(d.cobrado)} · tabela ${_atuaFmt(d.tabela)}`, acao: true
+  }));
+  add('so_atua', r.soAtua, d => ({
+    numero: d.numero, cliente: d.cliente, valor: d.valor,
+    detalhe: 'emitido no ATUA, sem pedido no sistema'
+  }));
+  add('so_sistema', r.soSistema, d => ({
+    numero: d.numero, cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
+    valor: d.valor, detalhe: 'no sistema, não encontrado no ATUA'
+  }));
+  add('cancelado', r.cancelados, d => ({
+    numero: d.numero, cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
+    valor: d.valorSistema ?? d.valor, detalhe: 'cancelado no ATUA'
+  }));
+  return linhas;
+}
+
+const _ATUA_SIT = {
+  confere:     { rotulo:'Conferido',     classe:'ok'    },
+  divergente:  { rotulo:'Divergente',    classe:'div'   },
+  fora_tabela: { rotulo:'Fora da tabela',classe:'fora'  },
+  so_atua:     { rotulo:'Só no ATUA',    classe:'erro'  },
+  so_sistema:  { rotulo:'Sem documento', classe:'cinza' },
+  cancelado:   { rotulo:'Cancelado',     classe:'cinza' }
+};
+
+function _atuaTelaHTML(r){
+  const linhas = _atuaLinhas(r);
+  const soma = (sit) => linhas.filter(l => sit.includes(l.situacao))
+    .reduce((s,l) => s + Number(l.valor||0), 0);
+  const conta = (sit) => linhas.filter(l => sit.includes(l.situacao)).length;
+
+  const pendentes = ['divergente','fora_tabela'];
+  const kpi = (classe, ico, rotulo, qtd, valor, filtro) => `
+    <button class="atua-kpi atua-kpi-${classe} ${_atuaFiltro===filtro?'sel':''}" onclick="_atuaSetFiltro('${filtro}')">
+      <span class="atua-kpi-ico">${ico}</span>
+      <span class="atua-kpi-rot">${rotulo}</span>
+      <span class="atua-kpi-num">${qtd}</span>
+      <span class="atua-kpi-val">${_atuaFmt(valor)}</span>
+    </button>`;
+
+  const visiveis = linhas.filter(l => {
+    if (_atuaFiltro === 'pendentes' && !pendentes.includes(l.situacao)) return false;
+    if (_atuaFiltro === 'confere'   && l.situacao !== 'confere') return false;
+    if (_atuaFiltro === 'sem_doc'   && !['so_atua','so_sistema','cancelado'].includes(l.situacao)) return false;
+    if (_atuaBuscaTxt){
+      const t = _atuaBuscaTxt.toLowerCase();
+      if (!`${l.numero} ${l.cliente||''} ${l.pedidoId||''}`.toLowerCase().includes(t)) return false;
+    }
+    return true;
+  });
+
+  const nomeRota = (rotaId) => {
+    if (!rotaId) return '—';
+    const rt = (typeof rotasGlobais !== 'undefined' ? rotasGlobais : []).find(x => String(x.id)===String(rotaId));
+    return rt ? (rt.nome || ('#'+rotaId)) : ('#'+rotaId);
+  };
+
+  return `
+    <div class="atua-topo">
+      <div class="atua-topo-info">
+        <strong>Conferência do período</strong>
+        <span>${_atuaEsc(r.origem||'')}</span>
+      </div>
+      ${(r.viagensOk||[]).length ? `
+        <button class="btn btn-primary btn-sm" id="atuaBtnConferir" onclick="atuaMarcarConferidas()">
+          ✅ Marcar ${r.viagensOk.length} viagem(ns) como conferida(s)
+        </button>` : ''}
     </div>
 
-    ${bloco('🟢','Conferem', r.conferem,
-      `<p class="atua-ajuda">${_atuaFmt(total(r.conferem))} — nada a fazer.</p>`)}
-
-    ${bloco('🟡','Valor divergente', r.divergentes, `
-      <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Cliente</th><th class="right">Sistema</th><th class="right">ATUA</th><th class="right">Diferença</th><th>Resolver</th></tr></thead>
-      <tbody>${r.divergentes.map(d => `<tr id="atuaLinha_${_atuaEsc(d.numero)}">
-        <td>${_atuaEsc(d.numero)}</td><td>${_atuaEsc(d.cliente)}</td>
-        <td class="right">${_atuaFmt(d.sistema)}</td>
-        <td class="right">${_atuaFmt(d.atua)}</td>
-        <td class="right" style="color:#fbbf24">${_atuaFmt(d.atua - d.sistema)}</td>
-        <td>${_atuaBotoesResolver(d.numero, d.pedidoId, d.atua)}</td>
-      </tr>`).join('')}</tbody></table>`)}
-
-    ${bloco('🟠','Valor fora da tabela de trecho', (r.foraTabela||[]), `
-      <p class="atua-ajuda">O CT-e e o sistema batem entre si, mas o valor cobrado não é o da tabela combinada para o trecho. Os dois lados podem estar errados juntos — por isso a tabela é conferida à parte.</p>
-      <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Cliente</th><th class="right">Cobrado</th><th class="right">Tabela</th><th class="right">Diferença</th></tr></thead>
-      <tbody>${(r.foraTabela||[]).map(d => `<tr>
-        <td>${_atuaEsc(d.numero)}</td><td>${_atuaEsc(d.cliente)}</td>
-        <td class="right">${_atuaFmt(d.cobrado)}</td>
-        <td class="right">${_atuaFmt(d.tabela)}</td>
-        <td class="right" style="color:#fb923c">${_atuaFmt(d.cobrado - d.tabela)}</td>
-      </tr>`).join('')}</tbody></table>`)}
-
-    ${bloco('🔴','Só no ATUA — emitido fora do sistema', r.soAtua, `
-      <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Tomador</th><th class="right">Valor</th></tr></thead>
-      <tbody>${r.soAtua.map(a => `<tr><td>${_atuaEsc(a.numero)}</td><td>${_atuaEsc(a.cliente)}</td><td class="right">${_atuaFmt(a.valor)}</td></tr>`).join('')}</tbody></table>`)}
-
-    ${bloco('🔴','Só no sistema — não consta no ATUA', r.soSistema, `
-      <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Cliente</th><th class="right">Valor</th></tr></thead>
-      <tbody>${r.soSistema.map(a => `<tr><td>${_atuaEsc(a.numero)}</td><td>${_atuaEsc(a.cliente)}</td><td class="right">${_atuaFmt(a.valor)}</td></tr>`).join('')}</tbody></table>`)}
-
-    ${(r.viagensOk||[]).length ? `
-      <div class="atua-bloco atua-bloco-conferir">
-        <div class="atua-bloco-tit">✅ Viagens prontas para conferir <span class="atua-qtd">${r.viagensOk.length}</span></div>
-        <p class="atua-ajuda">Todos os CT-es destas viagens bateram com o ATUA. Marcar registra data, usuário e a origem "Conciliação ATUA".</p>
-        <table class="atua-tabela"><thead><tr><th>Viagem</th><th class="right">CT-es</th></tr></thead>
-        <tbody>${r.viagensOk.map(v => `<tr><td>${_atuaEsc(v.nome)}</td><td class="right">${v.total}</td></tr>`).join('')}</tbody></table>
-        <button class="btn btn-primary btn-sm" id="atuaBtnConferir" style="margin-top:8px" onclick="atuaMarcarConferidas()">✅ Marcar ${r.viagensOk.length} viagem(ns) como conferida(s)</button>
-      </div>` : ''}
+    <div class="atua-kpis">
+      ${kpi('ok',   '✅', 'Conferidos',   conta(['confere']),   soma(['confere']),   'confere')}
+      ${kpi('pend', '⚠️', 'Pendentes',    conta(pendentes),     soma(pendentes),     'pendentes')}
+      ${kpi('erro', '❌', 'Sem documento',conta(['so_atua','so_sistema','cancelado']), soma(['so_atua','so_sistema','cancelado']), 'sem_doc')}
+      ${kpi('todos','📋', 'Todos',        linhas.length,        soma(Object.keys(_ATUA_SIT)), 'todos')}
+    </div>
 
     ${(r.viagensPendentes||[]).length ? `
-      <div class="atua-bloco">
-        <div class="atua-bloco-tit">⏳ Viagens que seguem pendentes <span class="atua-qtd">${r.viagensPendentes.length}</span></div>
-        <p class="atua-ajuda">Basta um CT-e com problema para a viagem inteira não ser conferida — marcar uma rota porque a maioria bateu seria registrar como verificado algo que não foi.</p>
-        <table class="atua-tabela"><thead><tr><th>Viagem</th><th class="right">OK</th><th>Motivo</th></tr></thead>
-        <tbody>${r.viagensPendentes.map(v => `<tr>
-          <td>${_atuaEsc(v.nome)}${v.jaConferida?' <span class="atua-qtd">já conferida</span>':''}</td>
-          <td class="right">${v.ok}/${v.total}</td>
-          <td>${_atuaEsc(v.motivos.join(' · '))}</td>
-        </tr>`).join('')}</tbody></table>
-      </div>` : ''}
+      <details class="atua-viagens-pend">
+        <summary>⏳ ${r.viagensPendentes.length} viagem(ns) não podem ser conferidas ainda</summary>
+        <table class="atua-tabela">
+          <thead><tr><th>Viagem</th><th class="right">OK</th><th>Motivo</th></tr></thead>
+          <tbody>${r.viagensPendentes.map(v => `<tr>
+            <td>${_atuaEsc(v.nome)}</td>
+            <td class="right">${v.ok}/${v.total}</td>
+            <td>${_atuaEsc(v.motivos.join(' · '))}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </details>` : ''}
 
-    ${bloco('📕','Cancelados no ATUA', r.cancelados, `
-      <p class="atua-ajuda">Estes CT-es constam como cancelados na fonte oficial. Aplicar atualiza a situação fiscal no sistema (etapa B) e registra o evento com origem <strong>atua</strong>.</p>
-      <table class="atua-tabela"><thead><tr><th>CT-e</th><th class="right">Valor no sistema</th></tr></thead>
-      <tbody>${r.cancelados.map(c => `<tr><td>${_atuaEsc(c.numero)}</td><td class="right">${_atuaFmt(c.valorSistema)}</td></tr>`).join('')}</tbody></table>
-      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="atuaAplicarCancelados()">📕 Aplicar cancelamentos</button>`)}
+    <div class="atua-filtro-linha">
+      <input type="text" id="atuaBusca" class="atua-busca" placeholder="🔍 Buscar por CT-e, cliente ou pedido"
+             value="${_atuaEsc(_atuaBuscaTxt)}" oninput="_atuaSetBusca(this.value)">
+      <span class="atua-contagem">${visiveis.length} de ${linhas.length}</span>
+    </div>
+
+    <table class="atua-tabela atua-tabela-principal">
+      <thead><tr>
+        <th>Situação</th><th>CT-e</th><th>Pedido</th><th>Cliente</th><th>Rota</th>
+        <th class="right">Valor</th><th>Detalhe</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${visiveis.length === 0
+          ? `<tr><td colspan="8" class="atua-vazio">Nada aqui${_atuaBuscaTxt?' para essa busca':''}.</td></tr>`
+          : visiveis.map(l => {
+            const sit = _ATUA_SIT[l.situacao] || { rotulo:l.situacao, classe:'cinza' };
+            return `<tr id="atuaLinha_${_atuaEsc(l.numero)}">
+              <td><span class="atua-pill atua-pill-${sit.classe}">${sit.rotulo}</span></td>
+              <td><strong>${_atuaEsc(l.numero)}</strong></td>
+              <td>${l.pedidoId?('#'+l.pedidoId):'—'}</td>
+              <td>${_atuaEsc((l.cliente||'—').slice(0,28))}</td>
+              <td class="atua-col-rota">${_atuaEsc(nomeRota(l.rotaId))}</td>
+              <td class="right">${_atuaFmt(l.valor)}</td>
+              <td class="atua-col-det">${_atuaEsc(l.detalhe||'')}</td>
+              <td>${l.acao ? _atuaBotoesResolver(l.numero, l.pedidoId, l.valor) : ''}</td>
+            </tr>`;
+          }).join('')}
+      </tbody>
+    </table>
 
     <div class="atua-acoes">
       <button class="btn btn-secondary btn-sm" onclick="atuaVerPendencias()">📋 Pendências em aberto</button>
+      <button class="btn btn-secondary btn-sm" onclick="atuaProcessar(true)">↻ Conferir de novo</button>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalAtua').remove()">Fechar</button>
     </div>`;
 }
 
-/* ===========================================================================
-   RESOLUÇÃO RÁPIDA DOS PENDENTES
+function _atuaSetFiltro(f){
+  _atuaFiltro = f;
+  if (window._atuaUltimo) _atuaRenderizar(window._atuaUltimo);
+}
+window._atuaSetFiltro = _atuaSetFiltro;
 
-   Um CT-e que existe no ATUA mas não casa com a tabela de valores quase
-   sempre é uma de duas coisas: ou o frete é integral de uma viagem só, ou o
-   transporte foi feito em mais de uma perna, por motoristas diferentes, e o
-   valor precisa ser repartido entre eles.
+function _atuaSetBusca(v){
+  _atuaBuscaTxt = v || '';
+  if (!window._atuaUltimo) return;
+  _atuaRenderizar(window._atuaUltimo);
+  // devolve o cursor: a tabela é redesenhada a cada tecla
+  const el = document.getElementById('atuaBusca');
+  if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+}
+window._atuaSetBusca = _atuaSetBusca;
 
-   Antes isso exigia abrir o pedido e lançar perna por perna. Agora são dois
-   botões. A regra dos CT-es que já conferem não muda: estes botões só
-   aparecem nos pendentes.
-   =========================================================================== */
 /* Um botão só na tabela: os dois caminhos ficam na tela do pendente, onde há
    espaço para mostrar ANTES o que está sendo decidido — o CT-e, os trechos e
-   os motoristas envolvidos. Dois botões miúdos no meio da linha obrigavam a
-   decidir sem ver nada disso. */
+   os motoristas envolvidos. */
 function _atuaBotoesResolver(numero, pedidoId, valorCte){
-  if (!pedidoId) return '<span class="atua-ajuda">sem pedido vinculado</span>';
+  if (!pedidoId) return '<span class="atua-ajuda">sem pedido</span>';
   const n = String(numero).replace(/'/g,"\\'");
   return `<button class="btn btn-primary btn-sm atua-btn-abrir"
             onclick="atuaAbrirPendente('${n}', ${pedidoId}, ${Number(valorCte)||0})">Resolver →</button>`;
