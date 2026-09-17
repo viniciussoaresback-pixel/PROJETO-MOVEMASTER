@@ -429,18 +429,95 @@ function _atuaRenderizar(r){
    botões. A regra dos CT-es que já conferem não muda: estes botões só
    aparecem nos pendentes.
    =========================================================================== */
+/* Um botão só na tabela: os dois caminhos ficam na tela do pendente, onde há
+   espaço para mostrar ANTES o que está sendo decidido — o CT-e, os trechos e
+   os motoristas envolvidos. Dois botões miúdos no meio da linha obrigavam a
+   decidir sem ver nada disso. */
 function _atuaBotoesResolver(numero, pedidoId, valorCte){
   if (!pedidoId) return '<span class="atua-ajuda">sem pedido vinculado</span>';
   const n = String(numero).replace(/'/g,"\\'");
-  return `
-    <div class="atua-resolver">
-      <button class="btn btn-secondary btn-sm" title="100% do valor do CT-e para esta viagem/motorista"
-              onclick="atuaFreteIntegral('${n}', ${pedidoId}, ${Number(valorCte)||0})">💰 Frete integral</button>
-      <button class="btn btn-secondary btn-sm" title="Reparte o valor entre os trechos registrados"
-              onclick="atuaDistribuirTrechos('${n}', ${pedidoId}, ${Number(valorCte)||0})">🔀 Distribuir por trechos</button>
-    </div>`;
+  return `<button class="btn btn-primary btn-sm atua-btn-abrir"
+            onclick="atuaAbrirPendente('${n}', ${pedidoId}, ${Number(valorCte)||0})">Resolver →</button>`;
 }
 window._atuaBotoesResolver = _atuaBotoesResolver;
+
+/* TELA DO PENDENTE
+   Mostra o que é preciso saber para decidir, e só então as duas opções:
+   o CT-e e seu valor, o pedido, a rota, e por quantos caminhões o carro
+   passou — com motorista e valor de tabela de cada trecho. */
+async function atuaAbrirPendente(numero, pedidoId, valorCte){
+  const p = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : [])
+    .find(x => String(x.id) === String(pedidoId));
+  if (!p){ alert('Pedido não encontrado.'); return; }
+
+  let trechos = [];
+  try {
+    const { data } = await supabase.from('pedido_trechos')
+      .select('*').eq('pedido_id', parseInt(pedidoId)).order('ordem', { ascending:true });
+    trechos = data || [];
+  } catch(_){}
+
+  const somaTabela = trechos.reduce((s,t) => s + Number(t.valor_frete||0), 0);
+  const caminhoes = [...new Set(trechos.map(t => t.placa_cegonha).filter(Boolean))];
+
+  const old = document.getElementById('modalPendente'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalPendente';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100080;padding:2vh 1vw';
+  div.innerHTML = `
+    <div class="modal-box pend-box">
+      <div class="pend-cab">
+        <div>
+          <div class="pend-cte">CT-e ${_atuaEsc(numero)}</div>
+          <div class="pend-sub">Pedido #${p.id} · ${_atuaEsc(p.cliente||'—')} ·
+            ${_atuaEsc((p.cidadeOrigem||'?').split('/')[0])} → ${_atuaEsc((p.cidadeDestino||'?').split('/')[0])}</div>
+        </div>
+        <div class="pend-valor">
+          <span>Valor do CT-e</span>
+          <strong>${_atuaFmt(valorCte)}</strong>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalPendente').remove()">✕</button>
+      </div>
+
+      <div class="pend-corpo">
+        ${trechos.length ? `
+          <div class="pend-frase">Este pedido passou por <strong>${caminhoes.length || trechos.length} caminhão(ões)</strong>, em ${trechos.length} trecho(s).</div>
+          <table class="pend-tab">
+            <thead><tr><th>Trecho</th><th>Motorista</th><th>Caminhão</th><th class="right">Valor (tabela)</th></tr></thead>
+            <tbody>
+              ${trechos.map(t => `<tr>
+                <td>${_atuaEsc(t.origem_cidade||'?')} → ${_atuaEsc(t.destino_cidade||'?')}</td>
+                <td>${_atuaEsc(t.motorista_nome||'—')}</td>
+                <td>${_atuaEsc(t.placa_cegonha||'—')}</td>
+                <td class="right">${_atuaFmt(t.valor_frete)}</td>
+              </tr>`).join('')}
+              <tr class="pend-tab-total">
+                <td colspan="3">Soma da tabela</td>
+                <td class="right">${_atuaFmt(somaTabela)}</td>
+              </tr>
+            </tbody>
+          </table>
+          ${Math.abs(somaTabela - Number(valorCte)) >= 0.01 ? `
+            <div class="pend-aviso">A soma da tabela (${_atuaFmt(somaTabela)}) não é igual ao CT-e (${_atuaFmt(valorCte)}). Distribuindo por trechos, o valor do CT-e é repartido na mesma <strong>proporção</strong> da tabela, para o total fechar com o documento.</div>` : ''}
+        ` : `
+          <div class="pend-frase">Este pedido <strong>não tem trechos registrados</strong> — então não há como repartir. Se o transporte foi feito numa perna só, use o frete integral.</div>`}
+      </div>
+
+      <div class="pend-opcoes">
+        <button class="pend-opt pend-opt-integral" onclick="document.getElementById('modalPendente').remove();atuaFreteIntegral('${String(numero).replace(/'/g,"\\'")}', ${pedidoId}, ${Number(valorCte)||0})">
+          <span class="pend-opt-tit">💰 Considerar frete integral</span>
+          <span class="pend-opt-sub">${_atuaFmt(valorCte)} inteiro para esta viagem/motorista</span>
+        </button>
+        <button class="pend-opt pend-opt-trechos" ${trechos.length < 2 ? 'disabled title="Precisa de dois ou mais trechos registrados"' : ''}
+                onclick="document.getElementById('modalPendente').remove();atuaDistribuirTrechos('${String(numero).replace(/'/g,"\\'")}', ${pedidoId}, ${Number(valorCte)||0})">
+          <span class="pend-opt-tit">🔀 Distribuir por trechos</span>
+          <span class="pend-opt-sub">${trechos.length >= 2 ? `reparte entre os ${trechos.length} trechos, conforme a tabela` : 'indisponível: menos de dois trechos'}</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+window.atuaAbrirPendente = atuaAbrirPendente;
 
 /* Frete integral: uma perna só, com o valor cheio do CT-e. */
 async function atuaFreteIntegral(numero, pedidoId, valorCte){
