@@ -909,7 +909,7 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
     }
 }
 
-        // Ao concluir, limpa os documentos (manifesto/CTe) da rota — controle do que está em aberto
+        // Ao concluir: solta os carros transbordados. Os documentos ficam.
         if (novoStatus === 'concluida'){
             // Item 2: carros transbordados saem da viagem AGORA (ao finalizar), mas continuam
             // nos corredores para a próxima perna (já têm status Transbordo + corredor definido).
@@ -923,16 +923,14 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
                     p.rotaId = null; p.rota_id = null; p.placaCegonha = null; p.motorista1 = null;
                 } catch(_){}
             }
-            const docs = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)===String(rotaId));
-            for (const d of docs){
-                try {
-                    await supabase.from('documentos_rota').delete().eq('id', d.id);
-                    // tenta remover o arquivo do storage (caminho após o domínio público)
-                    const m = (d.url||'').split('/movemaster-arquivos/')[1];
-                    if (m) await supabase.storage.from('movemaster-arquivos').remove([m]);
-                } catch(_){}
-            }
-            documentosRotaGlobais = (documentosRotaGlobais||[]).filter(d => String(d.rota_id)!==String(rotaId));
+            /* Os documentos NÃO são mais apagados ao concluir.
+               A regra pedida era tirá-los da tela do MOTORISTA quando a viagem
+               acaba — e isso é filtro de exibição, não exclusão. Apagar a linha
+               e o arquivo do storage destruía CT-e e manifesto de viagens
+               encerradas, que é justamente o que o Histórico de Cargas precisa
+               guardar: sem eles, não há como provar o que foi transportado nem
+               atender fiscalização depois.
+               Quem esconde do motorista é o filtro em renderizarRomaneiosMotorista. */
         }
         await aposMutacaoPedidos();
         renderizarRotas();
