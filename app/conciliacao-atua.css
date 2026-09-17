@@ -47,3 +47,7 @@
 .atua-acoes { display: flex; justify-content: flex-end; margin-top: 1rem; }
 
 [data-tema="claro"] .atua-painel { background: #fff; border-color: rgba(15,17,21,.12); }
+
+/* Bloco de viagens prontas para conferir */
+.atua-bloco-conferir { border-color: rgba(74,222,128,.35); background: rgba(74,222,128,.06); }
+.atua-bloco-conferir .atua-bloco-tit { color: #4ade80; }
