@@ -1315,8 +1315,24 @@ async function _viagemIniciar(rota, carros){
   if (elegiveis.length === 0){ alert('Nenhum carro pronto para iniciar viagem (precisa estar coletado).'); return; }
   _viagemModalCarros('🛫 Iniciar Viagem', 'Confirme os carros que saíram para viagem (Em transporte).', elegiveis, '#2563eb', '✅ Confirmar saída', async (ids) => {
     await _viagemMudarStatusCarros(ids, 'Em Transporte', 'Em transporte', '🛫 Saiu para viagem (evento na viagem)');
-    if (rota.status !== 'em_andamento'){ try { await supabase.from('rotas_planejadas').update({ status:'em_andamento' }).eq('id', rota.id); rota.status='em_andamento'; } catch(_){} }
+    /* Marca a data de saída. Este botão só gravava o status; quem preenchia
+       iniciada_em era o outro caminho (iniciar a rota pela tela de Rotas).
+       Quem começava a viagem por aqui deixava o campo vazio, e todas as telas
+       que mostram "quando saiu" — comercial, fiscal, linha do tempo — exibiam
+       "não iniciada" numa viagem que já estava na estrada.
+       Só grava se ainda não houver data: reiniciar a viagem não reescreve a
+       saída original. */
+    if (rota.status !== 'em_andamento' || !rota.iniciada_em){
+      const upd = { status: 'em_andamento' };
+      if (!rota.iniciada_em) upd.iniciada_em = new Date().toISOString();
+      try {
+        await supabase.from('rotas_planejadas').update(upd).eq('id', rota.id);
+        rota.status = 'em_andamento';
+        if (upd.iniciada_em) rota.iniciada_em = upd.iniciada_em;
+      } catch(_){}
+    }
     document.getElementById('modalViagemAcao').remove();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional();
     renderizarViagensAndamento();
   });
 }
@@ -2264,14 +2280,17 @@ function renderizarPlanejamentoRotas(){
       <div class="plan-kpi"><span class="plan-kpi-lbl">${modoSemRota?'Sem encaixe':'Neste corredor'}</span><span class="plan-kpi-num">${pedidosCol.length}</span></div>
     </div>
 
-    <div class="plan-layout2">
-      <!-- Coluna 1: Corredores + aba Sem Rota -->
-      <div class="plan-col plan-col-corredores">
-        <div class="plan-col-tit plan-col-tit-corr">
-          <span>Corredores</span>
-          <button class="plan-novo-corr" onclick="_planAbrirNovaRotaLivre()" title="Criar um novo corredor">➕ Novo</button>
-        </div>
-        <div class="plan-col-dica">arraste um pedido para cá ↴</div>
+    <!-- Corredores em faixa horizontal, acima das colunas de trabalho.
+         Como coluna lateral, com uma dúzia de corredores, trocar de corredor
+         obrigava a descer a barra de rolagem e voltar. Aqui eles ficam lado a
+         lado em duas fileiras, na largura inteira da tela. -->
+    <div class="plan-col plan-corr-faixa">
+      <div class="plan-col-tit plan-col-tit-corr">
+        <span>Corredores</span>
+        <button class="plan-novo-corr" onclick="_planAbrirNovaRotaLivre()" title="Criar um novo corredor">➕ Novo</button>
+      </div>
+      <div class="plan-col-dica">arraste um pedido para um corredor ↴</div>
+      <div class="plan-corr-lista">
         <div class="plan-corr-item plan-corr-semrota ${modoSemRota?'sel':''}" onclick="_planSelSemRota()">
           <div class="plan-corr-nome">⚠️ Sem rota</div>
           <div class="plan-corr-sub">${semRotaLista.length} pedido(s) sem corredor</div>
@@ -2294,8 +2313,10 @@ function renderizarPlanejamentoRotas(){
           </div>`;
         }).join('')}
       </div>
+    </div>
 
-      <!-- Coluna 2: Pedidos -->
+    <div class="plan-layout2">
+      <!-- Coluna 1: Pedidos -->
       <div class="plan-col plan-col-pedidos">
         <div class="plan-col-tit">
           <span>${tituloCol} <span class="plan-col-badge">${pedidosCol.length}</span></span>
