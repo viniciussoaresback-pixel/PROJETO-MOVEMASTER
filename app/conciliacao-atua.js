@@ -357,12 +357,13 @@ function _atuaRenderizar(r){
       `<p class="atua-ajuda">${_atuaFmt(total(r.conferem))} — nada a fazer.</p>`)}
 
     ${bloco('🟡','Valor divergente', r.divergentes, `
-      <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Cliente</th><th class="right">Sistema</th><th class="right">ATUA</th><th class="right">Diferença</th></tr></thead>
-      <tbody>${r.divergentes.map(d => `<tr>
+      <table class="atua-tabela"><thead><tr><th>CT-e</th><th>Cliente</th><th class="right">Sistema</th><th class="right">ATUA</th><th class="right">Diferença</th><th>Resolver</th></tr></thead>
+      <tbody>${r.divergentes.map(d => `<tr id="atuaLinha_${_atuaEsc(d.numero)}">
         <td>${_atuaEsc(d.numero)}</td><td>${_atuaEsc(d.cliente)}</td>
         <td class="right">${_atuaFmt(d.sistema)}</td>
         <td class="right">${_atuaFmt(d.atua)}</td>
         <td class="right" style="color:#fbbf24">${_atuaFmt(d.atua - d.sistema)}</td>
+        <td>${_atuaBotoesResolver(d.numero, d.pedidoId, d.atua)}</td>
       </tr>`).join('')}</tbody></table>`)}
 
     ${bloco('🟠','Valor fora da tabela de trecho', (r.foraTabela||[]), `
@@ -414,6 +415,178 @@ function _atuaRenderizar(r){
       <button class="btn btn-secondary btn-sm" onclick="atuaVerPendencias()">📋 Pendências em aberto</button>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalAtua').remove()">Fechar</button>
     </div>`;
+}
+
+/* ===========================================================================
+   RESOLUÇÃO RÁPIDA DOS PENDENTES
+
+   Um CT-e que existe no ATUA mas não casa com a tabela de valores quase
+   sempre é uma de duas coisas: ou o frete é integral de uma viagem só, ou o
+   transporte foi feito em mais de uma perna, por motoristas diferentes, e o
+   valor precisa ser repartido entre eles.
+
+   Antes isso exigia abrir o pedido e lançar perna por perna. Agora são dois
+   botões. A regra dos CT-es que já conferem não muda: estes botões só
+   aparecem nos pendentes.
+   =========================================================================== */
+function _atuaBotoesResolver(numero, pedidoId, valorCte){
+  if (!pedidoId) return '<span class="atua-ajuda">sem pedido vinculado</span>';
+  const n = String(numero).replace(/'/g,"\\'");
+  return `
+    <div class="atua-resolver">
+      <button class="btn btn-secondary btn-sm" title="100% do valor do CT-e para esta viagem/motorista"
+              onclick="atuaFreteIntegral('${n}', ${pedidoId}, ${Number(valorCte)||0})">💰 Frete integral</button>
+      <button class="btn btn-secondary btn-sm" title="Reparte o valor entre os trechos registrados"
+              onclick="atuaDistribuirTrechos('${n}', ${pedidoId}, ${Number(valorCte)||0})">🔀 Distribuir por trechos</button>
+    </div>`;
+}
+window._atuaBotoesResolver = _atuaBotoesResolver;
+
+/* Frete integral: uma perna só, com o valor cheio do CT-e. */
+async function atuaFreteIntegral(numero, pedidoId, valorCte){
+  const p = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : [])
+    .find(x => String(x.id) === String(pedidoId));
+  if (!p){ alert('Pedido não encontrado.'); return; }
+  const origem  = (p.cidadeOrigem  || '').split('/')[0];
+  const destino = (p.cidadeDestino || '').split('/')[0];
+  const motorista = p.motorista1 || '(motorista da viagem)';
+
+  if (!confirm(
+    `Considerar frete INTEGRAL para o CT-e ${numero}?\n\n` +
+    `${origem} → ${destino}\n` +
+    `Motorista: ${motorista}\n` +
+    `Valor: ${_atuaFmt(valorCte)}\n\n` +
+    `O valor inteiro fica nesta viagem, sem repartir entre trechos.`
+  )) return;
+
+  await _atuaGravarResolucao(numero, pedidoId, 'integral', [{
+    origem, destino, motorista, valor: valorCte
+  }], valorCte);
+}
+window.atuaFreteIntegral = atuaFreteIntegral;
+
+/* Distribuição por trechos: usa os trechos já registrados do pedido e reparte
+   o valor do CT-e entre eles, proporcionalmente ao valor de tabela de cada um.
+
+   O total distribuído tem de fechar EXATAMENTE com o CT-e. Como rateio
+   proporcional gera dízima, a sobra de centavos vai para o último trecho —
+   caso contrário a soma das pernas ficaria um ou dois centavos diferente do
+   documento, e essa diferença aparece no fechamento do mês. */
+async function atuaDistribuirTrechos(numero, pedidoId, valorCte){
+  let trechos = [];
+  try {
+    const { data, error } = await supabase.from('pedido_trechos')
+      .select('*').eq('pedido_id', parseInt(pedidoId)).order('ordem', { ascending:true });
+    if (error) throw error;
+    trechos = data || [];
+  } catch(e){ alert('Não consegui ler os trechos: '+(e.message||e)); return; }
+
+  if (trechos.length < 2){
+    alert(
+      `O pedido do CT-e ${numero} tem ${trechos.length} trecho registrado.\n\n` +
+      `Para distribuir é preciso ter dois ou mais. Se o transporte foi feito numa perna só, ` +
+      `use "Frete integral".`
+    );
+    return;
+  }
+
+  // Pesos: o valor de tabela de cada trecho. Sem valores, divide igualmente.
+  const pesos = trechos.map(t => Number(t.valor_frete) || 0);
+  const somaPesos = pesos.reduce((a,b) => a+b, 0);
+  const usarIgual = somaPesos <= 0;
+
+  const centavosTotal = Math.round(Number(valorCte) * 100);
+  let acumulado = 0;
+  const rateio = trechos.map((t, i) => {
+    let centavos;
+    if (i === trechos.length - 1){
+      centavos = centavosTotal - acumulado;        // o último absorve a sobra
+    } else {
+      centavos = usarIgual
+        ? Math.floor(centavosTotal / trechos.length)
+        : Math.floor(centavosTotal * (pesos[i] / somaPesos));
+      acumulado += centavos;
+    }
+    return {
+      origem:  (t.origem_cidade  || '').split('/')[0],
+      destino: (t.destino_cidade || '').split('/')[0],
+      motorista: t.motorista_nome || '—',
+      cegonha: t.placa_cegonha || '',
+      tabela: pesos[i],
+      valor: centavos / 100
+    };
+  });
+
+  const somaRateio = rateio.reduce((s,r) => s + r.valor, 0);
+  if (!confirm(
+    `Distribuir ${_atuaFmt(valorCte)} do CT-e ${numero} entre ${rateio.length} trechos?\n\n` +
+    rateio.map((r,i) => `${i+1}. ${r.origem} → ${r.destino} · ${r.motorista}: ${_atuaFmt(r.valor)}`).join('\n') +
+    `\n\nTotal distribuído: ${_atuaFmt(somaRateio)}` +
+    (usarIgual ? '\n\n(os trechos não têm valor de tabela — dividido em partes iguais)' : '')
+  )) return;
+
+  await _atuaGravarResolucao(numero, pedidoId, usarIgual ? 'trechos_igual' : 'trechos', rateio, valorCte);
+}
+window.atuaDistribuirTrechos = atuaDistribuirTrechos;
+
+/* Grava as pernas, resolve a pendência e deixa o rastro de quem decidiu. */
+async function _atuaGravarResolucao(numero, pedidoId, opcao, pernas, valorCte){
+  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const agora = new Date().toISOString();
+  const rotulo = opcao === 'integral' ? 'frete integral'
+               : opcao === 'trechos_igual' ? 'distribuído por trechos (partes iguais)'
+               : 'distribuído por trechos (tabela)';
+  try {
+    for (const perna of pernas){
+      await supabase.from('remuneracao_pernas').upsert({
+        pedido_id: parseInt(pedidoId),
+        trecho_origem: perna.origem,
+        trecho_destino: perna.destino,
+        valor: perna.valor,
+        definido_por: usuario,
+        definido_em: agora
+      }, { onConflict: 'pedido_id,trecho_origem,trecho_destino' });
+      // memória, para a Central de Conferência já mostrar
+      window._confValoresPerna = window._confValoresPerna || {};
+      window._confValoresPerna[`${pedidoId}|${perna.origem}|${perna.destino}`] = perna.valor;
+    }
+
+    const detalhe = pernas.map(p => `${p.origem}→${p.destino} (${p.motorista||'—'}): ${_atuaFmt(p.valor)}`).join(' · ');
+
+    // fecha a pendência com a decisão registrada
+    try {
+      await supabase.from('conciliacao_pendencias').update({
+        status:'resolvida', resolvida_em: agora, resolvida_por: usuario,
+        resolucao_nota: `${rotulo} — ${detalhe}`
+      }).eq('numero_cte', String(numero)).eq('status','aberta');
+    } catch(e){ console.warn('pendência:', e?.message); }
+
+    // e no histórico do pedido, que é onde alguém vai procurar depois
+    try {
+      const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+      await supabase.from('historico_status').insert({
+        pedido_id: parseInt(pedidoId),
+        status_anterior: p?.status, status_novo: p?.status,
+        usuario_nome: usuario,
+        usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'financeiro'),
+        observacao: `💰 Conferência do CT-e ${numero} (${_atuaFmt(valorCte)}): ${rotulo}. ${detalhe}.`
+      });
+    } catch(e){ console.warn('histórico:', e?.message); }
+
+    if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+
+    // marca a linha como resolvida sem precisar rodar tudo de novo
+    const linha = document.getElementById('atuaLinha_' + numero);
+    if (linha){
+      linha.style.opacity = '.55';
+      const cel = linha.lastElementChild;
+      if (cel) cel.innerHTML = `<span class="atua-resolvido">✅ ${rotulo}</span>`;
+    }
+    if (typeof mmToast === 'function') mmToast(`✅ CT-e ${numero}: ${rotulo}`);
+    if (typeof renderizarCentralConferencia === 'function') renderizarCentralConferencia();
+  } catch(e){
+    alert('Erro ao gravar a resolução: ' + (e.message||e));
+  }
 }
 
 /* ===========================================================================
