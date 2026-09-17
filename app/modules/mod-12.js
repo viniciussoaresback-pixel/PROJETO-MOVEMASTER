@@ -380,19 +380,35 @@ function _pvGradeHTML(rotaVazia){
           <span class="pv-grupo-cont">${itens.length} carro(s)</span>
         </div>
         <div class="pv-grupo-cards">
-          ${itens.map(p => `
+          ${itens.map(p => {
+            /* Mesmos selos do card do Planejamento (_selosPedidoHTML): transbordo
+               com a cidade, CT-e já emitido, observação. Na hora de montar a
+               carga isso decide o que entra — um carro que já transbordou em
+               Maringá não pode ir numa cegonha que não passa lá, e um com CT-e
+               emitido custa retrabalho no fiscal se for tirado depois.
+               Aqui a versão é compacta: são dezenas de cartões lado a lado. */
+            const selos = (typeof _selosPedidoHTML === 'function') ? _selosPedidoHTML(p) : '';
+            const ondeEsta = (p.patioAtual && typeof _norm === 'function'
+                && _norm(p.patioAtual) !== _norm(p.cidadeOrigem||''))
+              ? String(p.patioAtual).split('/')[0].replace('PÁTIO ','') : '';
+            return `
             <label class="pv-card" data-cliente="${String(cliente).replace(/"/g,'&quot;')}">
               <input type="checkbox" class="plan-viagem-ped" value="${p.id}" ${rotaVazia ? '' : 'checked'}
                      onchange="_pvAtualizarContador()">
               <div class="pv-card-corpo">
-                <div class="pv-card-placa">${p.placa||'—'}</div>
+                <div class="pv-card-placa">${p.placa||'—'}
+                  ${p.valorFrete?`<span class="pv-card-valor">R$ ${Number(p.valorFrete).toLocaleString('pt-BR')}</span>`:''}
+                </div>
                 <div class="pv-card-modelo">${p.modelo||'—'}</div>
-                <div class="pv-card-rota">${(p.patioAtual||p.cidadeOrigem||'—').split('/')[0]} → ${(p.cidadeDestino||'—').split('/')[0]}</div>
+                ${p.referencia?`<div class="pv-card-ref" title="Solicitação / referência do cliente">🏷️ ${String(p.referencia).replace(/"/g,'&quot;')}</div>`:''}
+                <div class="pv-card-rota">${(p.cidadeOrigem||'—').split('/')[0]} → ${(p.cidadeDestino||'—').split('/')[0]}</div>
+                ${ondeEsta?`<div class="pv-card-onde">📍 está em ${ondeEsta}</div>`:''}
+                ${selos?`<div class="pv-card-selos">${selos}</div>`:''}
                 <div class="pv-card-id">#${p.id}</div>
               </div>
               <button type="button" class="pv-card-trocar" title="Trocar o veículo deste pedido"
                       onclick="event.preventDefault();event.stopPropagation();_planTrocarVeiculo(${p.id})">🔄</button>
-            </label>`).join('')}
+            </label>`; }).join('')}
         </div>
       </div>`).join('');
 }
