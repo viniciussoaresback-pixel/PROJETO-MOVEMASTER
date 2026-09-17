@@ -1708,7 +1708,9 @@ function abrirFecharEnviarCarga(rotaId){
     }).join('');
     return `<div class="rm-carro" id="rmCarro_${p.id}">
       <div class="rm-carro-head">
-        <span><strong>#${p.id}</strong> · <strong>${p.placa||'—'}</strong> ${p.modelo?('· '+p.modelo):''}</span>
+        <span>
+          <input type="checkbox" class="rm-lote-chk" value="${p.id}" onchange="_rmLoteContar()" title="Marcar para preencher em bloco">
+          <strong>#${p.id}</strong> · <strong>${p.placa||'—'}</strong> ${p.modelo?('· '+p.modelo):''}</span>
         <span class="text-muted" style="font-size:.8rem">${p.cidadeOrigem||'—'} → <strong>${p.cidadeDestino||'—'}</strong></span>
       </div>
       ${p.cliente?`<div class="rm-carro-cliente">👤 ${p.cliente}</div>`:''}
@@ -1733,15 +1735,42 @@ function abrirFecharEnviarCarga(rotaId){
     </div>`;
   };
   div.innerHTML = `
-    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:820px;width:96%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+    <div class="modal-box rm-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <h2 style="margin:0">📋 Romaneio de carregamento</h2>
+        <h2 style="margin:0">📋 Romaneio de carregamento — ${d.carros.length} veículo(s)</h2>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalRomaneio').remove()">✕</button>
       </div>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">Marque quais carros já estão <strong>no pátio</strong> e informe <strong>onde está</strong> cada um. Salve e envie ao motorista — ele verá esta lista (e o PDF) para saber onde coletar/pegar cada carro.</p>
       <div class="romaneio-cab" style="margin-bottom:10px"><strong>🚛 ${d.rota.placa_cegonha||'—'}</strong>${d.rota.motorista_1?' · 👤 '+d.rota.motorista_1:''}${d.rota.nome?' · '+d.rota.nome:''}</div>
-      <div class="rm-carros-lista">${d.carros.map(linhaEdit).join('')}</div>
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+
+      <!-- Preencher em bloco. Numa carga de 21 carros que saíram todos do
+           mesmo pátio, marcar um por um são 21 cliques para dizer a mesma
+           coisa. Aqui é: marca os carros, escolhe o pátio, aplica. -->
+      <div class="rm-lote">
+        <div class="rm-lote-linha">
+          <label class="rm-lote-todos">
+            <input type="checkbox" id="rmLoteTodos" onchange="_rmLoteMarcarTodos(this.checked)">
+            <span>Selecionar todos</span>
+          </label>
+          <span class="rm-lote-cont" id="rmLoteCont">0 de ${d.carros.length} marcados</span>
+        </div>
+        <div class="rm-lote-linha rm-lote-aplicar">
+          <span class="rm-lote-rot">Aplicar aos marcados:</span>
+          <div class="rm-lote-chips">
+            ${PATIOS_FIXOS.map(pt => {
+              const lbl = _labelPatio(pt).replace('🅿️ ','');
+              return `<button type="button" class="rm-patio-chip" onclick="_rmLoteAplicarPatio('${lbl.replace(/'/g,"\\'")}')">🅿️ ${lbl.replace('PÁTIO ','')}</button>`;
+            }).join('')}
+          </div>
+        </div>
+        <div class="rm-lote-linha rm-lote-livre">
+          <input type="text" id="rmLoteTexto" placeholder="ou digite um endereço/local para todos os marcados">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="_rmLoteAplicarTexto()">Aplicar</button>
+        </div>
+      </div>
+
+      <div class="rm-carros-lista rm-grade">${d.carros.map(linhaEdit).join('')}</div>
+      <div class="rm-rodape" style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="_salvarLocaisRomaneio(${rotaId})">💾 Salvar localização</button>
         <button class="btn btn-primary" style="flex:1;min-width:180px" onclick="_salvarLocaisRomaneio(${rotaId}, true)">📤 Salvar e enviar ao motorista</button>
         <button class="btn btn-secondary" onclick="_gerarPdfRomaneio(${rotaId})">📄 Gerar PDF</button>
@@ -1757,6 +1786,51 @@ function _labelPatio(pt){
 }
 
 // Romaneio Opção B: chips de pátio + endereço editável
+/* ---- Preenchimento em lote do romaneio ----
+   Reaproveita _rmSelecionarPatio por carro em vez de duplicar a lógica: se um
+   dia mudar como o pátio é gravado, muda num lugar só. */
+function _rmLoteIds(){
+  return [...document.querySelectorAll('.rm-lote-chk:checked')].map(c => parseInt(c.value)).filter(n => !isNaN(n));
+}
+function _rmLoteContar(){
+  const marcados = document.querySelectorAll('.rm-lote-chk:checked').length;
+  const total = document.querySelectorAll('.rm-lote-chk').length;
+  const el = document.getElementById('rmLoteCont');
+  if (el) el.textContent = `${marcados} de ${total} marcados`;
+  const todos = document.getElementById('rmLoteTodos');
+  if (todos) todos.checked = (total > 0 && marcados === total);
+}
+window._rmLoteContar = _rmLoteContar;
+
+function _rmLoteMarcarTodos(valor){
+  document.querySelectorAll('.rm-lote-chk').forEach(c => { c.checked = !!valor; });
+  _rmLoteContar();
+}
+window._rmLoteMarcarTodos = _rmLoteMarcarTodos;
+
+function _rmLoteAplicarPatio(patio){
+  const ids = _rmLoteIds();
+  if (!ids.length){ alert('Marque os carros que estão neste pátio.'); return; }
+  ids.forEach(id => _rmSelecionarPatio(id, patio));
+  if (typeof _rmToastConfirmacao === 'function')
+    _rmToastConfirmacao(`🅿️ ${patio} aplicado a ${ids.length} carro(s).`);
+}
+window._rmLoteAplicarPatio = _rmLoteAplicarPatio;
+
+function _rmLoteAplicarTexto(){
+  const ids = _rmLoteIds();
+  if (!ids.length){ alert('Marque os carros primeiro.'); return; }
+  const txt = (document.getElementById('rmLoteTexto')?.value || '').trim();
+  if (!txt){ alert('Digite o local a aplicar.'); return; }
+  ids.forEach(id => {
+    const campo = document.getElementById('rmColeta_'+id);
+    if (campo){ campo.value = txt; if (typeof _rmColetaDigitado === 'function') _rmColetaDigitado(id); }
+  });
+  if (typeof _rmToastConfirmacao === 'function')
+    _rmToastConfirmacao(`📍 Local aplicado a ${ids.length} carro(s).`);
+}
+window._rmLoteAplicarTexto = _rmLoteAplicarTexto;
+
 function _rmSelecionarPatio(pedidoId, patio){
   // Preenche o campo unificado "Coletar em" com o pátio
   const campo = document.getElementById('rmColeta_'+pedidoId);
