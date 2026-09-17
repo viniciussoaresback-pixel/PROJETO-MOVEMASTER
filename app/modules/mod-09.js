@@ -11,6 +11,24 @@ async function _confirmarCriarRotaCorr(){
   if (!cegonha){
     if (!confirm('Criar a rota SEM cegonha? Ela ficará como "A definir" e aparecerá na seção "Rotas a definir" das Vagas por Rota, até você escolher o caminhão.')) return;
   }
+
+  /* Mesma trava de capacidade do outro caminho de criação (modal do
+     Planejamento). Este aqui é o atalho pela seleção direta no corredor —
+     sem a trava nos dois, sobra sempre uma porta para a carga estourar. */
+  if (cegonha && ctx.ids && ctx.ids.length){
+    const veic = (veiculosGlobais||[]).find(v => v.placa === cegonha);
+    const cap = Number(veic?.capacidade) || 0;
+    if (cap > 0 && ctx.ids.length > cap){
+      alert(
+        `Não dá para criar esta rota.\n\n` +
+        `Cegonha ${cegonha}${veic?.modelo ? ' ('+veic.modelo+')' : ''}: ${cap} vaga(s)\n` +
+        `Carros selecionados: ${ctx.ids.length}\n` +
+        `Excesso: ${ctx.ids.length - cap}\n\n` +
+        `Desmarque ${ctx.ids.length - cap} carro(s) ou escolha um veículo maior.`
+      );
+      return;
+    }
+  }
   const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
   try {
     const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
@@ -1897,28 +1915,100 @@ function _confAtualizarDiferencasFrete(){
    Cada renderizador verifica o próprio container e sai na primeira linha
    se não estiver na tela, então chamar todos é barato e evita esquecer um.
    ========================================================================= */
-function _propagarMudancaOperacional(){
-  // ATENÇÃO ao editar esta lista: um nome errado aqui não dá erro nenhum,
-  // a tela simplesmente não é redesenhada e o usuário vê dado velho até
-  // apertar F5. Era o caso de 'renderizarCentralOperacoes' (no plural), que
-  // nunca existiu — a função é renderizarCentralOperacao, no singular.
-  // Também faltavam as telas de corredores/planejamento, que é justamente
-  // onde se move carro de um corredor para outro.
-  [
-    'renderizarCentralOperacao', 'renderizarEquipesPainel',
-    'renderizarViagensAndamento', 'renderizarCentralConferencia',
-    'renderizarColetasDirecionadas', 'renderizarRomaneiosMotorista',
-    'carregarPedidosMotorista', 'renderizarOcupacao', 'renderizarKanban',
-    'renderizarPainelCegonhas', 'renderizarPedidosComercial',
-    'renderizarComercialPedidos', 'carregarDadosFiscal',
-    'renderizarAcompanhamento', 'renderizarCobranca',
-    'renderizarPainelCorredores', 'renderizarPlanejamentoRotas',
-    'renderizarPainelPatios', 'renderizarVagasPorRota'
-  ].forEach(fn => {
-    if (typeof window[fn] === 'function') {
-      try { window[fn](); } catch(e){ console.warn(fn, e); }
-    }
+function _propagarMudancaOperacional(imediato){
+  return _mmPropagar(imediato);
+}
+
+/* ============================================================
+   PROPAGAÇÃO — desenha só o que está à vista
+
+   O comentário acima dizia que "cada renderizador verifica o próprio
+   container e sai na primeira linha se não estiver na tela". Não é o que
+   acontece: eles testam se o elemento EXISTE (`if (!cont) return`), e ele
+   existe mesmo escondido — as abas ficam no HTML com display:none. Ou seja,
+   toda mudança redesenhava as 19 telas do sistema, visíveis ou não. Com
+   500+ pedidos em memória, cada uma reconstrói tabelas inteiras por
+   innerHTML; somadas, é o que trava a troca de aba.
+
+   Dois desperdícios a mais na lista antiga: carregarDadosFiscal CONSULTA O
+   BANCO, então cada alteração disparava requisição de uma tela que ninguém
+   estava vendo; e renderizarKanban é apelido de renderizarOcupacao, que
+   assim saía duas vezes.
+
+   Agora: desenha as visíveis, anota as escondidas como pendentes, atualiza
+   quando aparecem. O resultado para o usuário é o mesmo.
+   ============================================================ */
+
+// Cada função de render e o elemento que ela preenche.
+const _MM_RENDERS = {
+  renderizarCentralOperacao:    'painelViewCentral',
+  renderizarEquipesPainel:      'equipesPainelWrap',
+  renderizarViagensAndamento:   'painelViewViagens',
+  renderizarCentralConferencia: 'conferenciaConteudo',
+  renderizarColetasDirecionadas:'cardColetasDirecionadas',
+  renderizarRomaneiosMotorista: 'romaneiosMotoristaWrap',
+  carregarPedidosMotorista:     'pedidosMotoristaLista',
+  renderizarOcupacao:           'ocupTabelaCorpo',
+  renderizarPedidosComercial:   'corpoTabelaPedidosComercial',
+  renderizarComercialPedidos:   'comercialPedidosConteudo',
+  renderizarAcompanhamento:     'corpoTabelaAcompanhamento',
+  renderizarCobranca:           'cobrancaWrap',
+  renderizarPainelCorredores:   'painelViewCorredores',
+  renderizarPlanejamentoRotas:  'painelViewPlanejamento',
+  renderizarPainelPatios:       'painelPatios',
+  renderizarVagasPorRota:       'vagasPorRotaWrap',
+  carregarDadosFiscal:          'corpoTabelaFiscal',
+  renderizarPainelCegonhas:     'painelCegonhas'
+};
+
+window.__mmPendentes = window.__mmPendentes || new Set();
+
+/* Visível = tem caixa na tela. offsetParent devolve null para quem está com
+   display:none, inclusive por causa de um ancestral — que é o caso das abas
+   escondidas. */
+function _mmVisivel(id){
+  const el = document.getElementById(id);
+  if (!el) return false;
+  return el.offsetParent !== null;
+}
+
+function _mmRodar(fn){
+  if (typeof window[fn] !== 'function') return;
+  try { window[fn](); } catch(e){ console.warn(fn, e); }
+}
+
+function _mmPropagarAgora(){
+  Object.entries(_MM_RENDERS).forEach(([fn, id]) => {
+    if (typeof window[fn] !== 'function') return;
+    if (_mmVisivel(id)) { window.__mmPendentes.delete(fn); _mmRodar(fn); }
+    else window.__mmPendentes.add(fn);   // fica devendo até aparecer
   });
 }
 
+/* Coalescência: um fluxo como "criar viagem" chama a propagação várias vezes
+   seguidas (update, histórico, vínculo). Sem isto, a tela é redesenhada uma
+   vez por chamada. */
+let _mmPropTimer = null;
+function _mmPropagar(imediato){
+  if (imediato){
+    if (_mmPropTimer){ clearTimeout(_mmPropTimer); _mmPropTimer = null; }
+    _mmPropagarAgora();
+    return;
+  }
+  if (_mmPropTimer) clearTimeout(_mmPropTimer);
+  _mmPropTimer = setTimeout(() => { _mmPropTimer = null; _mmPropagarAgora(); }, 120);
+}
+
+/* Chamado quando uma aba passa a ser exibida: coloca em dia o que mudou
+   enquanto ela estava escondida. */
+function _mmAtualizarPendentes(){
+  if (!window.__mmPendentes || !window.__mmPendentes.size) return;
+  [...window.__mmPendentes].forEach(fn => {
+    const id = _MM_RENDERS[fn];
+    if (id && _mmVisivel(id)){ window.__mmPendentes.delete(fn); _mmRodar(fn); }
+  });
+}
+
+window._mmVisivel = _mmVisivel;
+window._mmAtualizarPendentes = _mmAtualizarPendentes;
 window._propagarMudancaOperacional = _propagarMudancaOperacional;
