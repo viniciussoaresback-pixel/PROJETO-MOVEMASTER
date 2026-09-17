@@ -9923,7 +9923,7 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
 .pv-grupo-todos { display:flex; align-items:center; gap:8px; font-size:.82rem; font-weight:700; cursor:pointer; }
 .pv-grupo-todos input { width:16px; height:16px; accent-color:var(--accent,#ff6a00); }
 .pv-grupo-cont { font-size:.72rem; color:var(--text-tertiary,#8b93a1); font-weight:600; white-space:nowrap; }
-.pv-grupo-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(168px, 1fr)); gap:7px; }
+.pv-grupo-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(196px, 1fr)); gap:7px; }
 
 .pv-card { position:relative; display:flex; gap:8px; align-items:flex-start; cursor:pointer;
   padding:8px 9px; border-radius:9px; border:1px solid var(--border,rgba(255,255,255,.1));
@@ -9938,6 +9938,17 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
 .pv-card-rota { font-size:.7rem; color:var(--text-tertiary,#8b93a1); margin-top:3px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pv-card-id { font-size:.64rem; color:var(--text-tertiary,#8b93a1); opacity:.7; margin-top:2px; }
+
+/* Informação do pedido no cartão de montar carga — versão compacta dos selos
+   do Planejamento. Fontes menores porque são dezenas de cartões lado a lado. */
+.pv-card-placa { display:flex; align-items:baseline; gap:6px; justify-content:space-between; }
+.pv-card-valor { font-size:.68rem; font-weight:700; color:#22c55e; white-space:nowrap; }
+.pv-card-ref { font-size:.68rem; color:#f59e0b; font-weight:600; margin-top:2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pv-card-onde { font-size:.66rem; color:#a855f7; margin-top:2px; }
+.pv-card-selos { margin-top:4px; display:flex; flex-wrap:wrap; gap:3px; }
+.pv-card-selos .selo-pedido { font-size:.6rem; padding:1px 5px; }
+.pv-card-selos .selos-pedido { display:flex; flex-wrap:wrap; gap:3px; }
 .pv-card-trocar { position:absolute; top:5px; right:5px; background:none; border:none; cursor:pointer;
   opacity:0; font-size:.78rem; padding:2px 4px; border-radius:4px; transition:opacity .12s; }
 .pv-card:hover .pv-card-trocar { opacity:.6; }
