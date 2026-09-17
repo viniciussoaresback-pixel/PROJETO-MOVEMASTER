@@ -60,7 +60,14 @@ function _atuaFmt(n){
 /** Descobre qual coluna da planilha corresponde a cada campo. */
 function _atuaMapearColunas(cabecalho){
   const mapa = {};
-  const nomes = cabecalho.map(c => _atuaNorm(c));
+  /* Array.from, não .map(): o sheet_to_json devolve arrays ESPARSOS quando o
+     cabeçalho tem células vazias no meio — buracos de verdade, não undefined
+     guardado. O .map() pula buracos e os mantém no resultado; o .findIndex()
+     abaixo, ao contrário, VISITA buracos e entrega undefined à função. Daí o
+     "Cannot read properties of undefined (reading 'includes')": bastava uma
+     coluna sem título no relatório do ATUA para derrubar a conferência.
+     Array.from materializa tudo, trocando buraco por string vazia. */
+  const nomes = Array.from(cabecalho || [], c => _atuaNorm(c));
 
   Object.keys(ATUA_COLUNAS).forEach(campo => {
     // Percorre os termos NA ORDEM da lista e, para cada um, tenta primeiro o
@@ -68,7 +75,7 @@ function _atuaMapearColunas(cabecalho){
     // vl_frete_empresa ser testado — e o valor comparado seria o errado.
     for (const termo of ATUA_COLUNAS[campo]){
       let idx = nomes.findIndex(n => n === termo);
-      if (idx < 0) idx = nomes.findIndex(n => n.includes(termo));
+      if (idx < 0) idx = nomes.findIndex(n => typeof n === 'string' && n.includes(termo));
       if (idx >= 0){ mapa[campo] = idx; return; }
     }
   });
@@ -166,7 +173,8 @@ async function _atuaProcessarInterno(arq, corpo){
   // Monta o lado ATUA
   const atua = {};
   for (let i = iCab + 1; i < linhas.length; i++){
-    const L = linhas[i] || [];
+    // mesma razão do cabeçalho: linha esparsa vira linha densa antes de usar
+    const L = Array.from(linhas[i] || [], v => v);
     // O número costuma vir como 59458.0 (numérico do Excel)
     const num = String(L[mapa.numero] ?? '').split('.')[0].replace(/\D/g,'');
     if (!num) continue;
@@ -174,7 +182,7 @@ async function _atuaProcessarInterno(arq, corpo){
     // Cancelado de duas formas: data de cancelamento preenchida (formato do
     // ATUA) ou a palavra num campo de status (outros relatórios).
     const dtCanc = mapa.cancelamento != null ? String(L[mapa.cancelamento]||'').trim() : '';
-    const sit = _atuaNorm(mapa.situacao != null ? L[mapa.situacao] : '');
+    const sit = String(_atuaNorm(mapa.situacao != null ? L[mapa.situacao] : '') || '');
     const cancelado = !!dtCanc || sit.includes('cancel');
 
     atua[num] = {
