@@ -175,7 +175,7 @@ async function _sepConfirmar(rotaOrigemId){
 
   const destinoId = document.getElementById('sepDestino')?.value || '';
   const motivo = document.getElementById('sepMotivo')?.value.trim() || 'separação de transportes registrados juntos';
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const rotaOrigem = (rotasGlobais||[]).find(r => String(r.id)===String(rotaOrigemId));
 
   let nome = '', cegonha = '', motorista = '';
