@@ -34,7 +34,7 @@ async function abrirModalAlocacaoCarga(itens, veiculo) {
                    `${p0.cidadeOrigem}/${p0.ufOrigem} → ${p0.cidadeDestino}/${p0.ufDestino}`;
     if (!confirm(`Alocar os múltiplos veículos na cegonha ${veiculo.placa}?\n\n${resumo}\n\nFicará com ${emUso + itens.length}/${capacidade} vagas ocupadas.`)) return;
 
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
     const atualizacao = {
         placa_cegonha: veiculo.placa,
         motorista_1: veiculo.motorista_padrao || null,
@@ -917,7 +917,7 @@ async function confirmarAlocacao(event) {
                     pedido_id: parseInt(pedidoId),
                     status_anterior: pedidoAtual?.status || 'Pendente',
                     status_novo: 'Intenção Agendada',
-                    usuario_nome: document.getElementById('usuarioLogado')?.textContent || 'Logística',
+                    usuario_nome: _usuarioAtualNome() || 'Logística',
                     usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica',
                     observacao: `Alocado no veículo ${veiculoPlaca} com motorista ${motorista1}`
                 });
@@ -1182,7 +1182,7 @@ async function gerarPDFAuditoria() {
 
 async function marcarFaturado(id) {
     if (!supabase) return;
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+    const usuarioNome = _usuarioAtualNome() || 'Financeiro';
     try {
         const { error } = await supabase.from('ocorrencias').update({
             faturado: true, faturado_em: new Date().toISOString(), faturado_por: usuarioNome
@@ -1333,7 +1333,7 @@ async function marcarReceita(pedidoId, confirmar) {
         if (obs === null) return;
         obs = obs.trim() || null;
     }
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+    const usuarioNome = _usuarioAtualNome() || 'Financeiro';
     try {
         const upd = confirmar
             ? { receita_confirmada: true, receita_confirmada_em: new Date().toISOString(), receita_confirmada_por: usuarioNome, receita_observacao: obs,
@@ -1781,7 +1781,7 @@ function _colAbrirDirecionamento(ids){
 
 async function _colJaNoPatio(ids){
   document.getElementById('modalDirecionarColeta')?.remove();
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const agora = new Date().toISOString();
   // Em lote: guarda o status anterior de todos antes de alterar
   const _antesPorId = {};
