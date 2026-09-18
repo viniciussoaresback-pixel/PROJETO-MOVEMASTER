@@ -10055,3 +10055,20 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
   .sep-lateral { width:100%; border-left:none; padding-left:0; padding-top:14px;
     border-top:1px solid var(--border,rgba(255,255,255,.1)); }
 }
+
+/* Garante a rolagem do modal de edição mesmo com outros CSS carregados depois.
+   O rodapé fica preso embaixo e só o corpo rola. */
+.ep-content { display:flex; flex-direction:column; overflow:hidden !important; max-height:90vh; }
+.ep-content > .ep-body { flex:1 1 auto; overflow-y:auto; min-height:0; }
+.ep-content > .ep-header,
+.ep-content > .ep-aviso,
+.ep-content > .ep-actions { flex:0 0 auto; position:static; }
+
+/* Quem lançou o pedido — abre o histórico do carro */
+.hist-lancamento { padding:12px 14px; border-radius:10px; margin-bottom:12px;
+  background:rgba(255,106,0,.07); border:1px solid rgba(255,106,0,.25); }
+.hist-lanc-tit { font-size:.74rem; font-weight:800; color:#ff6a00;
+  text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.hist-lanc-corpo { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:.86rem; }
+.hist-lanc-data { color:var(--text-tertiary,#8b93a1); font-size:.78rem; white-space:nowrap; }
+.hist-lanc-sub { font-size:.78rem; color:var(--text-secondary,#b6bcc6); margin-top:4px; }
