@@ -137,6 +137,7 @@ function _rpResultadoHTML(pedidos, vincs, trechos, hist){
               ${_rpEsc((p.cidadeOrigem||'?').split('/')[0])} → ${_rpEsc((p.cidadeDestino||'?').split('/')[0])}
               ${p.referencia?` · 🏷️ ${_rpEsc(p.referencia)}`:''}
             </div>
+            <div class="rp-pedido-lanc">📝 lançado por <strong>${_rpEsc(p.criadoPorNome||'não registrado')}</strong>${p.origemLancamento?` · via ${_rpEsc(p.origemLancamento)}`:''}${p.dataSolicitacao?` · ${_rpData(p.dataSolicitacao)}`:''}</div>
           </div>
           <div class="rp-pedido-dir">
             <div class="rp-verde">${_rpFmt(p.valorFrete)}</div>
