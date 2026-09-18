@@ -539,6 +539,30 @@ function registrarUltimoAcesso(userId) {
 const _ICONE_OLHO_ABERTO = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 12S5.5 5 12 5s10.4 7 10.4 7-3.9 7-10.4 7S1.6 12 1.6 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const _ICONE_OLHO_FECHADO = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10.4 7 10.4 7a18 18 0 0 1-2.8 3.6M6.3 6.8A18 18 0 0 0 1.6 12s3.9 7 10.4 7a9.8 9.8 0 0 0 4.2-.9"/><path d="m2 2 20 20"/></svg>';
 
+/* Quem está fazendo a ação, para gravar no histórico.
+
+   Antes, 97 pontos do sistema liam o TEXTO do cabeçalho
+   (document.getElementById('usuarioLogado').textContent). Isso quebrava em
+   dois casos: quando o admin visualiza outro perfil, o cabeçalho mostra
+   "Admin visualizado: Logística" — e era isso que ia para o histórico, no
+   lugar do nome de quem agiu; e qualquer mudança no layout do cabeçalho
+   mudava silenciosamente o conteúdo do log.
+
+   Agora a fonte é o perfil carregado no login. O texto da tela vira só
+   último recurso. */
+function _usuarioAtualNome(){
+    if (typeof perfilLogado !== 'undefined' && perfilLogado){
+        if (perfilLogado.nome) return perfilLogado.nome;
+        if (perfilLogado.email) return perfilLogado.email;
+    }
+    if (typeof usuarioAtual !== 'undefined' && usuarioAtual?.email) return usuarioAtual.email;
+    const txt = document.getElementById('usuarioLogado')?.textContent || '';
+    // descarta o rótulo de visualização do admin, que não é nome de ninguém
+    if (/admin visualizando/i.test(txt)) return 'Admin';
+    return txt || 'Sistema';
+}
+window._usuarioAtualNome = _usuarioAtualNome;
+
 function alternarVerSenha(campoId, botao) {
     const campo = document.getElementById(campoId);
     if (!campo) return;
