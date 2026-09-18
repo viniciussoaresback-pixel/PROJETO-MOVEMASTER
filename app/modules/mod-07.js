@@ -18,7 +18,7 @@ async function confirmarMoverPedido() {
     const motivo = document.getElementById('moverMotivo').value.trim();
     const cegonhaDestino = document.getElementById('cegonhaDestino').value;
     const msgEl = document.getElementById('mensagemMover');
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
 
     if (!acao) {
         msgEl.textContent = 'Selecione uma ação.';
@@ -712,7 +712,7 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
                 placaCegonha,
                 pedidos,
                 totalFrete,
-                usuarioNome: document.getElementById('usuarioLogado')?.textContent || 'Logística',
+                usuarioNome: _usuarioAtualNome() || 'Logística',
                 usuarioPerfil: 'logistica'
             });
         } catch(e) {
@@ -850,7 +850,7 @@ async function salvarChecklist(){
   const cor = calcularTagChecklist(qtdAtencao, qtdCritico);
   const hoje = _hojeISO();
   const validoAte = _addUmMes(hoje);
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+  const usuario = _usuarioAtualNome() || 'Manutenção';
 
   msgEl.textContent='Salvando...'; msgEl.className='message show';
   try {
@@ -957,7 +957,7 @@ async function salvarAvaliacaoEPI(){
   if (!motoristaId){ msgEl.textContent='Selecione o motorista.'; msgEl.className='message show error'; return; }
   const motorista = (motoristasGlobais||[]).find(m => String(m.id) === String(motoristaId));
   const urgencia = document.getElementById('epiUrgencia')?.value || 'normal';
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+  const usuario = _usuarioAtualNome() || 'Manutenção';
 
   // Coleta itens que precisam de ação: Necessita Reposição OU Inadequado
   const solicitacoes = [];
@@ -1062,7 +1062,7 @@ function _motoristaLogadoInfo(){
     const { motoristaVinculado } = nomesDoMotoristaLogado();
     if (motoristaVinculado) return { id: motoristaVinculado.id, nome: motoristaVinculado.nome };
   }
-  const nome = document.getElementById('usuarioLogado')?.textContent || 'Motorista';
+  const nome = _usuarioAtualNome() || 'Motorista';
   return { id: null, nome };
 }
 
@@ -1174,7 +1174,7 @@ async function salvarAgendamentoManutencao(){
   if (!dataHora){ msgEl.textContent='Informe a data/hora da manutenção.'; msgEl.className='message show error'; return; }
 
   const v = (veiculosGlobais||[]).find(x => x.placa === placa);
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+  const usuario = _usuarioAtualNome() || 'Manutenção';
   msgEl.textContent='Agendando...'; msgEl.className='message show';
   try {
     const { data, error } = await supabase.from('agendamentos_manutencao').insert({
@@ -1271,7 +1271,7 @@ async function salvarParadaEmergencia(){
   if (!motivo){ msgEl.textContent='Descreva o motivo/defeito.'; msgEl.className='message show error'; return; }
 
   const v = (veiculosGlobais||[]).find(x => x.placa === placa);
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Manutenção';
+  const usuario = _usuarioAtualNome() || 'Manutenção';
   msgEl.textContent='Registrando...'; msgEl.className='message show';
   try {
     const { data, error } = await supabase.from('paradas_emergencia').insert({
@@ -1332,7 +1332,7 @@ async function concluirEmergencia(id){
   if (!_podeConcluirEmergencia()){ alert('Sem permissão para concluir.'); return; }
   if (!confirm('Marcar esta emergência como concluída?')) return;
   const perfil = (typeof perfilAtual !== 'undefined') ? perfilAtual : null;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+  const usuario = _usuarioAtualNome() || 'Sistema';
   try {
     const { error } = await supabase.from('paradas_emergencia').update({
       status:'concluida', concluida_por: usuario, concluida_perfil: perfil,
@@ -1449,7 +1449,7 @@ async function salvarReservaComercial(){
     responsavel_comercial: responsavel,
     tipo_entrega: tipoEntrega,
     origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
-    criado_por_nome: (document.getElementById('usuarioLogado')?.textContent || null),
+    criado_por_nome: (_usuarioAtualNome() || null),
     status: 'Pendente',
     is_reserva: true, reserva_status: 'ativa', reserva_expira_em: expira
   };
@@ -1603,7 +1603,7 @@ async function desalocarPedido(pedidoId){
     try { await supabase.from('pedido_trechos').delete().eq('pedido_id', parseInt(pedidoId)); } catch(e){}
     // Registra no histórico, se a trilha existir
     try {
-      const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+      const usuario = _usuarioAtualNome() || 'Logística';
       await supabase.from('historico_status').insert({
         pedido_id: parseInt(pedidoId), status_novo: 'Pendente',
         usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
