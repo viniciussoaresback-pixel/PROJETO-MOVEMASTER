@@ -59,7 +59,7 @@ function _planAprovacaoListaHTML(){
 async function _aprovarPedido(pedidoId, corredorId){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+  const usuario = _usuarioAtualNome() || 'Sistema';
   try {
     const upd = { aprovado: true, aprovado_em: new Date().toISOString(), aprovado_por: usuario };
     if (corredorId) upd.corredor_manual_id = parseInt(corredorId);
@@ -151,7 +151,7 @@ async function _planDropCorr(ev, corredorId){
     // se o pedido estava aguardando aprovação, jogar num corredor APROVA
     if (p.aprovado === false){
       upd.aprovado = true; upd.aprovado_em = new Date().toISOString();
-      upd.aprovado_por = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+      upd.aprovado_por = _usuarioAtualNome() || 'Sistema';
     }
     await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
     p.corredorManualId = parseInt(corredorId);
@@ -585,7 +585,7 @@ window._planTrocarVeiculo = _planTrocarVeiculo;
 async function _confirmarTrocaVeiculo(pedidoId, placaNova, modeloNovo, placaAntiga, modeloAntigo){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     // modelo vazio não apaga o que já existe — preserva o anterior
     const modeloFinal = modeloNovo || modeloAntigo || null;
@@ -670,7 +670,7 @@ async function _planConfirmarViagem(corId){
   // desabilita o botão visualmente
   const btnCriar = document.querySelector('#modalPlanViagem .btn-primary, [onclick^="_planConfirmarViagem"]');
   if (btnCriar){ btnCriar.disabled = true; btnCriar.textContent = '⏳ Criando...'; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     // cria a rota
     const _perfilCriador = (typeof NOMES_PERFIL!=='undefined' && typeof perfilAtual!=='undefined') ? (NOMES_PERFIL[perfilAtual]||perfilAtual) : 'Logística';
@@ -907,7 +907,7 @@ async function _viagemConfirmarPuxar(rotaId, cap){
   if (jaNaCarga + ids.length > cap){
     alert(`Não cabe: a viagem tem ${jaNaCarga}/${cap} e você selecionou ${ids.length}. Reduza a seleção.`); return;
   }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
   for (const id of ids){
     const p = (pedidosGlobais||[]).find(x => String(x.id)===String(id));
@@ -1278,7 +1278,7 @@ function _centralModalMotoristaColeta(ids){
 async function _centralConfirmarMotoristaColeta(ids){
   const mot = document.getElementById('centralMotColetaSel')?.value.trim();
   if (!mot){ alert('Informe o motorista.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   let ok = 0;
 
   // Em lote: um update para todos os carros selecionados
@@ -1327,11 +1327,11 @@ function _centralModalEquipe(ids){
 async function _centralConfirmarEquipe(ids){
   const equipeId = document.getElementById('centralEquipeSel')?.value;
   if (!equipeId){ alert('Selecione uma equipe.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   // Em lote. coleta_equipe_id é o DIRECIONAMENTO da logística;
   // equipe_coleta_id (nome parecido) é a sugestão do comercial e não é mexida.
   const _agoraEq = new Date().toISOString();
-  const _usrEq = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const _usrEq = _usuarioAtualNome() || 'Logística';
   await mmAtualizarPedidos(ids,
     { coleta_equipe_id: parseInt(equipeId), coleta_direcionada_em: _agoraEq, coleta_direcionada_por: _usrEq },
     (p) => { p.coletaEquipeId = parseInt(equipeId); p.coletaDirecionadaEm = _agoraEq; }
@@ -1380,7 +1380,7 @@ async function _centralConfirmarEquipeEntrega(ids){
   const equipeId = document.getElementById('centralEquipeEntSel')?.value;
   if (!equipeId){ alert('Selecione uma equipe.'); return; }
   const eq = (equipesEntregaGlobais||[]).find(e => String(e.id)===String(equipeId));
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   // Em lote. Grava o DIRECIONAMENTO (entrega_direcionada_em), nunca a
   // conclusão (entrega_equipe_em) — esse último significa "a equipe já
   // entregou" e é o que tira o pedido da lista da equipe. Gravá-lo aqui
@@ -1428,7 +1428,7 @@ function _centralModalMotorista(ids){
 async function _centralConfirmarMotorista(ids){
   const mot = document.getElementById('centralMotoristaSel')?.value.trim();
   if (!mot){ alert('Informe o motorista.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
 
   // Grava em entrega_motorista, e NÃO em motorista_1. Antes escrevia no
   // motorista_1 — o campo do motorista da cegonha —, e por isso a entrega
@@ -1454,7 +1454,7 @@ async function _centralDisponivelRetirada(pedidoId){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
   if (!confirm(`Confirmar que o veículo #${p.id} (${p.placa||''}) chegou ao pátio e está DISPONÍVEL PARA RETIRADA pelo cliente?\n\nO comercial será avisado para acionar o cliente.`)) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Operador';
+  const usuario = _usuarioAtualNome() || 'Operador';
   try {
     await supabase.from('pedidos').update({
       aguardando_retirada: true,
@@ -1487,7 +1487,7 @@ async function _centralRegistrarRetirada(pedidoId){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
   if (!confirm(`Confirmar que o cliente ${p.cliente||''} RETIROU o veículo #${p.id} (${p.placa||''})?\n\nIsso conclui o processo (Entregue).`)) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Comercial';
+  const usuario = _usuarioAtualNome() || 'Comercial';
   try {
     await supabase.from('pedidos').update({
       aguardando_retirada: false,
