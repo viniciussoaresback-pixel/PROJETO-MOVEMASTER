@@ -761,30 +761,142 @@ function _viagemPuxarPedido(rota, carros){
     return { p, noCaminho };
   }).sort((a,b) => (b.noCaminho?1:0) - (a.noCaminho?1:0));
 
+  /* Mesma tela ampla da criação de viagem. Era uma caixa de 560px com a lista
+     espremida em 340px de altura — e aqui a escolha é ainda mais delicada,
+     porque a viagem já está montada e o que entra tem de caber nas vagas que
+     sobraram. */
+  window._pxCandidatos = ordenados;
+  window._pxBusca = '';
+  window._pxCap = cap;
+  window._pxNaCarga = carros.length;
+
   const old = document.getElementById('modalPuxarPedido'); if (old) old.remove();
   const div = document.createElement('div');
   div.id = 'modalPuxarPedido';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:9999;padding:2vh 1vw';
   div.innerHTML = `
-    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:560px;width:94%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
-      <h2 style="margin:0 0 4px">➕ Puxar pedido para a viagem</h2>
-      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${carros.length}/${cap} na carga · ${vagas} vaga(s). Selecione os pedidos para embarcar nesta viagem. Os marcados com 🔁 estão aguardando transbordo; ⭐ combinam com o destino da viagem.</p>
-      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:340px;overflow:auto">
-        ${ordenados.map(({p, noCaminho}) => `<label class="jv-sel-linha">
-          <input type="checkbox" class="puxar-ped" value="${p.id}">
-          <span>
-            ${noCaminho?'⭐ ':''}${p.status==='Transbordo'?'🔁 ':''}<strong>${p.placa||'—'}</strong> · ${p.modelo||''} · ${p.cliente||''}
-            <span class="text-muted">${p.patioAtual?('🅿️ '+p.patioAtual.split('/')[0]):(p.cidadeOrigem||'')} → ${p.cidadeDestino||''}</span>
-          </span>
-        </label>`).join('')}
+    <div class="modal-box pv-box">
+      <div class="pv-cab">
+        <div>
+          <h2 style="margin:0">➕ Puxar pedido para a viagem</h2>
+          <p class="text-muted" style="font-size:.84rem;margin:.25rem 0 0">
+            ${rota.nome || ('Viagem #'+rota.id)} · ${carros.length}/${cap} na carga ·
+            <strong>${vagas} vaga(s) livre(s)</strong>.
+            ⭐ combinam com o destino da viagem · 🔁 aguardando transbordo.
+          </p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalPuxarPedido').remove()">✕</button>
       </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-primary" style="flex:1" onclick="_viagemConfirmarPuxar(${rota.id}, ${cap})">✅ Puxar selecionados</button>
-        <button class="btn btn-secondary" onclick="document.getElementById('modalPuxarPedido').remove()">Cancelar</button>
+
+      <div class="pv-corpo">
+        <div class="pv-carros">
+          <div class="pv-ferramentas">
+            <div class="pv-busca">
+              <span class="pv-busca-ic">🔍</span>
+              <input type="text" id="pxBusca" placeholder="Placa, modelo, cliente, cidade ou #id"
+                     oninput="_pxFiltrar(this.value)">
+            </div>
+            <div class="pv-acoes-sel">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="_pxMarcar(false)">Desmarcar</button>
+            </div>
+          </div>
+          <div class="pv-grade" id="pxGrade">${_pxGradeHTML()}</div>
+        </div>
+
+        <div class="pv-lateral">
+          <div class="pv-contador" id="pxContador"></div>
+          <div class="pv-rodape">
+            <button class="btn btn-primary" style="width:100%" onclick="_viagemConfirmarPuxar(${rota.id}, ${cap})">✅ Puxar selecionados</button>
+            <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalPuxarPedido').remove()">Cancelar</button>
+          </div>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(div);
+  _pxAtualizarContador();
 }
+
+/* Cartões agrupados: primeiro os que fazem sentido no caminho, depois o resto.
+   Aqui o agrupamento é por "faz sentido ou não", não por cliente — a pergunta
+   de quem puxa é "o que cabe nesta viagem", não "de quem é a carga". */
+function _pxGradeHTML(){
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const b = n(window._pxBusca||'');
+  const lista = (window._pxCandidatos||[]).filter(({p}) => !b ||
+    n(`${p.placa||''} ${p.modelo||''} ${p.cliente||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.patioAtual||''} #${p.id}`).includes(b));
+
+  if (!lista.length) return '<p class="text-muted" style="padding:2rem;text-align:center;font-size:.86rem">Nenhum pedido encontrado.</p>';
+
+  const grupos = [
+    { tit:'⭐ Combinam com o destino desta viagem', itens: lista.filter(x => x.noCaminho) },
+    { tit:'Demais pedidos disponíveis',            itens: lista.filter(x => !x.noCaminho) }
+  ].filter(g => g.itens.length);
+
+  return grupos.map(g => `
+    <div class="pv-grupo">
+      <div class="pv-grupo-cab">
+        <span style="font-size:.82rem;font-weight:700">${g.tit}</span>
+        <span class="pv-grupo-cont">${g.itens.length}</span>
+      </div>
+      <div class="pv-grupo-cards">
+        ${g.itens.map(({p, noCaminho}) => {
+          const selos = (typeof _selosPedidoHTML === 'function') ? _selosPedidoHTML(p) : '';
+          return `
+          <label class="pv-card ${noCaminho?'px-card-bom':''}">
+            <input type="checkbox" class="puxar-ped" value="${p.id}" onchange="_pxAtualizarContador()">
+            <div class="pv-card-corpo">
+              <div class="pv-card-placa">${noCaminho?'⭐ ':''}${p.status==='Transbordo'?'🔁 ':''}${p.placa||'—'}
+                ${p.valorFrete?`<span class="pv-card-valor">R$ ${Number(p.valorFrete).toLocaleString('pt-BR')}</span>`:''}
+              </div>
+              <div class="pv-card-modelo">${p.modelo||'—'}</div>
+              <div class="pv-card-modelo">${p.cliente||''}</div>
+              ${p.referencia?`<div class="pv-card-ref">🏷️ ${String(p.referencia).replace(/"/g,'&quot;')}</div>`:''}
+              <div class="pv-card-rota">${p.patioAtual?('🅿️ '+p.patioAtual.split('/')[0]):((p.cidadeOrigem||'—').split('/')[0])} → ${(p.cidadeDestino||'—').split('/')[0]}</div>
+              ${selos?`<div class="pv-card-selos">${selos}</div>`:''}
+              <div class="pv-card-id">#${p.id}</div>
+            </div>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function _pxFiltrar(txt){
+  window._pxBusca = txt || '';
+  const marcados = new Set([...document.querySelectorAll('.puxar-ped:checked')].map(c => c.value));
+  const grade = document.getElementById('pxGrade');
+  if (!grade) return;
+  grade.innerHTML = _pxGradeHTML();
+  document.querySelectorAll('.puxar-ped').forEach(c => { c.checked = marcados.has(c.value); });
+  _pxAtualizarContador();
+}
+window._pxFiltrar = _pxFiltrar;
+
+function _pxMarcar(v){
+  document.querySelectorAll('.puxar-ped').forEach(c => { c.checked = !!v; });
+  _pxAtualizarContador();
+}
+window._pxMarcar = _pxMarcar;
+
+/* O contador aqui é mais importante que no criar viagem: as vagas já estão
+   parcialmente ocupadas, e estourar só apareceria no confirm. */
+function _pxAtualizarContador(){
+  const el = document.getElementById('pxContador');
+  if (!el) return;
+  const marcados = document.querySelectorAll('.puxar-ped:checked').length;
+  const cap = window._pxCap || 0, naCarga = window._pxNaCarga || 0;
+  const vagas = cap - naCarga;
+  const sobra = vagas - marcados;
+  el.innerHTML = `
+    <div class="pv-cont-num"><strong>${marcados}</strong> selecionado(s)</div>
+    <div class="pv-cont-info">carga ficaria em ${naCarga + marcados} de ${cap}</div>
+    ${sobra < 0
+      ? `<div class="pv-cont-alerta">⚠️ ${Math.abs(sobra)} a mais do que cabe</div>`
+      : sobra === 0
+        ? '<div class="pv-cont-ok">✅ completa a cegonha</div>'
+        : `<div class="pv-cont-info">${sobra} vaga(s) ainda livre(s)</div>`}`;
+}
+window._pxAtualizarContador = _pxAtualizarContador;
 
 async function _viagemConfirmarPuxar(rotaId, cap){
   const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
