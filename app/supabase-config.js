@@ -2363,21 +2363,51 @@ async function criarNovoUsuario(e) {
 }
 
 async function alterarPerfil(id, perfilAtualUsuario) {
-    const novoPerfil = prompt(
-        `Alterar perfil do usuário.\nPerfil atual: ${NOMES_PERFIL[perfilAtualUsuario] || perfilAtualUsuario}\n\nDigite o novo perfil:\nadmin / comercial / logistica / motorista / financeiro / fiscal / diretoria`
-    );
-    if (!novoPerfil) return;
+    /* A lista de perfis vem do NOMES_PERFIL, que é a fonte única do sistema.
+       Antes ela estava escrita à mão em dois lugares — e os dois discordavam:
+       o texto oferecia "diretoria", mas a validação não aceitava, então quem
+       escolhesse recebia "Perfil inválido"; e "equipe" e "manutencao" não
+       apareciam em lugar nenhum, embora existam e sejam usados. */
+    const perfisValidos = Object.keys(NOMES_PERFIL);
+    const listaTxt = perfisValidos.map(p => `${p} — ${NOMES_PERFIL[p]}`).join('\n');
 
-    const perfisValidos = ['admin','comercial','logistica','motorista','financeiro','fiscal'];
-    if (!perfisValidos.includes(novoPerfil.toLowerCase().trim())) {
-        alert('Perfil inválido. Use: ' + perfisValidos.join(', '));
+    const resposta = prompt(
+        `Alterar perfil do usuário.\nPerfil atual: ${NOMES_PERFIL[perfilAtualUsuario] || perfilAtualUsuario}\n\nDigite o novo perfil:\n${listaTxt}`
+    );
+    if (!resposta) return;
+
+    const novoPerfil = resposta.toLowerCase().trim();
+    if (!perfisValidos.includes(novoPerfil)) {
+        alert('Perfil inválido. Use um destes:\n\n' + perfisValidos.join(', '));
         return;
     }
 
-    const { error } = await supabase
-        .from('perfis')
-        .update({ perfil: novoPerfil.toLowerCase().trim() })
-        .eq('id', id);
+    const dados = { perfil: novoPerfil };
+
+    /* O perfil "equipe" não funciona sozinho: o sistema filtra o que a pessoa
+       vê pela equipe vinculada. Sem o vínculo, ela entra e não enxerga nada —
+       ou, pior, enxerga tudo, dependendo da tela. Por isso o vínculo é pedido
+       aqui, junto. */
+    if (novoPerfil === 'equipe') {
+        const equipes = (typeof equipesEntregaGlobais !== 'undefined' ? equipesEntregaGlobais : [])
+            .filter(e => e.ativo !== false);
+        if (!equipes.length) {
+            alert('Não há equipes cadastradas. Cadastre a equipe antes de vincular o usuário a ela.');
+            return;
+        }
+        const opcoes = equipes.map(e => `${e.id} — ${e.nome}${e.cidade_base ? ' ('+e.cidade_base+')' : ''}`).join('\n');
+        const escolha = prompt(`A qual equipe este usuário pertence?\n\nDigite o número:\n${opcoes}`);
+        if (!escolha) return;
+        const eq = equipes.find(e => String(e.id) === String(escolha).trim());
+        if (!eq) { alert('Equipe não encontrada. Use um dos números da lista.'); return; }
+        dados.equipe_id = eq.id;
+    } else {
+        // Saindo de "equipe": o vínculo antigo não pode ficar para trás,
+        // senão o usuário volta a ser filtrado por uma equipe que não é mais dele.
+        dados.equipe_id = null;
+    }
+
+    const { error } = await supabase.from('perfis').update(dados).eq('id', id);
 
     if (error) {
         alert('Erro ao alterar perfil: ' + error.message);
