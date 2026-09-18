@@ -10072,3 +10072,9 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
 .hist-lanc-corpo { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:.86rem; }
 .hist-lanc-data { color:var(--text-tertiary,#8b93a1); font-size:.78rem; white-space:nowrap; }
 .hist-lanc-sub { font-size:.78rem; color:var(--text-secondary,#b6bcc6); margin-top:4px; }
+
+/* Puxar pedido: destaque para os que combinam com o destino da viagem */
+.px-card-bom { border-color:rgba(74,222,128,.4) !important; }
+.px-card-bom:has(input:checked) { border-color:#4ade80 !important; background:rgba(74,222,128,.1) !important; }
+/* Entrega em lote no romaneio */
+.rm-chip-entrega { border-color:rgba(74,222,128,.35) !important; color:#4ade80 !important; }
