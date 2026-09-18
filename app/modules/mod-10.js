@@ -1771,6 +1771,23 @@ function abrirFecharEnviarCarga(rotaId){
           <input type="text" id="rmLoteTexto" placeholder="ou digite um endereço/local para todos os marcados">
           <button type="button" class="btn btn-secondary btn-sm" onclick="_rmLoteAplicarTexto()">Aplicar</button>
         </div>
+
+        <!-- A entrega tem o mesmo problema da coleta: numa carga com 11 carros
+             do mesmo cliente, o endereço de entrega costuma ser um só, e
+             digitá-lo 11 vezes é trabalho inventado. -->
+        <div class="rm-lote-linha rm-lote-entrega">
+          <span class="rm-lote-rot">🏁 Entrega dos marcados:</span>
+          <div class="rm-lote-chips">
+            ${PATIOS_FIXOS.map(pt => {
+              const lbl = _labelPatio(pt).replace('🅿️ ','');
+              return `<button type="button" class="rm-patio-chip rm-chip-entrega" onclick="_rmLoteAplicarEntregaPatio('${lbl.replace(/'/g,"\\'")}')">🅿️ ${lbl.replace('PÁTIO ','')}</button>`;
+            }).join('')}
+          </div>
+        </div>
+        <div class="rm-lote-linha rm-lote-livre">
+          <input type="text" id="rmLoteEntregaTexto" placeholder="ou digite o endereço de entrega para todos os marcados">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="_rmLoteAplicarEntrega()">Aplicar</button>
+        </div>
       </div>
 
       <div class="rm-carros-lista rm-grade">${d.carros.map(linhaEdit).join('')}</div>
@@ -1820,6 +1837,32 @@ function _rmLoteAplicarPatio(patio){
     _rmToastConfirmacao(`🅿️ ${patio} aplicado a ${ids.length} carro(s).`);
 }
 window._rmLoteAplicarPatio = _rmLoteAplicarPatio;
+
+function _rmLoteAplicarEntregaPatio(patio){
+  const ids = _rmLoteIds();
+  if (!ids.length){ alert('Marque os carros que serão entregues neste pátio.'); return; }
+  ids.forEach(id => {
+    const campo = document.getElementById('rmEntrega_'+id);
+    if (campo){ campo.value = patio; campo.classList.add('rm-local-ok'); }
+  });
+  if (typeof _rmToastConfirmacao === 'function')
+    _rmToastConfirmacao(`🏁 Entrega em ${patio} para ${ids.length} carro(s).`);
+}
+window._rmLoteAplicarEntregaPatio = _rmLoteAplicarEntregaPatio;
+
+function _rmLoteAplicarEntrega(){
+  const ids = _rmLoteIds();
+  if (!ids.length){ alert('Marque os carros primeiro.'); return; }
+  const txt = (document.getElementById('rmLoteEntregaTexto')?.value || '').trim();
+  if (!txt){ alert('Digite o endereço de entrega a aplicar.'); return; }
+  ids.forEach(id => {
+    const campo = document.getElementById('rmEntrega_'+id);
+    if (campo){ campo.value = txt; campo.classList.add('rm-local-ok'); }
+  });
+  if (typeof _rmToastConfirmacao === 'function')
+    _rmToastConfirmacao(`🏁 Endereço de entrega aplicado a ${ids.length} carro(s).`);
+}
+window._rmLoteAplicarEntrega = _rmLoteAplicarEntrega;
 
 function _rmLoteAplicarTexto(){
   const ids = _rmLoteIds();
