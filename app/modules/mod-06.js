@@ -227,7 +227,7 @@ async function salvarFolga() {
             data_inicio: inicio,
             data_fim: fim,
             descricao: document.getElementById('folgaDescricao').value.trim() || null,
-            criado_por: document.getElementById('usuarioLogado')?.textContent || 'Logística'
+            criado_por: _usuarioAtualNome() || 'Logística'
         });
         if (error) throw error;
 
@@ -694,7 +694,7 @@ async function salvarNovaRota() {
         msgEl.className = 'message show error';
         return;
     }
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
 
     const corredorId = document.getElementById('rotaCorredor')?.value || null;
 
@@ -789,7 +789,7 @@ async function vincularPedidoRota(pedidoId, rotaId) {
             pedido_id: parseInt(pedidoId),
             status_anterior: p.status,
             status_novo: update.status || p.status,
-            usuario_nome: document.getElementById('usuarioLogado')?.textContent || 'Logística',
+            usuario_nome: _usuarioAtualNome() || 'Logística',
             usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica',
             observacao: `🛣️ Vinculado à rota planejada "${rota.nome || '#' + rota.id}"${rota.placa_cegonha ? ' — cegonha ' + rota.placa_cegonha : ''}`
         });
@@ -835,7 +835,7 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
             String(p.rotaId || p.rota_id) === String(rotaId) &&
             !['Entregue','Cancelado','Em Transporte','Transbordo'].includes(p.status||'Pendente'));
         if (!confirm(`Iniciar a viagem desta rota?\n\nOs ${carros.length} carro(s) da carga vão direto para "Em Transporte".`)) return;
-        const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+        const usuario = _usuarioAtualNome() || 'Logística';
         try {
             const { error } = await supabase.from('rotas_planejadas').update({ status: 'em_andamento', iniciada_em: new Date().toISOString() }).eq('id', rotaId);
             if (error) throw error;
@@ -864,7 +864,7 @@ async function mudarStatusRota(rotaId, novoStatus, jaConfirmado) {
 
         // Ao CANCELAR a rota: a viagem não aconteceu — os carros voltam à etapa anterior.
         if (novoStatus === 'cancelada'){
-    const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuario = _usuarioAtualNome() || 'Logística';
     const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
     const carros = (pedidosGlobais||[]).filter(p =>
         String(p.rotaId || p.rota_id) === String(rotaId) &&
@@ -981,7 +981,7 @@ function tempoNoPatio(iso) {
 // Registra movimentação de pátio no histórico (sem mudar o status)
 async function registrarMovimentacaoPatio(pedido, texto) {
     if (!supabase) return;
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+    const usuarioNome = _usuarioAtualNome() || 'Sistema';
     const perfilUsuario = typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica';
     const { error } = await supabase.from('historico_status').insert({
         pedido_id: parseInt(pedido.id),
@@ -993,6 +993,22 @@ async function registrarMovimentacaoPatio(pedido, texto) {
     });
     if (error) console.warn('Movimentação de pátio não registrada no histórico:', error.message);
 }
+
+/* Busca dos Pátios. Com 10 pátios e dezenas de carros em cada, a pergunta
+   costuma ser sobre UM carro ("onde está a ABC1D23?") ou UM cliente — e a
+   resposta exigia varrer os cards com o olho. */
+let _patiosBusca = '';
+function _patiosSetBusca(){
+  const el = document.getElementById('patiosBusca');
+  _patiosBusca = el?.value || '';
+  const pos = el?.selectionStart ?? null;
+  renderizarPainelPatios();
+  const novo = document.getElementById('patiosBusca');
+  if (novo){ novo.focus(); if (pos !== null){ try { novo.setSelectionRange(pos,pos); } catch(_){} } }
+}
+window._patiosSetBusca = _patiosSetBusca;
+function _patiosLimparBusca(){ _patiosBusca = ''; renderizarPainelPatios(); }
+window._patiosLimparBusca = _patiosLimparBusca;
 
 async function renderizarPainelPatios() {
     // A tela de Pátios agora aparece em dois lugares: Gestão Logística e
@@ -1016,11 +1032,18 @@ async function renderizarPainelPatios() {
     // destino — o carro está na estrada, não no pátio.
     // "Transbordo" NÃO pode ficar de fora: esse carro está fisicamente parado
     // no pátio esperando a próxima perna. Era exatamente quem sumia da tela.
-    const carros = pedidosGlobais.filter(p =>
+    let carros = pedidosGlobais.filter(p =>
         p.patioAtual
         && !['Entregue', 'Cancelado'].includes(p.status)
         && p.status !== 'Em Transporte'
     );
+
+    // Filtro por texto: placa, modelo, cliente, referência, #id, cidade ou pátio
+    if (_patiosBusca){
+        const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+        const b = n(_patiosBusca);
+        carros = carros.filter(p => n(`${p.placa||''} ${p.modelo||''} ${p.cliente||''} ${p.referencia||''} ${p.cidadeOrigem||''} ${p.cidadeDestino||''} ${p.patioAtual||''} #${p.id} ${p.id}`).includes(b));
+    }
 
     // Agrupar por pátio — SOMENTE pátios fixos (evita "pátios fantasma"
     // criados por carros cujo patio_atual é a cidade de destino aguardando equipe).
@@ -1095,7 +1118,12 @@ async function renderizarPainelPatios() {
             </div>
         </div>`;
 
-    const patiosHTML = Object.entries(grupos).map(([patio, lista]) => {
+    /* Buscando, os pátios sem resultado saem da tela: uma parede de "Pátio
+       vazio" esconde o que a pessoa procurou. Sem busca, todos aparecem,
+       porque aí o vazio é informação. */
+    const patiosHTML = Object.entries(grupos)
+      .filter(([, lista]) => !_patiosBusca || lista.length > 0)
+      .map(([patio, lista]) => {
         const carrosHTML = lista.length === 0
             ? '<p class="patio-vazio">Pátio vazio</p>'
             : lista.map(p => {
@@ -1156,7 +1184,17 @@ async function renderizarPainelPatios() {
         </div>`;
     }).join('');
 
-    painel.innerHTML = resumoHTML +
+    const buscaHTML = `
+        <div class="patios-busca">
+            <span class="patios-busca-ic">🔍</span>
+            <input type="text" id="patiosBusca" placeholder="Placa, modelo, cliente, referência, ID ou cidade — em todos os pátios"
+                   value="${String(_patiosBusca).replace(/"/g,'&quot;')}"
+                   oninput="_mmDeb('patiosBusca', _patiosSetBusca)">
+            ${_patiosBusca ? `<button class="patios-busca-x" onclick="_patiosLimparBusca()" title="Limpar">✕</button>` : ''}
+        </div>
+        ${_patiosBusca ? `<div class="patios-busca-info">🔍 Mostrando <strong>${carros.length}</strong> carro(s) que casam com "<strong>${String(_patiosBusca).replace(/</g,'&lt;')}</strong>". Os pátios sem resultado somem da lista.</div>` : ''}`;
+
+    painel.innerHTML = resumoHTML + buscaHTML +
         `<div class="painel-patios-grid">${patiosHTML}</div>` +
         `<div class="patios-movs">
             <button class="patios-movs-tit" onclick="_patiosMovsToggle()">
@@ -1712,7 +1750,7 @@ async function tirarCarroDaCargaPorOcorrencia(pedidoId, rotaId, motivoPronto){
     if (!texto){ alert('Descreva a ocorrência para manter o registro.'); return; }
   }
 
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const perfil  = (typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica');
   const rotuloAntes = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
 
