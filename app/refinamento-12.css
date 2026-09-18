@@ -80,11 +80,16 @@ section > h2 {
 }
 
 /* ---------- 4. Modais mais elegantes ---------- */
+/* ATENÇÃO: `overflow: hidden` aqui quebrava a rolagem de todo modal alto.
+   O .modal-content é o container que rola (max-height:90vh; overflow-y:auto);
+   forçar hidden cortava o conteúdo e deixava o rodapé por cima do formulário,
+   sem como chegar nos campos de baixo. Era o caso do "Editar pedido".
+   O arredondamento é mantido; quem precisa recortar o conteúdo aplica o
+   hidden no próprio componente. */
 .modal,
 [class*="modal"] > .conteudo,
 .modal-content {
   border-radius: 16px;
-  overflow: hidden;
 }
 
 .modal h2,
