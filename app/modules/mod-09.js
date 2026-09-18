@@ -29,7 +29,7 @@ async function _confirmarCriarRotaCorr(){
       return;
     }
   }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
       nome: ctx.nome, corredor_id: parseInt(ctx.corredorId) || null,
@@ -271,7 +271,7 @@ async function marcarCobranca(pedidoId, novo){
     if (st === 'nao_cobro') alvo = 'a_cobrar'; // devolve pro comercial
     else { const i = fluxo.indexOf(st); alvo = fluxo[Math.max(0, i-1)]; }
   }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || '';
+  const usuario = _usuarioAtualNome() || '';
   const agora = new Date().toISOString();
   // Item 3: ao marcar como pago, permite escolher a data do pagamento (padrão: hoje)
   let dataPagamento = agora;
@@ -391,7 +391,7 @@ async function _inserirCarroNaRota(pedidoId, rotaId){
     }
     try { await supabase.from('historico_status').insert({
       pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: update.status || p.status,
-      usuario_nome: document.getElementById('usuarioLogado')?.textContent || 'Logística',
+      usuario_nome: _usuarioAtualNome() || 'Logística',
       usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica', observacao: obs
     }); } catch(_){}
 
@@ -469,7 +469,7 @@ document.addEventListener('change', e => { if (e.target && e.target.classList?.c
 async function _aplicarChegada(rotaId, modo){
   const ids = Array.from(document.querySelectorAll('.cheg-check:checked')).map(c => parseInt(c.value));
   if (ids.length === 0){ alert('Selecione ao menos um carro.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     for (const id of ids){
       const p = (pedidosGlobais||[]).find(x => String(x.id) === String(id));
@@ -677,7 +677,7 @@ async function marcarColetaEquipe(pedidoId, equipeId){
   const membro = document.getElementById(`mb_coletar_${pedidoId}`)?.value || null;
   // Usa o pátio combinado no pedido (se o vendedor definiu); senão o pátio base da equipe
   const cidade = p.patioColeta || `${eq.cidade_base}${eq.uf_base?'/'+eq.uf_base:''}`;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     const { error } = await supabase.from('pedidos').update({
       coleta_equipe_em: new Date().toISOString(), coleta_equipe_por: membro, coleta_equipe_id: parseInt(equipeId),
@@ -706,7 +706,7 @@ async function marcarEntregaEquipe(pedidoId, equipeId){
   const eq = (equipesEntregaGlobais||[]).find(e => String(e.id) === String(equipeId));
   if (!p || !eq || !supabase) return;
   const membro = document.getElementById(`mb_entregar_${pedidoId}`)?.value || null;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     const { error } = await supabase.from('pedidos').update({
       entrega_equipe_em: new Date().toISOString(), entrega_equipe_por: membro, entrega_equipe_id: parseInt(equipeId),
@@ -785,7 +785,7 @@ document.addEventListener('change', e => { if (e.target && e.target.classList?.c
 async function _aplicarAvancarRota(rotaId){
   const ids = Array.from(document.querySelectorAll('.avr-check:checked')).map(c => parseInt(c.value));
   if (ids.length === 0){ alert('Selecione ao menos um carro.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   let ok = 0, pulados = 0;
   try {
     for (const id of ids){
@@ -1240,7 +1240,7 @@ function _confPainelFechamento(viagens){
 
 async function _confLiberarFechamento(){
   const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   if (!confirm(`Fechar o período de ${_confFiltros.de} a ${_confFiltros.ate}?\n\nAs viagens deste período ficarão travadas para conferência (só reabrindo o fechamento).`)) return;
   await _confGravarFechamento(usuario, chavePeriodo, false, null, null);
 }
@@ -1262,7 +1262,7 @@ async function _confFechamentoExcepcional(pendenciasJson){
   const texto = just.trim();
   if (!texto){ alert('A justificativa é obrigatória no fechamento excepcional.'); return; }
 
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
   await _confGravarFechamento(usuario, chavePeriodo, true, texto, pendencias);
 }
@@ -1337,7 +1337,7 @@ async function _confReabrirFechamento(){
   const motivo = prompt('Motivo da reabertura do fechamento:\n(será registrado com seu nome, data e hora)');
   if (motivo === null || !motivo.trim()) return;
   const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   try {
     await supabase.from('fechamentos').insert({
       periodo_de:_confFiltros.de, periodo_ate:_confFiltros.ate,
@@ -1621,7 +1621,7 @@ async function _confCarregarPernas(){
 async function _confSalvarPernas(viagemId){
   const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
   if ((window._fechamentosPeriodo||{})[chavePeriodo]){ alert('🔒 Este período está fechado. Reabra o fechamento para editar.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   const valores = window._confValoresPerna || {};
   try {
     for (const chave of Object.keys(valores)){
