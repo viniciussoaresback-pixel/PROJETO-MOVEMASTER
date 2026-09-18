@@ -1075,9 +1075,27 @@ function _evoAbrirPreview(pedidos){
       <div class="evo-head">
         <div>
           <h2 style="margin:0">📥 Importar do Evo — prévia</h2>
-          <p class="text-muted" style="font-size:.85rem;margin:.3rem 0 0">${pedidos.length} pedido(s) · ${totalCarros} carro(s)${comDup?` · <span style="color:#f59e0b">⚠️ ${comDup} possível(is) duplicado(s)</span>`:''}</p>
+          <p class="text-muted" style="font-size:.85rem;margin:.3rem 0 0">${pedidos.length} solicitação(ões) · ${totalCarros} carro(s)${comDup?` · <span style="color:#f59e0b">⚠️ ${comDup} possível(is) duplicado(s)</span>`:''}</p>
         </div>
         <button class="evo-x" onclick="document.getElementById('evoPreviewOverlay').remove()">✕</button>
+      </div>
+
+      <!-- Importar ≠ montar carga.
+           Era o que levava a apagar carros da planilha antes de importar: numa
+           solicitação de 70 carros em que a cegonha leva 11, os outros 59 eram
+           descartados e precisavam ser reimportados depois. Cada carro vira um
+           pedido independente; a carga se monta na tela de criar viagem. -->
+      <div class="evo-explica">
+        💡 <strong>Importe todos os carros da solicitação.</strong> Eles ficam em
+        <strong>"Sem rota"</strong> até você montá-los numa viagem — não precisa
+        deixar de fora os que vão em outra carga. Desmarque apenas o que
+        <strong>não vai ser transportado</strong>.
+      </div>
+
+      <div class="evo-barra-sel">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="_evoMarcarTudo(true)">Marcar todos</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="_evoMarcarTudo(false)">Desmarcar todos</button>
+        <span class="evo-contagem" id="evoContagem"></span>
       </div>
       <div class="evo-lista">
         ${pedidos.map((p,i) => {
@@ -1087,7 +1105,8 @@ function _evoAbrirPreview(pedidos){
           const problema = semCliente || semDestino;
           return `<div class="evo-ped ${p.duplicado?'evo-dup':''}">
             <label class="evo-ped-head">
-              <input type="checkbox" class="evo-chk" data-idx="${i}" ${problema?'':'checked'}>
+              <input type="checkbox" class="evo-chk" data-idx="${i}" ${problema?'':'checked'}
+                     onchange="_evoMarcarGrupo(${i}, this.checked)">
               <span class="evo-ped-id">${p.id}</span>
               <span class="evo-ped-badge">🔗 ${p.carros.length} carro(s)</span>
               ${p.duplicado?`<span class="evo-dup-badge">⚠️ ${p.duplicado} já existe(m)</span>`:''}
@@ -1096,8 +1115,14 @@ function _evoAbrirPreview(pedidos){
             <div class="evo-ped-info">
               <div>👤 <strong>${c.embarcador||'—'}</strong> ${c.embarcadorDoc?`· ${c.embarcadorDoc}`:''}</div>
               <div>📍 ${c.colCidade||'—'}/${c.colUf||''} → 🏁 ${c.entCidade||'—'}/${c.entUf||''}</div>
-              <div class="text-muted" style="font-size:.78rem">🚗 ${p.carros.map(x=>x.placa).join(', ')}</div>
-              <div class="text-muted" style="font-size:.78rem">${c.modelo||'sem modelo'} · frete: ${c.frete?('R$ '+c.frete.toLocaleString('pt-BR')):'a preencher'}</div>
+              <div class="evo-carros">
+                ${p.carros.map((x,j) => `
+                  <label class="evo-carro">
+                    <input type="checkbox" class="evo-chk-carro" data-idx="${i}" data-carro="${j}"
+                           ${problema?'':'checked'} onchange="_evoCarroMudou(${i})">
+                    <span><strong>${x.placa}</strong>${x.modelo?` · ${x.modelo}`:''}${x.frete?` · R$ ${Number(x.frete).toLocaleString('pt-BR')}`:''}</span>
+                  </label>`).join('')}
+              </div>
             </div>
           </div>`;
         }).join('')}
@@ -1108,7 +1133,42 @@ function _evoAbrirPreview(pedidos){
       </div>
     </div>`;
   document.body.appendChild(div);
+  _evoAtualizarContagem();
 }
+
+/* Seleção carro a carro. Antes só dava para marcar a solicitação inteira —
+   ou entravam os 15 carros, ou nenhum. */
+function _evoMarcarGrupo(idx, valor){
+  document.querySelectorAll(`.evo-chk-carro[data-idx="${idx}"]`).forEach(c => { c.checked = !!valor; });
+  _evoAtualizarContagem();
+}
+window._evoMarcarGrupo = _evoMarcarGrupo;
+
+function _evoCarroMudou(idx){
+  // o checkbox do grupo acompanha: marcado só quando todos os carros estão
+  const carros = [...document.querySelectorAll(`.evo-chk-carro[data-idx="${idx}"]`)];
+  const grupo = document.querySelector(`.evo-chk[data-idx="${idx}"]`);
+  if (grupo) grupo.checked = carros.length > 0 && carros.every(c => c.checked);
+  _evoAtualizarContagem();
+}
+window._evoCarroMudou = _evoCarroMudou;
+
+function _evoMarcarTudo(valor){
+  document.querySelectorAll('.evo-chk, .evo-chk-carro').forEach(c => { c.checked = !!valor; });
+  _evoAtualizarContagem();
+}
+window._evoMarcarTudo = _evoMarcarTudo;
+
+function _evoAtualizarContagem(){
+  const el = document.getElementById('evoContagem');
+  if (!el) return;
+  const marcados = document.querySelectorAll('.evo-chk-carro:checked').length;
+  const total = document.querySelectorAll('.evo-chk-carro').length;
+  el.innerHTML = `<strong>${marcados}</strong> de ${total} carro(s) serão importados`;
+  const btn = document.querySelector('#evoPreviewOverlay .btn-primary');
+  if (btn) btn.textContent = marcados ? `✅ Importar ${marcados} carro(s)` : '✅ Importar selecionados';
+}
+window._evoAtualizarContagem = _evoAtualizarContagem;
 
 // Converte a data do Evo (texto dd/mm/aaaa, ou serial do Excel) para ISO
 function _evoParseData(v){
@@ -1131,9 +1191,21 @@ function _evoParseData(v){
 
 async function _evoConfirmarImportacao(){
   console.log('%c[Evo Import v257] iniciando — grupo_id via UUID','color:#ff6a00;font-weight:bold');
-  const marcados = [...document.querySelectorAll('.evo-chk:checked')].map(c => parseInt(c.getAttribute('data-idx')));
-  if (marcados.length === 0){ alert('Selecione ao menos um pedido para importar.'); return; }
-  const pedidos = marcados.map(i => _evoPreview[i]);
+  /* A seleção agora é por CARRO, não por solicitação: monta-se um recorte de
+     _evoPreview com apenas os carros marcados de cada grupo. */
+  const porGrupo = {};
+  document.querySelectorAll('.evo-chk-carro:checked').forEach(c => {
+    const i = parseInt(c.getAttribute('data-idx'));
+    const j = parseInt(c.getAttribute('data-carro'));
+    (porGrupo[i] = porGrupo[i] || []).push(j);
+  });
+  const indices = Object.keys(porGrupo).map(Number);
+  if (indices.length === 0){ alert('Marque ao menos um carro para importar.'); return; }
+  const pedidos = indices.map(i => {
+    const base = _evoPreview[i];
+    const carros = porGrupo[i].sort((a,b)=>a-b).map(j => base.carros[j]).filter(Boolean);
+    return { ...base, carros, ref: carros[0] || base.ref };
+  }).filter(p => p.carros.length);
   const btn = document.querySelector('#evoPreviewOverlay .btn-primary');
   if (btn){ btn.disabled = true; btn.textContent = '⏳ Importando...'; }
 
@@ -1319,11 +1391,11 @@ async function salvarPedidoComercial(event) {
                 equipe_coleta_id: (document.getElementById('formaColeta')?.value === 'coletador') ? (parseInt(document.getElementById('equipeColeta')?.value) || null) : null,
                 obs_coleta: document.getElementById('obsColeta')?.value.trim() || null,
                 origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
-                criado_por_nome: (document.getElementById('usuarioLogado')?.textContent || null),
+                criado_por_nome: (_usuarioAtualNome() || null),
                 corredor_manual_id: (parseInt(document.getElementById('pedidoCorredor')?.value) || null),
                 aprovado: (window._lancamentoJaAprovado === true),
                 aprovado_em: (window._lancamentoJaAprovado === true) ? new Date().toISOString() : null,
-                aprovado_por: (window._lancamentoJaAprovado === true) ? (document.getElementById('usuarioLogado')?.textContent || null) : null,
+                aprovado_por: (window._lancamentoJaAprovado === true) ? (_usuarioAtualNome() || null) : null,
                 status: 'Pendente'
             };
 
