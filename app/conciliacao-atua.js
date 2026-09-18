@@ -688,7 +688,7 @@ window.atuaDistribuirTrechos = atuaDistribuirTrechos;
 
 /* Grava as pernas, resolve a pendência e deixa o rastro de quem decidiu. */
 async function _atuaGravarResolucao(numero, pedidoId, opcao, pernas, valorCte){
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   const agora = new Date().toISOString();
   const rotulo = opcao === 'integral' ? 'frete integral'
                : opcao === 'trechos_igual' ? 'distribuído por trechos (partes iguais)'
@@ -755,7 +755,7 @@ async function _atuaGravarResolucao(numero, pedidoId, opcao, pernas, valorCte){
 async function _atuaGravarHistorico(){
   const r = window._atuaResultado;
   if (!r) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
 
   const { data, error } = await supabase.from('conciliacoes_atua').insert({
     periodo_de: r.de || null,
@@ -830,7 +830,7 @@ async function atuaMarcarConferidas(){
     `\n\nSão viagens em que todos os CT-es bateram com o ATUA.`
   )) return;
 
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   const agora = new Date().toISOString();
   let ok = 0; const falhas = [];
 
@@ -899,7 +899,7 @@ window.atuaVerPendencias = atuaVerPendencias;
 async function atuaResolverPendencia(id){
   const nota = prompt('O que foi feito? (fica registrado)');
   if (nota === null) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   try {
     await supabase.from('conciliacao_pendencias').update({
       status:'resolvida', resolvida_em:new Date().toISOString(),
@@ -916,7 +916,7 @@ async function atuaAplicarCancelados(){
   if (!lista.length){ alert('Nenhum cancelamento a aplicar.'); return; }
   if (!confirm(`Marcar ${lista.length} CT-e(s) como cancelados, conforme o relatório do ATUA?`)) return;
 
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   const agora = new Date().toISOString();
   let ok = 0;
 
