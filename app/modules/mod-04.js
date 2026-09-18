@@ -56,7 +56,7 @@ async function confirmarMudancaStatus() {
     }
 
     const perfilUsuario = typeof perfilAtual !== 'undefined' ? perfilAtual : 'admin';
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+    const usuarioNome = _usuarioAtualNome() || 'Sistema';
 
     try {
         const pedidoObj = pedidosGlobais.find(p => String(p.id) === String(pedidoId));
@@ -632,7 +632,7 @@ async function confirmarSairPatio() {
     if (!cegonha || !motorista) { alert('Escolha a cegonha e o motorista.'); return; }
     const pedido = pedidosGlobais.find(p => String(p.id) === String(pedidoId));
     if (!pedido || !supabase) return;
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
     const perfilU = typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica';
     try {
         const { error } = await supabase.from('pedidos').update({
@@ -856,7 +856,7 @@ async function confirmarChecklist() {
     }
 
     const obs = document.getElementById('checklistObs')?.value || '';
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Comercial';
+    const usuarioNome = _usuarioAtualNome() || 'Comercial';
 
     try {
         const { error } = await supabase.from('pedidos')
@@ -1439,7 +1439,7 @@ async function renderizarOcorrenciasComercial() {
             .limit(30);
         if (error) throw error;
 
-        const usuarioNome = document.getElementById('usuarioLogado')?.textContent || '';
+        const usuarioNome = _usuarioAtualNome() || '';
 
         // Roteamento: comercial vê as ocorrências dos SEUS pedidos; admin vê todas
         const minhas = (data || []).filter(o => {
@@ -1487,7 +1487,7 @@ async function responderOcorrencia(ocorrenciaId, pedidoId) {
     const resposta = (campo?.value || '').trim();
     if (!resposta) { alert('Escreva o retorno antes de enviar.'); return; }
 
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Comercial';
+    const usuarioNome = _usuarioAtualNome() || 'Comercial';
     const perfilUsuario = typeof perfilAtual !== 'undefined' ? perfilAtual : 'comercial';
 
     try {
@@ -1581,7 +1581,7 @@ async function _solicitarEdicaoPedidoAntigo(pedidoId) {
     if (motivo === null) return;
     if (!motivo.trim()) { alert('Descreva o motivo da edição.'); return; }
 
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Comercial';
+    const usuarioNome = _usuarioAtualNome() || 'Comercial';
     try {
         const { error } = await supabase.from('solicitacoes_edicao').insert({
             pedido_id: parseInt(pedidoId),
@@ -1649,7 +1649,7 @@ async function aprovarSolicitacaoEdicao(solicitacaoId, pedidoId) {
     const p = pedidosGlobais.find(x => String(x.id) === String(pedidoId));
     if (!p || !supabase) return;
 
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
     const precisaVoltar = p.status !== 'Pendente';
     const aviso = precisaVoltar
         ? `Aprovar a edição do pedido #${p.id}?\n\n⚠️ Ele está em "${p.status}". Ao aprovar, o pedido VOLTA para Pendente, sai da carga atual (libera a vaga na cegonha) e precisará ser realocado após a edição.`
@@ -1692,7 +1692,7 @@ async function aprovarSolicitacaoEdicao(solicitacaoId, pedidoId) {
 async function recusarSolicitacaoEdicao(solicitacaoId, pedidoId) {
     if (!supabase) return;
     const motivo = prompt('Motivo da recusa (opcional):') || '';
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
     try {
         await supabase.from('solicitacoes_edicao').update({
             status: 'recusada', resolvida_por: usuarioNome,
