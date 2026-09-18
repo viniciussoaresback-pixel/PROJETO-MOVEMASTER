@@ -190,3 +190,5 @@
   background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border,rgba(255,255,255,.1)); }
 .atua-viagens-pend summary { font-size:.84rem; font-weight:700; cursor:pointer; color:#f59e0b; }
 .atua-viagens-pend table { margin-top:10px; }
+
+.rp-pedido-lanc { font-size:.74rem; color:var(--text-tertiary,#8b93a1); margin-top:3px; }
