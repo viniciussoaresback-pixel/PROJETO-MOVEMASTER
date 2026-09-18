@@ -1069,7 +1069,7 @@ async function _aplicarStatusPlanilha(pedidoId, novoRotulo, rotuloAntes, perfil,
         pedido_id: parseInt(pedidoId),
         status_anterior: rotuloAntes,
         status_novo: novoRotulo,
-        usuario_nome: document.getElementById('usuarioLogado')?.textContent || '',
+        usuario_nome: _usuarioAtualNome() || '',
         usuario_perfil: perfil,
         observacao: obs || '✏️ status alterado'
       });
@@ -1182,7 +1182,7 @@ function _abrirModalPuloEtapas(pedidoId, rotuloAntes, novoRotulo, etapas){
 
 async function _confirmarPuloEtapas(pedidoId, rotuloAntes, novoRotulo, etapas){
   const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || '';
+  const usuario = _usuarioAtualNome() || '';
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
   // valida obrigatórios
@@ -1603,4 +1603,3 @@ function abrirModalStatusGrupo(grupoId) {
             `<div class="lote-aviso">⏩ Avançando <strong>${doStatus.length} carros</strong> de múltiplos veículos juntos${fora ? ` · ${fora} em outro status ficam de fora` : ''}.</div>`);
     }
 }
-
