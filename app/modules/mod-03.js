@@ -731,15 +731,89 @@ function mascaraCEP(input) {
 }
 
 // Máscara de telefone GLOBAL — aceita o elemento (this) ou um evento
+/* ============================================================
+   CPF e TELEFONE — aceita como a pessoa digitar
+
+   Os campos chamam mascaraCPF(this) no oninput, mas a única mascaraCPF que
+   existia estava DENTRO de outra função — invisível para o HTML. O resultado
+   era um erro silencioso a cada tecla e nenhuma formatação: o CPF ia para o
+   banco como a pessoa digitou, uns com ponto, outros sem, e a busca por CPF
+   passava a depender de acertar o formato.
+
+   Agora: digite com pontos, sem pontos, com espaços ou colando de outro
+   sistema — tudo vira o formato certo enquanto se digita.
+   ============================================================ */
+function mascaraCPF(elOuEvento) {
+    const el = (elOuEvento && elOuEvento.target) ? elOuEvento.target : elOuEvento;
+    if (!el) return;
+    // Guarda onde estava o cursor: formatar no meio do texto joga o cursor
+    // para o fim, e quem corrige um dígito perde a posição a cada tecla.
+    const posicaoAntes = el.selectionStart;
+    const tamanhoAntes = el.value.length;
+
+    let v = String(el.value).replace(/\D/g, '').slice(0, 11);
+    if (v.length > 9)      v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
+    else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{0,3})/, '$1.$2.$3');
+    else if (v.length > 3) v = v.replace(/(\d{3})(\d{0,3})/, '$1.$2');
+    el.value = v;
+
+    if (posicaoAntes != null && posicaoAntes < tamanhoAntes){
+        const novaPos = posicaoAntes + (v.length - tamanhoAntes);
+        try { el.setSelectionRange(Math.max(0, novaPos), Math.max(0, novaPos)); } catch(_){}
+    }
+}
+window.mascaraCPF = mascaraCPF;
+
+/* CNPJ pelo mesmo caminho — o cadastro de cliente usa nos dois formatos. */
+function mascaraCNPJ(elOuEvento) {
+    const el = (elOuEvento && elOuEvento.target) ? elOuEvento.target : elOuEvento;
+    if (!el) return;
+    let v = String(el.value).replace(/\D/g, '').slice(0, 14);
+    if (v.length > 12)     v = v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
+    else if (v.length > 8) v = v.replace(/(\d{2})(\d{3})(\d{3})(\d{0,4})/, '$1.$2.$3/$4');
+    else if (v.length > 5) v = v.replace(/(\d{2})(\d{3})(\d{0,3})/, '$1.$2.$3');
+    else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,3})/, '$1.$2');
+    el.value = v;
+}
+window.mascaraCNPJ = mascaraCNPJ;
+
+/* Aceita CPF (11) e CNPJ (14) no mesmo campo, decidindo pelo tamanho. */
+function mascaraCpfCnpj(elOuEvento) {
+    const el = (elOuEvento && elOuEvento.target) ? elOuEvento.target : elOuEvento;
+    if (!el) return;
+    const d = String(el.value).replace(/\D/g, '');
+    if (d.length > 11) mascaraCNPJ(el); else mascaraCPF(el);
+}
+window.mascaraCpfCnpj = mascaraCpfCnpj;
+
+/* Só os dígitos — para comparar e gravar. "123.456.789-00" e "12345678900"
+   passam a ser a mesma coisa na hora de procurar. */
+function soDigitos(v){ return String(v==null?'':v).replace(/\D/g, ''); }
+window.soDigitos = soDigitos;
+
 function mascaraTelefone(elOuEvento) {
     const el = (elOuEvento && elOuEvento.target) ? elOuEvento.target : elOuEvento;
     if (!el) return;
-    let v = el.value.replace(/\D/g, '').slice(0, 11);
+    const posicaoAntes = el.selectionStart;
+    const tamanhoAntes = el.value.length;
+
+    let v = String(el.value).replace(/\D/g, '');
+    // Colando de outro sistema vem com 55 na frente ou com zero de operadora;
+    // nenhum dos dois faz parte do número.
+    if (v.length > 11 && v.startsWith('55')) v = v.slice(2);
+    if (v.length > 11 && v.startsWith('0'))  v = v.slice(1);
+    v = v.slice(0, 11);
+
     if (v.length > 10) v = v.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
     else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
     else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,5})/, '($1) $2');
     else if (v.length > 0) v = '(' + v;
     el.value = v;
+
+    if (posicaoAntes != null && posicaoAntes < tamanhoAntes){
+        const novaPos = posicaoAntes + (v.length - tamanhoAntes);
+        try { el.setSelectionRange(Math.max(0, novaPos), Math.max(0, novaPos)); } catch(_){}
+    }
 }
 
 // Buscar endereço pelo CEP (ViaCEP)
@@ -874,31 +948,14 @@ async function salvarCadastroVeiculo(event) {
 // ============================================
 
 function aplicarMascaras() {
-    function mascaraCPF(e) {
-        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-        if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
-        else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{0,3})/, '$1.$2.$3');
-        else if (v.length > 3) v = v.replace(/(\d{3})(\d{0,3})/, '$1.$2');
-        e.target.value = v;
-    }
+    // Delegam para as versões globais: duas implementações da mesma máscara
+    // acabam divergindo, e aí o mesmo CPF sai formatado de dois jeitos
+    // dependendo da tela.
+    const mascaraCPF = window.mascaraCPF;
 
-    function mascaraCNPJ(e) {
-        let v = e.target.value.replace(/\D/g, '').slice(0, 14);
-        if (v.length > 12) v = v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
-        else if (v.length > 8) v = v.replace(/(\d{2})(\d{3})(\d{3})(\d{0,4})/, '$1.$2.$3/$4');
-        else if (v.length > 5) v = v.replace(/(\d{2})(\d{3})(\d{0,3})/, '$1.$2.$3');
-        else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,3})/, '$1.$2');
-        e.target.value = v;
-    }
+    const mascaraCNPJ = window.mascaraCNPJ;
 
-    function mascaraTelefone(e) {
-        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-        if (v.length > 10) v = v.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
-        else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-        else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,5})/, '($1) $2');
-        else if (v.length > 0) v = '(' + v;
-        e.target.value = v;
-    }
+    const mascaraTelefone = window.mascaraTelefone;
 
     const cnpjCliente = document.getElementById('cnpjCliente');
     if (cnpjCliente) cnpjCliente.addEventListener('input', mascaraCNPJ);
