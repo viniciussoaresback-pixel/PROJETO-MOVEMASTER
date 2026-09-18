@@ -267,12 +267,31 @@ async function abrirHistorico(pedidoId) {
 
         const lista = document.getElementById('listaHistorico');
 
+        /* Quem lançou o pedido abre o histórico.
+           O lançamento é o primeiro evento da vida do carro, mas não passa
+           por historico_status — ele nasce junto com o pedido. Sem esta
+           linha, o histórico começava no meio da história, e a pergunta
+           "quem cadastrou isso?" não tinha resposta em lugar nenhum da tela. */
+        const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+        const cabecalho = p ? `
+            <div class="hist-lancamento">
+                <div class="hist-lanc-tit">📝 Pedido lançado</div>
+                <div class="hist-lanc-corpo">
+                    <span><strong>${p.criadoPorNome || 'não registrado'}</strong>${p.origemLancamento ? ` · via ${p.origemLancamento}` : ''}</span>
+                    <span class="hist-lanc-data">${p.dataSolicitacao ? new Date(p.dataSolicitacao).toLocaleString('pt-BR') : (p.createdAt ? new Date(p.createdAt).toLocaleString('pt-BR') : '')}</span>
+                </div>
+                <div class="hist-lanc-sub">
+                    ${p.cliente || ''} · ${p.placa || ''}${p.modelo ? ' · ' + p.modelo : ''}
+                    ${p.referencia ? ` · 🏷️ ${p.referencia}` : ''}
+                </div>
+            </div>` : '';
+
         if (error || !data || data.length === 0) {
-            lista.innerHTML = '<p class="text-center text-muted">Nenhuma alteração registrada.</p>';
+            lista.innerHTML = cabecalho + '<p class="text-center text-muted">Nenhuma alteração registrada depois do lançamento.</p>';
             return;
         }
 
-        lista.innerHTML = data.map(h => {
+        lista.innerHTML = cabecalho + data.map(h => {
             const corAnterior = FLUXO_STATUS[h.status_anterior]?.cor || '#888';
             const corNovo = FLUXO_STATUS[h.status_novo]?.cor || '#4ade80';
             const data_fmt = h.created_at
