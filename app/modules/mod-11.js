@@ -415,7 +415,7 @@ async function _enviarDocRota(rotaId, tipo){
   const input = document.getElementById((tipo==='cte'?'docCte_':'docMan_')+rotaId);
   const arquivos = input?.files;
   if (!arquivos || arquivos.length === 0){ alert('Escolha um ou mais arquivos PDF.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Fiscal';
+  const usuario = _usuarioAtualNome() || 'Fiscal';
   let enviados = 0;
   try {
     for (const arquivo of arquivos){
@@ -718,7 +718,7 @@ async function _desfazerTransbordo(pedidoIds){
     : `de ${alvos.length} pedidos`;
   if (!confirm(`Desfazer o transbordo ${quem}?\n\nO carro deixa de contar como transbordado, sai do pátio de transbordo e volta ao estado anterior — se ainda estiver numa viagem, volta para ela; senão, volta ao planejamento.`)) return;
 
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const falhas = [];
 
   for (const p of alvos){
@@ -822,7 +822,7 @@ async function _confirmarTransbordoStatus(pedidoIds, rotuloAntes){
   const corredorId = document.getElementById('transbCorredor')?.value || null;
   if (!patio){ alert('Selecione o pátio onde o(s) carro(s) vai(vão) ficar.'); return; }
   const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || '';
+  const usuario = _usuarioAtualNome() || '';
   const btn = document.getElementById('modalTransbStatus')?.querySelector('.btn-primary');
   if (btn){ btn.disabled = true; btn.textContent = '⏳ Registrando...'; }
   const falhas = [];
@@ -1178,7 +1178,7 @@ function _viagemModalCarros(titulo, subtitulo, carros, corBtn, textoBtn, onConfi
 }
 
 async function _viagemMudarStatusCarros(ids, statusInterno, statusPlanilha, obs){
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Operador';
+  const usuario = _usuarioAtualNome() || 'Operador';
   const perfil = (typeof perfilAtual!=='undefined'?perfilAtual:'logistica');
   // ANTES: um laço sequencial com DOIS acessos ao servidor por carro
   // (update + histórico), cada um esperando o anterior. Com 11 carros eram
@@ -1287,7 +1287,12 @@ function _viagemModalFormaColeta(rota, ids){
 
 // (a) já coletado — comportamento que existia antes
 async function _viagemColetaFeita(ids){
-  await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado', '🚚 Coleta registrada (evento na viagem)');
+  /* "evento na viagem" não diz nada a quem lê o histórico meses depois.
+     A linha do tempo precisa responder: o que aconteceu, com qual cegonha,
+     em que trajeto. */
+  const _ctx = `${rota.placa_cegonha ? 'cegonha '+rota.placa_cegonha : 'viagem '+(rota.nome||'#'+rota.id)}`;
+  await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado',
+    `🚚 Coleta confirmada — carro carregado na ${_ctx}${rota.motorista_1?' com '+rota.motorista_1:''}`);
   document.getElementById('modalFormaColeta')?.remove();
   renderizarViagensAndamento();
 }
@@ -1314,7 +1319,9 @@ async function _viagemIniciar(rota, carros){
   });
   if (elegiveis.length === 0){ alert('Nenhum carro pronto para iniciar viagem (precisa estar coletado).'); return; }
   _viagemModalCarros('🛫 Iniciar Viagem', 'Confirme os carros que saíram para viagem (Em transporte).', elegiveis, '#2563eb', '✅ Confirmar saída', async (ids) => {
-    await _viagemMudarStatusCarros(ids, 'Em Transporte', 'Em transporte', '🛫 Saiu para viagem (evento na viagem)');
+    const _ctxV = `${rota.placa_cegonha ? rota.placa_cegonha : ('#'+rota.id)}`;
+    await _viagemMudarStatusCarros(ids, 'Em Transporte', 'Em transporte',
+      `🛫 Saiu para viagem na cegonha ${_ctxV}${rota.motorista_1?' com '+rota.motorista_1:''} — ${rota.nome||''}`);
     /* Marca a data de saída. Este botão só gravava o status; quem preenchia
        iniciada_em era o outro caminho (iniciar a rota pela tela de Rotas).
        Quem começava a viagem por aqui deixava o campo vazio, e todas as telas
@@ -1385,7 +1392,7 @@ async function _viagemConfirmarEntregaMotorista(ids){
 async function _viagemEntregaParaEquipe(rotaId, ids){
   document.getElementById('modalFormaEntrega')?.remove();
   // marca que chegou ao pátio e precisa de equipe (usa a Central: aguardando_retirada=false, mas fica pendente de entrega pela equipe)
-  const _usr = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const _usr = _usuarioAtualNome() || 'Logística';
   // Cada carro tem cidade de destino própria, então o patch é por pedido —
   // o auxiliar agrupa os iguais e faz poucas chamadas em vez de uma por carro.
   await mmAtualizarPedidos(ids,
@@ -1489,7 +1496,7 @@ async function _confirmarOcorrencia(pedidoIds, descricao, rota, opcoes){
   const alvos = ids.map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
   if (alvos.length === 0) return;
   const { tipo = 'outro', patio = '' } = (opcoes || {});
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
 
   try {
     for (const p of alvos){
@@ -1629,7 +1636,7 @@ async function _confirmarReverterOcorrencia(pedidoId){
   if (!p) return;
   const corredorId = document.getElementById('reverterCorredor')?.value || null;
   const obs = document.getElementById('reverterObs')?.value.trim() || '';
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const cor = corredorId ? (corredoresGlobais||[]).find(c => String(c.id)===String(corredorId)) : null;
 
   try {
@@ -1747,7 +1754,7 @@ window._abrirModalRetirarCarro = _abrirModalRetirarCarro;
 async function _confirmarRetirarCarro(ids, rota, motivo, obs){
   const alvos = (ids||[]).map(id => (pedidosGlobais||[]).find(x => String(x.id)===String(id))).filter(Boolean);
   if (alvos.length === 0) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const rotulos = {
     cliente_desistiu: 'cliente desistiu do embarque',
     nao_pronto: 'carro não ficou pronto a tempo',
@@ -1938,7 +1945,7 @@ window._abrirModalAlterarDestino = _abrirModalAlterarDestino;
 async function _confirmarAlterarDestino(pedidoId, d, rota){
   const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
   if (!p) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   const destinoAntes = `${p.cidadeDestino||'—'}${p.ufDestino?'/'+p.ufDestino:''}`;
   const destinoDepois = `${d.cidade}${d.uf?'/'+d.uf:''}`;
   const freteAntes = Number(p.valorFrete||0);
@@ -2686,11 +2693,159 @@ function _planAgruparErenderizar(pedidos){
       </details>
       <div class="plan-pedido-coleta">${(typeof _colDirecionamentoHTML==='function') ? _colDirecionamentoHTML(p) : ''}</div>
       <div class="plan-pedido-acoes">
+        <button class="plan-desmembrar-btn" onclick="event.stopPropagation();_planDesmembrar([${idsGrupo.join(',')}])"
+                title="Levar só parte dos carros nesta viagem">✂️ Desmembrar — levar alguns</button>
         <button class="plan-mover-btn" onclick="event.stopPropagation();_planAbrirBuscaCorredor(${p.id})">🔀 Mover o grupo para outro corredor →</button>
       </div>
     </div>`;
   }).join('');
 }
+
+/* ============================================================
+   DESMEMBRAR UMA SOLICITAÇÃO
+
+   Uma solicitação da Evo pode vir com 70 carros, e a cegonha leva 11. Antes,
+   a saída era apagar 59 da planilha antes de importar — e reimportar depois
+   para a próxima carga. Aqui o grupo continua inteiro no sistema: você tira
+   os que vão agora e o restante segue no card, esperando a próxima cegonha.
+   ============================================================ */
+let _pdIds = [];
+
+function _planDesmembrar(ids){
+  _pdIds = ids || [];
+  const itens = _pdIds.map(id => (pedidosGlobais||[]).find(p => String(p.id)===String(id))).filter(Boolean);
+  if (!itens.length) return;
+  const lider = itens[0];
+  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
+
+  const old = document.getElementById('modalDesmembrar'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalDesmembrar';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100060;padding:2vh 1vw';
+  div.innerHTML = `
+    <div class="modal-box pv-box">
+      <div class="pv-cab">
+        <div>
+          <h2 style="margin:0">✂️ Desmembrar solicitação</h2>
+          <p class="text-muted" style="font-size:.84rem;margin:.25rem 0 0">
+            ${lider.cliente||''} · ${itens.length} carro(s) · ${(lider.cidadeOrigem||'').split('/')[0]} → ${(lider.cidadeDestino||'').split('/')[0]}<br>
+            Marque os que vão <strong>agora</strong>. Os demais continuam no card, prontos para a próxima carga.
+          </p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalDesmembrar').remove()">✕</button>
+      </div>
+      <div class="pv-corpo">
+        <div class="pv-carros">
+          <div class="pv-ferramentas">
+            <div class="pv-busca">
+              <span class="pv-busca-ic">🔍</span>
+              <input type="text" id="pdBusca" placeholder="Placa, modelo ou referência" oninput="_pdFiltrar(this.value)">
+            </div>
+            <div class="pv-acoes-sel">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="_pdMarcar(true)">Marcar todos</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="_pdMarcar(false)">Desmarcar</button>
+            </div>
+          </div>
+          <div class="pv-grade" id="pdGrade">${_pdGradeHTML('')}</div>
+        </div>
+        <div class="pv-lateral">
+          <div class="pv-contador" id="pdContador"></div>
+          <div class="pv-rodape">
+            <button class="btn btn-primary" style="width:100%" onclick="_pdCriarViagem()">🚛 Criar viagem com os marcados</button>
+            ${cor ? `<button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="_pdDirecionar()">📌 Direcionar ao corredor ${cor.nome}</button>` : ''}
+            <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalDesmembrar').remove()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  _pdAtualizar();
+}
+window._planDesmembrar = _planDesmembrar;
+
+function _pdGradeHTML(busca){
+  const n = (typeof _norm === 'function') ? _norm : (t => String(t||'').toLowerCase().trim());
+  const b = n(busca||'');
+  const itens = _pdIds.map(id => (pedidosGlobais||[]).find(p => String(p.id)===String(id))).filter(Boolean)
+    .filter(p => !b || n(`${p.placa||''} ${p.modelo||''} ${p.referencia||''} #${p.id}`).includes(b));
+  if (!itens.length) return '<p class="text-muted" style="padding:2rem;text-align:center">Nenhum carro encontrado.</p>';
+  return `<div class="pv-grupo"><div class="pv-grupo-cards">
+    ${itens.map(p => `
+      <label class="pv-card">
+        <input type="checkbox" class="pd-chk" value="${p.id}" onchange="_pdAtualizar()">
+        <div class="pv-card-corpo">
+          <div class="pv-card-placa">${p.placa||'—'}
+            ${p.valorFrete?`<span class="pv-card-valor">R$ ${Number(p.valorFrete).toLocaleString('pt-BR')}</span>`:''}</div>
+          <div class="pv-card-modelo">${p.modelo||'—'}</div>
+          ${p.referencia?`<div class="pv-card-ref">🏷️ ${p.referencia}</div>`:''}
+          <div class="pv-card-id">#${p.id}</div>
+        </div>
+      </label>`).join('')}
+  </div></div>`;
+}
+
+function _pdFiltrar(txt){
+  const marcados = new Set([...document.querySelectorAll('.pd-chk:checked')].map(c=>c.value));
+  const g = document.getElementById('pdGrade');
+  if (g){ g.innerHTML = _pdGradeHTML(txt); document.querySelectorAll('.pd-chk').forEach(c=>{ c.checked = marcados.has(c.value); }); }
+  _pdAtualizar();
+}
+window._pdFiltrar = _pdFiltrar;
+
+function _pdMarcar(v){
+  document.querySelectorAll('.pd-chk').forEach(c => { c.checked = !!v; });
+  _pdAtualizar();
+}
+window._pdMarcar = _pdMarcar;
+
+function _pdAtualizar(){
+  const el = document.getElementById('pdContador');
+  if (!el) return;
+  const marcados = document.querySelectorAll('.pd-chk:checked').length;
+  const restam = _pdIds.length - marcados;
+  el.innerHTML = `
+    <div class="pv-cont-num"><strong>${marcados}</strong> vão agora</div>
+    <div class="pv-cont-info">${restam} continuam esperando no card</div>`;
+}
+window._pdAtualizar = _pdAtualizar;
+
+function _pdSelecionados(){
+  return [...document.querySelectorAll('.pd-chk:checked')]
+    .map(c => (pedidosGlobais||[]).find(p => String(p.id)===String(c.value)))
+    .filter(Boolean);
+}
+
+function _pdCriarViagem(){
+  const sel = _pdSelecionados();
+  if (!sel.length){ alert('Marque os carros que vão nesta viagem.'); return; }
+  document.getElementById('modalDesmembrar')?.remove();
+  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
+  if (cor && typeof _planAbrirModalViagem === 'function'){
+    _planAbrirModalViagem(cor, sel);
+  } else if (typeof _planViagemDireta === 'function'){
+    // sem corredor selecionado (modo "Sem rota"): cria a rota excepcional
+    _planVdPedidos = sel;
+    _planViagemDireta();
+  }
+}
+window._pdCriarViagem = _pdCriarViagem;
+
+async function _pdDirecionar(){
+  const sel = _pdSelecionados();
+  if (!sel.length){ alert('Marque os carros primeiro.'); return; }
+  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
+  if (!cor) return;
+  try {
+    const ids = sel.map(p => p.id);
+    await supabase.from('pedidos').update({ corredor_manual_id: cor.id }).in('id', ids);
+    sel.forEach(p => { p.corredorManualId = cor.id; });
+    if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+    document.getElementById('modalDesmembrar')?.remove();
+    if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`📌 ${ids.length} carro(s) no corredor ${cor.nome}.`);
+    renderizarPlanejamentoRotas();
+  } catch(e){ alert('Erro: '+(e.message||e)); }
+}
+window._pdDirecionar = _pdDirecionar;
 
 // Arrasta o grupo todo
 function _planDragStartGrupo(ev, ids){
@@ -2812,7 +2967,7 @@ async function confirmarServicoAvulso(pedidoId, tipo){
 
   if (!confirm(`Confirmar ${ehColeta ? 'a COLETA' : 'a ENTREGA'} do veículo ${p.placa||'#'+p.id}?`)) return;
 
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Motorista';
+  const usuario = _usuarioAtualNome() || 'Motorista';
   const agora = new Date().toISOString();
   const anterior = (typeof statusPlanilhaDoPedido==='function') ? statusPlanilhaDoPedido(p) : p.status;
 
@@ -2884,7 +3039,7 @@ async function confirmarServicosAvulsosLote(tipo){
   const placas = alvos.map(p => p.placa || ('#'+p.id)).join(', ');
   if (!confirm(`Confirmar ${ehColeta ? 'a COLETA' : 'a ENTREGA'} de ${ids.length} veículo(s)?\n\n${placas}`)) return;
 
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Motorista';
+  const usuario = _usuarioAtualNome() || 'Motorista';
   const agora = new Date().toISOString();
   const upd = ehColeta
     ? { status: 'Em Transporte', status_planilha: 'Coletado',
