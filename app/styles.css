@@ -10078,3 +10078,41 @@ body.mm-aguardando, body.mm-aguardando * { cursor: progress !important; }
 .px-card-bom:has(input:checked) { border-color:#4ade80 !important; background:rgba(74,222,128,.1) !important; }
 /* Entrega em lote no romaneio */
 .rm-chip-entrega { border-color:rgba(74,222,128,.35) !important; color:#4ade80 !important; }
+
+/* Botão de ver senha: tamanho travado.
+   O HTML começava com o emoji 👁 e o JavaScript trocava por SVG no primeiro
+   clique — dois desenhos de tamanhos diferentes, então o botão "pulava" e no
+   Windows o emoji saía borrado. Agora o SVG já vem no HTML; estas regras
+   garantem que nada (animações de outros CSS, fonte do sistema) mexa nele. */
+.btn-olho-senha svg { display:block; width:19px; height:19px; flex:0 0 auto; pointer-events:none; }
+.btn-olho-senha { font-size:0; padding:0; flex:0 0 40px; }
+.btn-olho-senha:active { transform: translateY(-50%) scale(0.92); }
+.btn-olho-senha, .btn-olho-senha * { animation:none !important; }
+
+/* Busca dos Pátios */
+.patios-busca { position:relative; display:flex; align-items:center; margin:12px 0 6px; }
+.patios-busca-ic { position:absolute; left:11px; font-size:.82rem; opacity:.55; pointer-events:none; }
+.patios-busca input { width:100%; padding:9px 34px 9px 32px; font-size:.85rem; border-radius:9px;
+  border:1px solid var(--border,rgba(255,255,255,.14));
+  background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.patios-busca input:focus { outline:none; border-color:var(--accent,#ff6a00); }
+.patios-busca-x { position:absolute; right:8px; background:none; border:none; cursor:pointer;
+  color:var(--text-tertiary,#8b93a1); font-size:.8rem; padding:4px; }
+.patios-busca-info { font-size:.78rem; color:var(--text-secondary,#b6bcc6); margin-bottom:10px; }
+
+/* Importação do Evo — seleção carro a carro */
+.evo-explica { margin:12px 22px 0; padding:11px 14px; border-radius:9px; font-size:.82rem; line-height:1.5;
+  background:rgba(96,165,250,.09); border:1px solid rgba(96,165,250,.3); color:var(--text-secondary,#b6bcc6); }
+.evo-barra-sel { display:flex; align-items:center; gap:8px; margin:10px 22px 0; flex-wrap:wrap; }
+.evo-contagem { margin-left:auto; font-size:.8rem; color:var(--text-secondary,#b6bcc6); }
+.evo-carros { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:4px; margin-top:8px; }
+.evo-carro { display:flex; align-items:center; gap:7px; padding:5px 8px; border-radius:6px;
+  font-size:.78rem; cursor:pointer; background:var(--surface-2,rgba(255,255,255,.03)); }
+.evo-carro:hover { background:var(--surface-1,rgba(255,255,255,.06)); }
+.evo-carro input { width:15px; height:15px; accent-color:var(--accent,#ff6a00); flex-shrink:0; }
+
+/* Desmembrar solicitação */
+.plan-desmembrar-btn { width:100%; margin-bottom:5px; padding:6px 10px; border-radius:7px; cursor:pointer;
+  font-size:.74rem; font-weight:700; text-align:center;
+  background:rgba(168,85,247,.16); color:#c084fc; border:1px solid rgba(168,85,247,.35); }
+.plan-desmembrar-btn:hover { background:rgba(168,85,247,.26); }
