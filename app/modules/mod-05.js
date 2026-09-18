@@ -126,7 +126,7 @@ async function salvarEdicaoPedido(pedidoId) {
         return;
     }
 
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
     try {
         const { error } = await supabase.from('pedidos').update(update).eq('id', pedidoId);
         if (error) throw error;
@@ -302,7 +302,7 @@ async function _avancarParaColeta(pedidoId, observacaoExtra) {
     const antesDeColeta = ['Pendente', 'Intenção Agendada', 'Aguardando Confirmação'];
     if (!antesDeColeta.includes(ped.status)) return false;
 
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Sistema';
+    const usuarioNome = _usuarioAtualNome() || 'Sistema';
     const statusAnterior = ped.status;
     try {
         const { error } = await supabase.from('pedidos').update({
@@ -349,7 +349,7 @@ async function _varrerAutoOkParaColeta(ocorrencias) {
 
 async function validarPlaca(ocorrenciaId, resultado) {
     if (!supabase) return;
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
 
     // Ao REPROVAR, pedir o motivo — é o que o motorista vai ler no celular
     let motivo = null;
@@ -431,7 +431,7 @@ const LABELS_EVENTO_MANIFESTO = {
 // Registra o evento no manifesto do caminhão e gera o apontamento fiscal
 async function registrarEventoManifesto(placaCaminhao, pedido, tipoEvento, delta) {
     if (!supabase || !placaCaminhao) return;
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
 
     // 1) Buscar/garantir o manifesto ativo do caminhão
     let manifesto;
@@ -548,7 +548,7 @@ async function renderizarApontamentosFiscais() {
 
 async function resolverApontamentoFiscal(id, resolucao) {
     if (!supabase) return;
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Fiscal';
+    const usuarioNome = _usuarioAtualNome() || 'Fiscal';
     const labels = { atualizado: 'Seguro atualizado', trocado: 'Seguro trocado', sem_alteracao: 'Sem alteração necessária' };
     try {
         const { error } = await supabase.from('apontamentos_fiscais').update({
@@ -655,7 +655,7 @@ async function cancelarPedido(pedidoId) {
     const motivo = prompt(`Cancelar o pedido #${p.id} (${p.cliente || ''})?\n\nMotivo do cancelamento (opcional):`);
     if (motivo === null) return; // desistiu
 
-    const usuarioNome = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+    const usuarioNome = _usuarioAtualNome() || 'Logística';
     try {
         const { error } = await supabase.from('pedidos')
             .update({ status: 'Cancelado' }).eq('id', pedidoId);
@@ -914,7 +914,7 @@ async function notificar({ perfil, nome, pedidoId, tipo, titulo, mensagem }) {
             tipo: tipo || 'status',
             titulo,
             mensagem: mensagem || null,
-            origem: document.getElementById('usuarioLogado')?.textContent || 'Sistema'
+            origem: _usuarioAtualNome() || 'Sistema'
         });
     } catch (e) {
         console.warn('Notificação não registrada:', e.message);
@@ -939,7 +939,7 @@ async function notificarComPush(destino, dados) {
 // As minhas notificações: pelo meu perfil ou pelo meu nome
 function _notifMinhas(lista) {
     const meuPerfil = typeof perfilAtual !== 'undefined' ? perfilAtual : null;
-    const meuNome = (document.getElementById('usuarioLogado')?.textContent || '').trim().toLowerCase();
+    const meuNome = (_usuarioAtualNome() || '').trim().toLowerCase();
     return (lista || []).filter(n => {
         if (n.nome_destino) return n.nome_destino.trim().toLowerCase() === meuNome;
         if (!n.perfil_destino) return false;
