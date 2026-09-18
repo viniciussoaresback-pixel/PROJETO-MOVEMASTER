@@ -442,7 +442,7 @@ async function fecharCargaRota(rotaId){
   const v = _rotaStatusVerde(r.id, r.placa_cegonha);
   if (!v.todosVerdes){ alert('Ainda há pedidos não validados nesta rota.'); return; }
   if (!confirm(`Fechar a carga da rota "${r.nome || '#'+r.id}" e enviar ao motorista da cegonha ${r.placa_cegonha||'—'}?`)) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     const { error } = await supabase.from('rotas_planejadas')
       .update({ carga_fechada:true, fechada_em:new Date().toISOString(), fechada_por:usuario })
@@ -572,7 +572,7 @@ async function definirLastMile(pedidoId){
   if (fluxo === 'equipe' && !equipeId){ alert('Selecione a equipe local.'); return; }
   const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
   const equipe = (equipesEntregaGlobais||[]).find(e => String(e.id) === String(equipeId));
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     const { error: e1 } = await supabase.from('entregas_last_mile').insert({
       pedido_id: parseInt(pedidoId), fluxo_entrega: fluxo,
@@ -612,7 +612,7 @@ function carregarExtratoMotorista(){
     try { nomes = (nomesDoMotoristaLogado().nomes || []); } catch(e){}
   }
   if (nomes.length === 0){
-    const n = document.getElementById('usuarioLogado')?.textContent; if (n) nomes = [n];
+    const n = _usuarioAtualNome(); if (n) nomes = [n];
   }
   const norm = t => (t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
   const alvos = nomes.map(norm).filter(Boolean);
@@ -714,7 +714,7 @@ async function salvarConferenciaRota(rotaId){
   if (isNaN(emit)){ alert('Informe o valor emitido.'); return; }
   const prev = Number(r.valor_previsto)||0;
   const div = Math.abs(prev - emit) > _DIVERGENCIA_TOLERANCIA;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     const { error } = await supabase.from('rotas_planejadas').update({
       valor_emitido: emit, conf_divergencia: div,
@@ -876,7 +876,7 @@ function popularResponsaveisComercial(){
     const k = _normResp2(r); if (!k) return;
     if (!mapa[k]) mapa[k] = _tituloResp2(r);
   });
-  const usuarioRaw = document.getElementById('usuarioLogado')?.textContent || '';
+  const usuarioRaw = _usuarioAtualNome() || '';
   const usuario = /visualizando|admin/i.test(usuarioRaw) ? '' : usuarioRaw;
   if (usuario){ const k=_normResp2(usuario); if(k && !mapa[k]) mapa[k]=_tituloResp2(usuario); }
   const nomes = Object.values(mapa).sort((a,b)=>a.localeCompare(b));
@@ -911,15 +911,15 @@ function _getResponsavelComercial(){
   // Se o campo está oculto (perfil comercial lançando no próprio perfil), usa o usuário logado.
   const wrap = document.getElementById('grupoResponsavelComercial');
   if (wrap && wrap.style.display === 'none'){
-    return document.getElementById('usuarioLogado')?.textContent?.trim() || '';
+    return _usuarioAtualNome()?.trim() || '';
   }
   const sel = document.getElementById('responsavelComercial');
-  if (!sel) return document.getElementById('usuarioLogado')?.textContent?.trim() || '';
+  if (!sel) return _usuarioAtualNome()?.trim() || '';
   if (sel.value === '__outro__'){
     return _tituloResp2(document.getElementById('responsavelComercialOutro')?.value || '');
   }
   // se não selecionou nada, cai para o usuário logado
-  return sel.value || document.getElementById('usuarioLogado')?.textContent?.trim() || '';
+  return sel.value || _usuarioAtualNome()?.trim() || '';
 }
 
 // ============================================================
@@ -1373,7 +1373,7 @@ async function criarRotaCarteira(chaveOrigem){
   const itens = _carteiraCache[chaveOrigem];
   if (!itens || itens.length === 0 || !supabase) return;
   if (!confirm(`Criar uma rota com os ${itens.length} carro(s) de ${chaveOrigem}?\n\nDepois é só definir a cegonha na Gestão Logística.`)) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   // paradas = origem + destinos distintos (na ordem em que aparecem)
   const paradas = [];
   const push = c => { if (c && !paradas.some(x => x.toLowerCase() === c.toLowerCase())) paradas.push(c); };
@@ -1617,7 +1617,7 @@ async function criarRotaDoCorredor(corredorId){
   const dados = _corredorCache[String(corredorId)];
   if (!dados || !dados.itens || dados.itens.length === 0 || !supabase) return;
   if (!confirm(`Criar a rota "${dados.nome}" e alocar ${dados.itens.length} carro(s) sem rota deste corredor?`)) return;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+  const usuario = _usuarioAtualNome() || 'Logística';
   try {
     const { data: nova, error: e1 } = await supabase.from('rotas_planejadas').insert({
       nome: dados.nome,
