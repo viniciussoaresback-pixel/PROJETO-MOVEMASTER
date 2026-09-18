@@ -10,7 +10,7 @@ async function _confSalvarFrete(viagemId){
   if (!r) return;
   const v = _histDadosViagem(r);
   const justificativa = document.getElementById('confJustificativa')?.value.trim() || null;
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   try {
     await Promise.all(v.pedidos.map(p => {
       const esperado = _confValoresEsperados[p.id];
@@ -32,7 +32,7 @@ async function _confSalvarFrete(viagemId){
 async function _confMarcarConferida(viagemId){
   const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
   if ((window._fechamentosPeriodo||{})[chavePeriodo]){ alert('🔒 Este período está fechado. Reabra o fechamento para alterar a conferência.'); return; }
-  const usuario = document.getElementById('usuarioLogado')?.textContent || 'Financeiro';
+  const usuario = _usuarioAtualNome() || 'Financeiro';
   try {
     await supabase.from('rotas_planejadas').update({ conferida_em: new Date().toISOString(), conferida_por: usuario }).eq('id', viagemId);
     const r = (rotasGlobais||[]).find(x=>String(x.id)===String(viagemId));
@@ -1139,7 +1139,7 @@ async function salvarTabelaPreco(){
   if (!origem || !destino){ msg.textContent='Informe origem e destino.'; msg.className='message show error'; return; }
   msg.textContent='Salvando...'; msg.className='message show';
   try {
-    const usuario = document.getElementById('usuarioLogado')?.textContent || null;
+    const usuario = _usuarioAtualNome() || null;
     const { data, error } = await supabase.from('tabela_precos')
       .insert({ cidade_origem: origem, uf_origem: ufO, cidade_destino: destino, uf_destino: ufD,
                 valor_comum: comum, valor_suv: suv, ativo: true, criado_por: usuario }).select();
@@ -1569,7 +1569,7 @@ async function _salvarValorManualTrecho(pedidoId){
   const cat = (p.categoriaVeiculo || p.categoria_veiculo || '').toLowerCase();
   const faixaSuv = ['suv','caminhonete'].includes(cat);
   try {
-    const usuario = document.getElementById('usuarioLogado')?.textContent || null;
+    const usuario = _usuarioAtualNome() || null;
     // upsert: se já existe o trecho, atualiza a faixa; senão cria
     const existente = (precosManuaisTrechoGlobais||[]).find(x =>
       _cidadeIgual(x.cidade_origem, p.cidadeOrigem) && _cidadeIgual(x.cidade_destino, p.cidadeDestino));
@@ -1957,7 +1957,7 @@ async function _salvarLocaisRomaneio(rotaId, enviar){
     });
     await Promise.all(updates);
     if (enviar){
-      const usuario = document.getElementById('usuarioLogado')?.textContent || 'Logística';
+      const usuario = _usuarioAtualNome() || 'Logística';
       await supabase.from('rotas_planejadas').update({ carga_enviada_em: new Date().toISOString(), carga_enviada_por: usuario }).eq('id', rotaId);
       const rota = (rotasGlobais||[]).find(r => String(r.id)===String(rotaId));
       if (rota){ rota.carga_enviada_em = new Date().toISOString(); rota.carga_enviada_por = usuario; }
