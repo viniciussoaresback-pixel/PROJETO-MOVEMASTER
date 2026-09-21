@@ -1145,6 +1145,7 @@ async function salvarTabelaPreco(){
                 valor_comum: comum, valor_suv: suv, ativo: true, criado_por: usuario }).select();
     if (error) throw error;
     if (data && data[0]) tabelaPrecosGlobais.push(data[0]);
+    _aposMudarTabelaTrecho();
     msg.textContent='Trecho salvo.'; msg.className='message show success';
     ['tpOrigem','tpUfOrigem','tpDestino','tpUfDestino','tpComum','tpSuv'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     renderizarTabelaPrecos();
@@ -1170,6 +1171,17 @@ function renderizarTabelaPrecos(){
     </tr>`).join('')}</tbody></table>`;
 }
 
+/* Toda mudança na tabela de trechos muda o valor das pernas que ainda não
+   têm valor informado — e portanto a Central de Conferência, o extrato do
+   motorista e a matriz. Antes só a própria tabela era redesenhada: as outras
+   telas continuavam com o número antigo até alguém dar F5. */
+function _aposMudarTabelaTrecho(){
+  window._tabelaTrechoMudouEm = Date.now();
+  if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional(true);
+  if (typeof renderizarMatrizFaturamento === 'function') renderizarMatrizFaturamento();
+}
+window._aposMudarTabelaTrecho = _aposMudarTabelaTrecho;
+
 async function excluirTabelaPreco(id){
   const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
   if (!['financeiro','admin'].includes(perfil)){ alert('Apenas o Financeiro pode editar a tabela de preços.'); return; }
@@ -1179,6 +1191,7 @@ async function excluirTabelaPreco(id){
     if (error) throw error;
     tabelaPrecosGlobais = tabelaPrecosGlobais.filter(t => t.id !== id);
     renderizarTabelaPrecos();
+    _aposMudarTabelaTrecho();
   } catch(e){ alert('Erro ao excluir: '+(e.message||e)); }
 }
 
@@ -1560,6 +1573,23 @@ function _matPernasDoPedido(pedidoId){
   }, 0);
 }
 
+/* Coluna de cada linha da matriz. Cegonhas da frota própria ganham coluna
+   individual; as de terceiros (agregados e fretes direto com terceiros) somam
+   numa coluna só, TERCEIROS — como na planilha. Sem isso, cada placa de
+   terceiro virava uma coluna à parte e o total de terceirização não aparecia
+   em lugar nenhum da matriz, só no quadro de baixo. */
+function _matColuna(){
+  const terceiro = {};
+  (veiculosGlobais||[]).forEach(v => {
+    if (v.placa) terceiro[String(v.placa).toUpperCase().replace(/\s+/g,'')] = (v.propriedade === 'terceiro');
+  });
+  return (l) => {
+    const placa = String(l.cegonha || '').toUpperCase().replace(/\s+/g,'');
+    if (!placa) return '—';
+    return terceiro[placa] ? 'TERCEIROS' : (l.cegonha || '—');
+  };
+}
+
 function renderizarMatrizFaturamento(){
   const cont = document.getElementById('relatMatrizWrap');
   if (!cont) return;
@@ -1571,13 +1601,16 @@ function renderizarMatrizFaturamento(){
 
   // ---- monta a matriz ----
   const chaveLinha = (l) => _matAgrupar === 'tipoCliente' ? (l.tipoCliente || '—') : (l.cliente || '—');
-  const colunas = [...new Set(linhas.map(l => l.cegonha || '—'))].sort();
+  const colDe = _matColuna();
+  // colunas próprias em ordem alfabética, TERCEIROS sempre por último
+  const colunas = [...new Set(linhas.map(colDe))]
+    .sort((a,b) => a === 'TERCEIROS' ? 1 : b === 'TERCEIROS' ? -1 : a.localeCompare(b));
   const grupos = {};
 
   linhas.forEach(l => {
     const k = chaveLinha(l);
     const g = grupos[k] = grupos[k] || { total:0, pernas:0, carros:0, porColuna:{} };
-    const col = l.cegonha || '—';
+    const col = colDe(l);
     g.porColuna[col] = (g.porColuna[col] || 0) + l.frete;
     g.total += l.frete;
     g.carros++;
@@ -1595,11 +1628,9 @@ function renderizarMatrizFaturamento(){
   });
 
   // ---- frota própria × terceiros × locadoras ----
-  const propriedade = {};
-  (veiculosGlobais||[]).forEach(v => { if (v.placa) propriedade[v.placa] = v.propriedade || 'propria'; });
   let fatPropria = 0, fatTerceiro = 0;
   linhas.forEach(l => {
-    if (propriedade[l.cegonha] === 'terceiro') fatTerceiro += l.frete; else fatPropria += l.frete;
+    if (colDe(l) === 'TERCEIROS') fatTerceiro += l.frete; else fatPropria += l.frete;
   });
   const fatLocadoras = linhas
     .filter(l => (l.tipoCliente||'').toLowerCase().includes('locadora'))
@@ -1639,7 +1670,7 @@ function renderizarMatrizFaturamento(){
         <thead>
           <tr>
             <th class="mat-col-fixa">${_matAgrupar==='tipoCliente'?'CATEGORIA':'CLIENTE'}</th>
-            ${colunas.map(c => `<th class="right">${_matEsc(c)}</th>`).join('')}
+            ${colunas.map(c => `<th class="right ${c==='TERCEIROS'?'mat-col-terc':''}">${_matEsc(c)}</th>`).join('')}
             <th class="right mat-col-mm">MOVEMASTER</th>
             <th class="right mat-col-tot">SOMA</th>
             <th class="right">%</th>
@@ -1650,7 +1681,7 @@ function renderizarMatrizFaturamento(){
             const mm = g.total - g.pernas;
             return `<tr>
               <td class="mat-col-fixa">${_matEsc(nome)}<span class="mat-carros">${g.carros} carro(s)</span></td>
-              ${colunas.map(c => `<td class="right ${g.porColuna[c]?'':'mat-zero'}">${_matFmt(g.porColuna[c]||0)}</td>`).join('')}
+              ${colunas.map(c => `<td class="right ${g.porColuna[c]?'':'mat-zero'} ${c==='TERCEIROS'?'mat-col-terc':''}">${_matFmt(g.porColuna[c]||0)}</td>`).join('')}
               <td class="right mat-col-mm ${mm<0?'v-neg':''}">${_matFmt(mm)}</td>
               <td class="right mat-col-tot">${_matFmt(g.total)}</td>
               <td class="right mat-pct">${pct(g.total)}</td>
@@ -1660,7 +1691,7 @@ function renderizarMatrizFaturamento(){
         <tfoot>
           <tr>
             <td class="mat-col-fixa">TOTAL POR PLACA</td>
-            ${colunas.map(c => `<td class="right">${_matFmt(totaisColuna[c])}</td>`).join('')}
+            ${colunas.map(c => `<td class="right ${c==='TERCEIROS'?'mat-col-terc':''}">${_matFmt(totaisColuna[c])}</td>`).join('')}
             <td class="right mat-col-mm">${_matFmt(totalMovemaster)}</td>
             <td class="right mat-col-tot">${_matFmt(totalGeral)}</td>
             <td class="right">100,00%</td>
@@ -1717,12 +1748,15 @@ function _matExportar(){
   if (!linhas.length){ alert('Nada para exportar.'); return; }
 
   const chaveLinha = (l) => _matAgrupar === 'tipoCliente' ? (l.tipoCliente || '—') : (l.cliente || '—');
-  const colunas = [...new Set(linhas.map(l => l.cegonha || '—'))].sort();
+  const colDe = _matColuna();
+  const colunas = [...new Set(linhas.map(colDe))]
+    .sort((a,b) => a === 'TERCEIROS' ? 1 : b === 'TERCEIROS' ? -1 : a.localeCompare(b));
   const grupos = {};
   linhas.forEach(l => {
     const k = chaveLinha(l);
     const g = grupos[k] = grupos[k] || { total:0, pernas:0, porColuna:{} };
-    g.porColuna[l.cegonha||'—'] = (g.porColuna[l.cegonha||'—']||0) + l.frete;
+    const col = colDe(l);
+    g.porColuna[col] = (g.porColuna[col]||0) + l.frete;
     g.total += l.frete;
     g.pernas += _matPernasDoPedido(l.id);
   });
@@ -1782,7 +1816,7 @@ function _extMontar(){
   const rotas = (rotasGlobais||[]).filter(r => {
     if (r.status === 'cancelada') return false;
     if (!_extFiltros.incluirNaoConferidas && !r.conferida_em) return false;
-    if (_extFiltros.motorista && !n(r.motorista_1||'').includes(n(_extFiltros.motorista))) return false;
+    if (_extFiltros.motorista && n(r.motorista_1||'') !== n(_extFiltros.motorista)) return false;
     if (_extFiltros.cegonha  && !n(r.placa_cegonha||'').includes(n(_extFiltros.cegonha))) return false;
     const dt = r.iniciada_em || r.created_at;
     if (de  && dt && new Date(dt) < de)  return false;
@@ -1840,8 +1874,28 @@ function renderizarRemuneracaoMotorista(){
   const cont = document.getElementById('remuneracaoWrap');
   if (!cont) return;
 
-  const motoristas = [...new Set((rotasGlobais||[]).map(r => r.motorista_1).filter(Boolean))].sort();
-  const cegonhas   = [...new Set((rotasGlobais||[]).map(r => r.placa_cegonha).filter(Boolean))].sort();
+  /* O mesmo motorista aparece gravado de jeitos diferentes nas viagens:
+     "GILMAR BATISTA SANTOS", "Gilmar Batista Santos", "GILMAR BATISTA  SANTOS"
+     com espaço duplo. O Set comparava texto cru e tratava cada grafia como
+     uma pessoa — daí os nomes repetidos no filtro. Agora a chave é o nome
+     normalizado, e a grafia exibida é a mais frequente. */
+  const _nk = (t) => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase().replace(/\s+/g,' ').trim();
+  const _unicos = (lista) => {
+    const cont = {};
+    lista.filter(Boolean).forEach(v => {
+      const k = _nk(v);
+      if (!k) return;
+      cont[k] = cont[k] || {};
+      const exib = String(v).replace(/\s+/g,' ').trim();
+      cont[k][exib] = (cont[k][exib] || 0) + 1;
+    });
+    return Object.values(cont)
+      .map(grafias => Object.entries(grafias).sort((a,b) => b[1]-a[1])[0][0])
+      .sort((a,b) => a.localeCompare(b, 'pt-BR'));
+  };
+  const motoristas = _unicos((rotasGlobais||[]).map(r => r.motorista_1));
+  const cegonhas   = _unicos((rotasGlobais||[]).map(r => r.placa_cegonha));
   const blocos = _extMontar();
 
   const totalGeral = blocos.reduce((s,b) => s + b.total, 0);
@@ -2006,6 +2060,7 @@ async function _salvarValorManualTrecho(pedidoId){
       if (data && data[0]) precosManuaisTrechoGlobais.push(data[0]);
     }
     renderizarRemuneracaoMotorista();
+    _aposMudarTabelaTrecho();
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFaturamento', `Valor do trecho ${p.cidadeOrigem}→${p.cidadeDestino} salvo.`, 'success');
   } catch(e){ alert('Erro: '+(e.message||e)); }
 }
