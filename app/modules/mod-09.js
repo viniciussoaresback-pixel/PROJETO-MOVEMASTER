@@ -1510,12 +1510,11 @@ function _confRenderPainel(){
 
       <div class="conf-painel-abas">
         <button class="conf-aba ${_confAbaDetalhe==='veiculos'?'ativo':''}" onclick="_confSelAbaDetalhe('veiculos')">Veículos (${v.pedidos.length})</button>
-        <button class="conf-aba ${_confAbaDetalhe==='frete'?'ativo':''}" onclick="_confSelAbaDetalhe('frete')">Frete e Tabela</button>
         <button class="conf-aba ${_confAbaDetalhe==='ctes'?'ativo':''}" onclick="_confSelAbaDetalhe('ctes')">CT-es (${v.comCte}/${v.pedidos.length})</button>
         <button class="conf-aba ${_confAbaDetalhe==='remuneracao'?'ativo':''}" onclick="_confSelAbaDetalhe('remuneracao')">Remuneração</button>
       </div>
 
-      <div class="conf-painel-corpo">${_confAbaConteudo(v)}</div>
+      <div class="conf-painel-corpo" id="confPainelDetalhe">${_confAbaConteudo(v)}</div>
 
       <div class="conf-painel-rodape">
         ${st.chave==='conferida'
@@ -1598,6 +1597,88 @@ function _confValorPerna(perna, p){
   return { valor: null, origem: 'pendente' };
 }
 
+/* Compara nomes de motorista com tolerância: o mesmo nome aparece com
+   acento, sem acento, em caixa alta ou com espaço a mais dependendo de onde
+   foi digitado. Comparando cru, a perna do motorista não seria reconhecida
+   como dele e o total do topo sairia zerado. */
+function _confNomesIguais(a, b){
+  if (!a || !b) return false;
+  const n = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/\s+/g,' ').trim();
+  return n(a) === n(b);
+}
+window._confNomesIguais = _confNomesIguais;
+
+/* Recalcula os totais ao editar uma perna, sem redesenhar a aba — redesenhar
+   tiraria o foco do campo e faria perder o que está sendo digitado. */
+function _confRecalcularRemuneracao(){
+  const painel = document.getElementById('confPainelDetalhe') || document;
+  const inputs = [...painel.querySelectorAll('.rem-input')];
+  if (!inputs.length) return;
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+
+  // soma por pedido
+  const porPedido = {};
+  inputs.forEach(inp => {
+    const oninput = inp.getAttribute('oninput') || '';
+    const m = oninput.match(/'(\d+)\|/);
+    if (!m) return;
+    const pid = m[1];
+    const v = parseFloat(inp.value);
+    porPedido[pid] = (porPedido[pid] || 0) + (isNaN(v) ? 0 : v);
+  });
+
+  let totalPernas = 0;
+  Object.entries(porPedido).forEach(([pid, soma]) => {
+    totalPernas += soma;
+    const elSoma = document.getElementById('remSoma_' + pid);
+    if (elSoma) elSoma.textContent = fmt(soma);
+    const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pid));
+    const margem = Number(p?.valorFrete||0) - soma;
+    const elM = document.getElementById('remMargem_' + pid);
+    if (elM){
+      elM.textContent = fmt(margem);
+      const pai = elM.closest('.rem-margem');
+      if (pai) pai.classList.toggle('neg', margem < 0);
+    }
+  });
+
+  // total do motorista desta viagem: só as linhas marcadas como dele
+  let totalMot = 0;
+  painel.querySelectorAll('tr.rem-perna-atual .rem-input').forEach(inp => {
+    const v = parseFloat(inp.value); if (!isNaN(v)) totalMot += v;
+  });
+  const elMot = document.getElementById('remTotalMotorista');
+  if (elMot) elMot.textContent = fmt(totalMot);
+  const elPernas = document.getElementById('remTotalPernas');
+  if (elPernas) elPernas.textContent = fmt(totalPernas);
+
+  const elMargemV = document.getElementById('remMargemViagem');
+  if (elMargemV){
+    const receita = (pedidosGlobais||[])
+      .filter(p => Object.keys(porPedido).includes(String(p.id)))
+      .reduce((s,p) => s + Number(p.valorFrete||0), 0);
+    const mv = receita - totalPernas;
+    elMargemV.textContent = fmt(mv);
+    elMargemV.className = mv < 0 ? 'v-neg' : 'v-pos';
+  }
+}
+window._confRecalcularRemuneracao = _confRecalcularRemuneracao;
+
+/* Frete cheio: o valor do pedido inteiro vai para a única perna. */
+function _confRepassarIntegral(pedidoId, valor, origem, destino){
+  const chave = `${pedidoId}|${origem}|${destino}`;
+  _confSetValorPerna(chave, valor);
+  const painel = document.getElementById('confPainelDetalhe') || document;
+  const alvo = [...painel.querySelectorAll('.rem-input')]
+    .find(inp => (inp.getAttribute('oninput')||'').includes(`'${chave.replace(/'/g,"\\'")}'`));
+  if (alvo) alvo.value = valor;
+  _confRecalcularRemuneracao();
+  if (typeof _rmToastConfirmacao === 'function')
+    _rmToastConfirmacao(`⬇️ R$ ${Number(valor).toLocaleString('pt-BR',{minimumFractionDigits:2})} repassados. Não esqueça de salvar.`);
+}
+window._confRepassarIntegral = _confRepassarIntegral;
+
 // Guarda o valor definido para uma perna (sem re-renderizar, pra não perder foco)
 function _confSetValorPerna(chave, valor){
   window._confValoresPerna = window._confValoresPerna || {};
@@ -1643,6 +1724,11 @@ async function _confSalvarPernas(viagemId){
 
 function _confAbaConteudo(v){
   const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  /* "Frete e Tabela" saiu: mostrava os mesmos números da Remuneração, e ter
+     dois lugares dizendo a mesma coisa é o que confundia na conferência.
+     Quem tinha essa aba aberta cai na Remuneração, que agora é a aba única
+     de dinheiro. */
+  if (_confAbaDetalhe === 'frete') _confAbaDetalhe = 'remuneracao';
 
   if (_confAbaDetalhe === 'veiculos'){
     return `<table class="conf-det-tabela">
@@ -1730,64 +1816,174 @@ function _confAbaConteudo(v){
   }
 
   if (_confAbaDetalhe === 'remuneracao'){
-    // Conferência POR PERNA: cada pedido mostra as pernas que percorreu, com o valor
-    // de cada trecho (tabela ou definido manualmente) e o status (finalizado ou não).
-    let totalGeral = 0, temPendente = false, temNaoFinalizado = false;
-    const origemLabel = { tabela:'🟢 Tabela do trecho', manual:'🟠 Manual do trecho', definido:'🔵 Definido por você', pendente:'🔴 Sem valor' };
+    /* ============================================================
+       REMUNERAÇÃO — a aba onde os valores nascem
+
+       É aqui que se forma a margem: o comercial informa o que o cliente paga
+       (valor do pedido) e aqui se define o que sai para cada motorista (valor
+       da perna). A diferença é o que fica para a Movemaster, e é dela que
+       saem os três números do fechamento — por motorista, por cliente e o
+       faturamento real.
+
+       Duas mudanças de fundo em relação à versão anterior:
+
+       1. O total do topo passa a ser o do MOTORISTA DESTA VIAGEM, somando só
+          as pernas dele. Antes era o total de todas as pernas de todos os
+          motoristas, o que não respondia a pergunta que se faz olhando a
+          viagem do Gilmar: quanto o Gilmar fez aqui.
+
+       2. Todas as pernas são editáveis, sempre. Antes só dava para digitar
+          quando não havia valor de tabela — então, para pagar diferente do
+          que a tabela diz, era preciso mexer na tabela. O valor digitado
+          agora substitui a tabela naquele pedido, e a tabela volta a ser o
+          que deveria: sugestão.
+       ============================================================ */
+    const rotaViagem = (rotasGlobais||[]).find(r => String(r.id) === String(v.id));
+    const motoristaViagem = (rotaViagem && rotaViagem.motorista_1) || v.motorista || '';
+    const mesmoMotorista = (nome) => _confNomesIguais(nome, motoristaViagem);
+
+    let totalMotorista = 0;   // só as pernas do motorista desta viagem
+    let totalPernas = 0;      // todas as pernas, de todos os motoristas
+    let totalPedidos = 0;     // receita informada pelo comercial
+    let temPendente = false, temNaoFinalizado = false;
 
     const blocos = v.pedidos.map(p => {
       const { pernas, finalizado } = _confPernasDoPedido(p);
       if (!finalizado) temNaoFinalizado = true;
-      let totalPedido = 0, pedidoPendente = false;
-      const linhasPernas = pernas.map((perna,i) => {
+
+      const valorPedido = Number(p.valorFrete || 0);
+      totalPedidos += valorPedido;
+
+      let somaPedido = 0, pedidoPendente = false;
+
+      const linhasPernas = pernas.map((perna, i) => {
         const vp = _confValorPerna(perna, p);
-        if (vp.valor == null){ pedidoPendente = true; temPendente = true; } else { totalPedido += Number(vp.valor); }
-        const chaveManual = `${p.id}|${perna.trechoOrigem}|${perna.trechoDestino}`;
-        const podeDefinir = vp.origem === 'pendente' || vp.origem === 'definido';
-        return `<tr>
-          <td style="font-size:.78rem;color:#9ca3af">Perna ${i+1}</td>
-          <td><strong>${perna.trechoOrigem}</strong> → <strong>${perna.trechoDestino}</strong>
-            ${perna.transbordo?'<span style="color:#fb923c;font-size:.7rem"> 🔀 transbordo</span>':''}
-            ${!perna.concluida?'<span style="color:#f59e0b;font-size:.7rem"> ⏳ em andamento</span>':''}
+        if (vp.valor == null){ pedidoPendente = true; temPendente = true; }
+        else {
+          somaPedido += Number(vp.valor);
+          if (mesmoMotorista(perna.motorista)) totalMotorista += Number(vp.valor);
+        }
+        const chave = `${p.id}|${perna.trechoOrigem}|${perna.trechoDestino}`;
+        const daViagem = mesmoMotorista(perna.motorista);
+        const rotulo = vp.origem === 'definido' ? '✏️ valor informado'
+                     : vp.origem === 'tabela'   ? '🟢 tabela do trecho'
+                     : vp.origem === 'manual'   ? '🟠 manual do trecho'
+                     : '🔴 sem valor';
+        return `<tr class="${daViagem ? 'rem-perna-atual' : ''}">
+          <td class="rem-perna-num">Perna ${i+1}</td>
+          <td>
+            <strong>${perna.trechoOrigem}</strong> → <strong>${perna.trechoDestino}</strong>
+            ${perna.transbordo?'<span class="rem-tag-transb">🔀 transbordo</span>':''}
+            ${!perna.concluida?'<span class="rem-tag-andamento">⏳ em andamento</span>':''}
           </td>
-          <td style="font-size:.8rem">👤 ${perna.motorista}<br><span class="text-muted" style="font-size:.72rem">🚛 ${perna.cegonha}</span></td>
-          <td>${podeDefinir
-            ? `<input type="number" step="0.01" class="conf-perna-input" value="${vp.origem==='definido'?vp.valor:''}" placeholder="definir R$" oninput="_confSetValorPerna('${chaveManual.replace(/'/g,"\\'")}', this.value)" style="width:110px;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.04);color:inherit;font-size:.82rem">`
-            : `<span style="font-size:.74rem;color:#22c55e">${origemLabel[vp.origem]}</span>`}
-            ${vp.origem === 'pendente'
-              ? `<br><button type="button" class="conf-esp-btn" style="margin-top:4px" onclick="_irCadastrarTabelaTrecho('${String(perna.trechoOrigem).replace(/'/g,"\\'")}','${String(perna.trechoDestino).replace(/'/g,"\\'")}','','')" title="Abre a Remuneração por Trecho já com o trecho preenchido">➕ Cadastrar trecho</button>`
-              : ''}
+          <td class="rem-perna-mot">
+            ${daViagem?'<span class="rem-mot-atual">▸</span> ':''}👤 ${perna.motorista}
+            <div class="rem-perna-ceg">🚛 ${perna.cegonha}</div>
           </td>
-          <td class="right"><strong>${vp.valor!=null?fmt(vp.valor):'—'}</strong></td>
+          <td>
+            <input type="number" step="0.01" class="rem-input"
+                   value="${vp.valor != null ? vp.valor : ''}" placeholder="R$"
+                   oninput="_confSetValorPerna('${chave.replace(/'/g,"\\'")}', this.value)"
+                   onchange="_confRecalcularRemuneracao()">
+            <div class="rem-origem">${rotulo}</div>
+          </td>
+          <td class="right"><strong id="remTot_${p.id}_${i}">${vp.valor!=null?fmt(vp.valor):'—'}</strong></td>
         </tr>`;
       }).join('');
-      totalGeral += totalPedido;
 
-      return `<div style="margin-bottom:16px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden">
-        <div style="padding:10px 12px;background:rgba(255,255,255,.03);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <div><strong>#${p.id}</strong> · ${p.placa||'—'} <span class="text-muted" style="font-size:.78rem">${p.modelo||''}</span>
-            <span class="text-muted" style="font-size:.75rem"> · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</span></div>
-          <div>${finalizado
-            ? '<span style="color:#22c55e;font-size:.75rem;font-weight:700">✅ Trajeto completo</span>'
-            : '<span style="color:#f59e0b;font-size:.75rem;font-weight:700">⚠️ Trajeto NÃO finalizado</span>'}</div>
+      totalPernas += somaPedido;
+      const margem = valorPedido - somaPedido;
+
+      /* O repassar existe para o frete cheio: um motorista, um trajeto, sem
+         divisão. Com duas pernas ele não faz sentido — jogar o valor inteiro
+         num motorista deixaria a outra perna sem lastro e a soma acima do
+         pedido. Por isso só aparece quando há uma perna. */
+      const podeRepassar = pernas.length === 1;
+
+      return `
+      <div class="rem-pedido">
+        <div class="rem-pedido-cab">
+          <div class="rem-pedido-id">
+            <strong>#${p.id}</strong> · ${p.placa||'—'}
+            <span class="rem-modelo">${p.modelo||''}</span>
+            ${p.numeroCte?`<span class="rem-cte">🧾 CT-e ${p.numeroCte}</span>`:'<span class="rem-cte-sem">sem CT-e</span>'}
+          </div>
+          <div class="rem-pedido-cli">
+            🏢 <strong>${(p.cliente||'—').slice(0,34)}</strong>
+            <span class="rem-rota">${(p.cidadeOrigem||'—').split('/')[0]} → ${(p.cidadeDestino||'—').split('/')[0]}</span>
+          </div>
+          <div class="rem-pedido-val">
+            <span>Valor do pedido</span>
+            <strong>${fmt(valorPedido)}</strong>
+          </div>
+          <div class="rem-pedido-st">${finalizado
+            ? '<span class="rem-ok">✅ trajeto completo</span>'
+            : '<span class="rem-alerta">⚠️ trajeto não finalizado</span>'}</div>
         </div>
-        <table class="conf-det-tabela" style="margin:0">
-          <thead><tr><th></th><th>Trecho da perna</th><th>Motorista / Cegonha</th><th>Valor</th><th>Total</th></tr></thead>
+
+        ${podeRepassar ? `
+          <div class="rem-repassar">
+            <button class="btn btn-secondary btn-sm"
+                    onclick="_confRepassarIntegral(${p.id}, ${valorPedido}, '${String(pernas[0].trechoOrigem).replace(/'/g,"\\'")}', '${String(pernas[0].trechoDestino).replace(/'/g,"\\'")}')">
+              ⬇️ Repassar ${fmt(valorPedido)} ao motorista
+            </button>
+            <span class="rem-repassar-dica">frete cheio, sem divisão entre caminhões</span>
+          </div>` : ''}
+
+        <table class="rem-tab">
+          <thead><tr>
+            <th></th><th>Trecho da perna</th><th>Motorista / cegonha</th><th>Valor</th><th class="right">Total</th>
+          </tr></thead>
           <tbody>${linhasPernas}</tbody>
-          <tfoot><tr><td colspan="4"><strong>Total do pedido #${p.id}${pedidoPendente?' <span style="color:#ef4444;font-size:.72rem">(perna sem valor)</span>':''}</strong></td><td class="right"><strong>${fmt(totalPedido)}</strong></td></tr></tfoot>
         </table>
+
+        <div class="rem-pedido-fim">
+          <span>Soma das pernas <strong id="remSoma_${p.id}">${fmt(somaPedido)}</strong></span>
+          <span>Valor do pedido <strong>${fmt(valorPedido)}</strong></span>
+          <span class="rem-margem ${margem < 0 ? 'neg' : ''}">
+            Diferença <strong id="remMargem_${p.id}">${fmt(margem)}</strong>
+          </span>
+          ${pedidoPendente?'<span class="rem-alerta">perna sem valor</span>':''}
+        </div>
       </div>`;
     }).join('');
 
+    const margemViagem = totalPedidos - totalPernas;
+
     return `
-      <div class="conf-frete-aviso">💡 Cada pedido mostra as <strong>pernas</strong> que percorreu. O valor vem da <strong>tabela do trecho</strong> quando existe; onde não há preço tabelado, <strong>defina o valor</strong> daquela perna. ${temNaoFinalizado?'<br><strong style="color:#f59e0b">⚠️ Há pedido(s) com trajeto não finalizado — confira só quando o trajeto estiver completo.</strong>':''}</div>
-      ${blocos}
-      <div style="margin-top:14px;padding:12px 14px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:8px;font-size:.85rem">
-        <div style="display:flex;justify-content:space-between"><span>Faturamento da viagem</span><strong>${fmt(v.total)}</strong></div>
-        <div style="display:flex;justify-content:space-between"><span>Remuneração total (todas as pernas)${temPendente?' <span style="color:#ef4444;font-size:.72rem">(há pendências)</span>':''}</span><strong>${fmt(totalGeral)}</strong></div>
+      <div class="rem-topo">
+        <div class="rem-topo-item rem-topo-destaque">
+          <span>Faturamento de ${motoristaViagem || 'motorista'} nesta viagem</span>
+          <strong id="remTotalMotorista">${fmt(totalMotorista)}</strong>
+          <small>soma só das pernas dele</small>
+        </div>
+        <div class="rem-topo-item">
+          <span>Receita dos pedidos</span>
+          <strong>${fmt(totalPedidos)}</strong>
+          <small>${v.pedidos.length} carro(s)</small>
+        </div>
+        <div class="rem-topo-item">
+          <span>Total das pernas</span>
+          <strong id="remTotalPernas">${fmt(totalPernas)}</strong>
+          <small>todos os motoristas</small>
+        </div>
+        <div class="rem-topo-item">
+          <span>Diferença</span>
+          <strong id="remMargemViagem" class="${margemViagem<0?'v-neg':'v-pos'}">${fmt(margemViagem)}</strong>
+          <small>receita − pernas</small>
+        </div>
       </div>
-      <div style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="_confSalvarPernas(${v.id})">💾 Salvar valores das pernas</button></div>`;
+
+      ${temNaoFinalizado?'<div class="rem-aviso">⚠️ Há carros com trajeto não finalizado. Os valores podem mudar quando as pernas restantes forem registradas.</div>':''}
+      ${temPendente?'<div class="rem-aviso">🔴 Há pernas sem valor. Enquanto isso, a soma está incompleta.</div>':''}
+
+      ${blocos}
+
+      <div class="rem-rodape">
+        <button class="btn btn-primary" onclick="_confSalvarPernas(${v.id})">💾 Salvar valores</button>
+      </div>`;
   }
+
   return '';
 }
 
