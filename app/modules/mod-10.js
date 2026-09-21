@@ -1391,6 +1391,26 @@ function _relSubaba(qual, btn){
   if (btn) btn.classList.add('ativo');
   const fat = document.getElementById('relFaturamentoView');
   const rem = document.getElementById('relRemuneracaoView');
+  const mat = document.getElementById('relMatrizView');
+
+  /* A matriz depende do mesmo _relatFatCache do faturamento. Se ninguém
+     gerou o período ainda, ela abriria vazia sem explicar por quê — então
+     dispara a carga por baixo. */
+  if (qual === 'matriz'){
+    if (fat) fat.style.display = 'none';
+    if (rem) rem.style.display = 'none';
+    if (mat) mat.style.display = '';
+    if (!document.getElementById('relatFatDe')){
+      if (typeof abrirRelatorioFaturamento === 'function') abrirRelatorioFaturamento();
+    } else if (!_relatFatCache && typeof carregarRelatorioFaturamento === 'function'){
+      carregarRelatorioFaturamento();
+    } else if (typeof renderizarMatrizFaturamento === 'function'){
+      renderizarMatrizFaturamento();
+    }
+    return;
+  }
+  if (mat) mat.style.display = 'none';
+
   if (qual === 'faturamento'){
     if (fat) fat.style.display = '';
     if (rem) rem.style.display = 'none';
@@ -1426,6 +1446,8 @@ function _relatFatOrigemHTML(){
 }
 
 function renderizarRelatorioFaturamento(){
+  // a matriz consome o mesmo _relatFatCache; redesenha junto
+  setTimeout(() => { if (typeof renderizarMatrizFaturamento === 'function') renderizarMatrizFaturamento(); }, 0);
   const cont = document.getElementById('relatFatConteudo');
   const resumo = document.getElementById('relatFatResumo');
   const grupoCampo = document.getElementById('relatFatGrupo')?.value || 'cliente';
@@ -1500,63 +1522,463 @@ function exportarRelatorioFaturamento(){
   a.click();
 }
 
+/* ============================================================
+   MATRIZ DE FATURAMENTO — cliente × cegonha
+
+   Clientes nas linhas, caminhões nas colunas, o valor faturado no cruzamento.
+   Totais nas duas pontas e o percentual de cada cliente sobre o faturamento.
+
+   A célula guarda a RECEITA — o valor do pedido, o que o cliente paga. Não a
+   margem. É daqui que saem os três números do fechamento:
+     • faturamento por caminhão → total da coluna
+     • faturamento por cliente  → total da linha (e a base da comissão de vendas)
+     • faturamento real         → o total geral, com a coluna MOVEMASTER
+                                   mostrando o que sobrou depois das pernas
+
+   A coluna MOVEMASTER é a diferença: receita menos o que foi distribuído aos
+   motoristas naquele cliente. É o que a empresa reteve.
+   ============================================================ */
+
+let _matAgrupar = 'cliente';   // cliente | tipoCliente
+
+function _matFmt(n){
+  const v = Number(n||0);
+  return v === 0 ? '—' : 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2});
+}
+function _matEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* Quanto foi distribuído aos motoristas num pedido — a soma das pernas.
+   Usa as mesmas funções da conferência, para o número não divergir do que se
+   vê lá: duas contas diferentes para a mesma coisa sempre acabam discordando. */
+function _matPernasDoPedido(pedidoId){
+  const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pedidoId));
+  if (!p || typeof _confPernasDoPedido !== 'function') return 0;
+  const { pernas } = _confPernasDoPedido(p);
+  return pernas.reduce((s, perna) => {
+    const vp = (typeof _confValorPerna === 'function') ? _confValorPerna(perna, p) : { valor:null };
+    return s + (vp.valor != null ? Number(vp.valor) : 0);
+  }, 0);
+}
+
+function renderizarMatrizFaturamento(){
+  const cont = document.getElementById('relatMatrizWrap');
+  if (!cont) return;
+  const linhas = _relatFatCache || [];
+  if (!linhas.length){
+    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum faturamento no período. Ajuste o período acima e clique em <strong>Gerar</strong>.</p>';
+    return;
+  }
+
+  // ---- monta a matriz ----
+  const chaveLinha = (l) => _matAgrupar === 'tipoCliente' ? (l.tipoCliente || '—') : (l.cliente || '—');
+  const colunas = [...new Set(linhas.map(l => l.cegonha || '—'))].sort();
+  const grupos = {};
+
+  linhas.forEach(l => {
+    const k = chaveLinha(l);
+    const g = grupos[k] = grupos[k] || { total:0, pernas:0, carros:0, porColuna:{} };
+    const col = l.cegonha || '—';
+    g.porColuna[col] = (g.porColuna[col] || 0) + l.frete;
+    g.total += l.frete;
+    g.carros++;
+    g.pernas += _matPernasDoPedido(l.id);
+  });
+
+  const totalGeral = linhas.reduce((s,l) => s + l.frete, 0);
+  const totalPernas = Object.values(grupos).reduce((s,g) => s + g.pernas, 0);
+  const totalMovemaster = totalGeral - totalPernas;
+
+  const ordenados = Object.entries(grupos).sort((a,b) => b[1].total - a[1].total);
+  const totaisColuna = {};
+  colunas.forEach(c => {
+    totaisColuna[c] = ordenados.reduce((s,[,g]) => s + (g.porColuna[c]||0), 0);
+  });
+
+  // ---- frota própria × terceiros × locadoras ----
+  const propriedade = {};
+  (veiculosGlobais||[]).forEach(v => { if (v.placa) propriedade[v.placa] = v.propriedade || 'propria'; });
+  let fatPropria = 0, fatTerceiro = 0;
+  linhas.forEach(l => {
+    if (propriedade[l.cegonha] === 'terceiro') fatTerceiro += l.frete; else fatPropria += l.frete;
+  });
+  const fatLocadoras = linhas
+    .filter(l => (l.tipoCliente||'').toLowerCase().includes('locadora'))
+    .reduce((s,l) => s + l.frete, 0);
+
+  const pct = (v) => totalGeral ? ((v/totalGeral)*100).toFixed(2).replace('.',',') + '%' : '0,00%';
+
+  cont.innerHTML = `
+    <div class="mat-barra">
+      <div class="mat-campo">
+        <label>Linhas da matriz</label>
+        <select onchange="_matSetAgrupar(this.value)">
+          <option value="cliente" ${_matAgrupar==='cliente'?'selected':''}>Por cliente</option>
+          <option value="tipoCliente" ${_matAgrupar==='tipoCliente'?'selected':''}>Por categoria de cliente</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="_matExportar()">⬇️ Exportar Excel</button>
+    </div>
+
+    <div class="mat-resumo">
+      <div class="mat-res-item mat-res-destaque">
+        <span>Faturamento do período</span><strong>${_matFmt(totalGeral)}</strong>
+      </div>
+      <div class="mat-res-item">
+        <span>Distribuído aos motoristas</span><strong class="v-laranja">${_matFmt(totalPernas)}</strong>
+      </div>
+      <div class="mat-res-item">
+        <span>Movemaster</span>
+        <strong class="${totalMovemaster<0?'v-neg':'v-pos'}">${_matFmt(totalMovemaster)}</strong>
+        <small>${pct(totalMovemaster)} do faturamento</small>
+      </div>
+      <div class="mat-res-item"><span>Carros faturados</span><strong>${linhas.length}</strong></div>
+    </div>
+
+    <div class="mat-scroll">
+      <table class="mat-tab">
+        <thead>
+          <tr>
+            <th class="mat-col-fixa">${_matAgrupar==='tipoCliente'?'CATEGORIA':'CLIENTE'}</th>
+            ${colunas.map(c => `<th class="right">${_matEsc(c)}</th>`).join('')}
+            <th class="right mat-col-mm">MOVEMASTER</th>
+            <th class="right mat-col-tot">SOMA</th>
+            <th class="right">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${ordenados.map(([nome, g]) => {
+            const mm = g.total - g.pernas;
+            return `<tr>
+              <td class="mat-col-fixa">${_matEsc(nome)}<span class="mat-carros">${g.carros} carro(s)</span></td>
+              ${colunas.map(c => `<td class="right ${g.porColuna[c]?'':'mat-zero'}">${_matFmt(g.porColuna[c]||0)}</td>`).join('')}
+              <td class="right mat-col-mm ${mm<0?'v-neg':''}">${_matFmt(mm)}</td>
+              <td class="right mat-col-tot">${_matFmt(g.total)}</td>
+              <td class="right mat-pct">${pct(g.total)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td class="mat-col-fixa">TOTAL POR PLACA</td>
+            ${colunas.map(c => `<td class="right">${_matFmt(totaisColuna[c])}</td>`).join('')}
+            <td class="right mat-col-mm">${_matFmt(totalMovemaster)}</td>
+            <td class="right mat-col-tot">${_matFmt(totalGeral)}</td>
+            <td class="right">100,00%</td>
+          </tr>
+          <tr class="mat-pct-linha">
+            <td class="mat-col-fixa">% sobre o faturamento</td>
+            ${colunas.map(c => `<td class="right">${pct(totaisColuna[c])}</td>`).join('')}
+            <td class="right mat-col-mm">${pct(totalMovemaster)}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="mat-quadros">
+      <div class="mat-quadro">
+        <div class="mat-quadro-tit">Frota própria e terceirização</div>
+        <table class="mat-quadro-tab">
+          <tr><td>Frota própria</td><td class="right">${_matFmt(fatPropria)}</td><td class="right mat-pct">${pct(fatPropria)}</td></tr>
+          <tr><td>Terceirização</td><td class="right">${_matFmt(fatTerceiro)}</td><td class="right mat-pct">${pct(fatTerceiro)}</td></tr>
+          <tr><td>Locadoras (clientes)</td><td class="right">${_matFmt(fatLocadoras)}</td><td class="right mat-pct">${pct(fatLocadoras)}</td></tr>
+        </table>
+      </div>
+
+      <div class="mat-quadro">
+        <div class="mat-quadro-tit">Composição do faturamento</div>
+        <table class="mat-quadro-tab">
+          <tr><td>CT-e normal</td><td class="right">${_matFmt(totalGeral)}</td></tr>
+          <tr class="mat-indisp"><td>Substituído</td><td class="right">—</td></tr>
+          <tr class="mat-indisp"><td>Substituição</td><td class="right">—</td></tr>
+          <tr class="mat-indisp"><td>Anulação</td><td class="right">—</td></tr>
+        </table>
+        <p class="mat-nota">
+          Substituição e anulação de CT-e ainda não são registradas no sistema — não há
+          campo para informar a situação do documento nem o CT-e substituído. Enquanto
+          não houver, estas linhas ficam vazias e o total considera só os CT-es normais.
+        </p>
+      </div>
+    </div>`;
+}
+window.renderizarMatrizFaturamento = renderizarMatrizFaturamento;
+
+function _matSetAgrupar(v){
+  _matAgrupar = v;
+  renderizarMatrizFaturamento();
+}
+window._matSetAgrupar = _matSetAgrupar;
+
+/* Exporta a matriz como CSV, que o Excel abre direto. Separador ponto e
+   vírgula e BOM no começo: sem isso o Excel em português quebra as colunas e
+   come os acentos. */
+function _matExportar(){
+  const linhas = _relatFatCache || [];
+  if (!linhas.length){ alert('Nada para exportar.'); return; }
+
+  const chaveLinha = (l) => _matAgrupar === 'tipoCliente' ? (l.tipoCliente || '—') : (l.cliente || '—');
+  const colunas = [...new Set(linhas.map(l => l.cegonha || '—'))].sort();
+  const grupos = {};
+  linhas.forEach(l => {
+    const k = chaveLinha(l);
+    const g = grupos[k] = grupos[k] || { total:0, pernas:0, porColuna:{} };
+    g.porColuna[l.cegonha||'—'] = (g.porColuna[l.cegonha||'—']||0) + l.frete;
+    g.total += l.frete;
+    g.pernas += _matPernasDoPedido(l.id);
+  });
+
+  const num = (v) => String(Number(v||0).toFixed(2)).replace('.', ',');
+  const totalGeral = linhas.reduce((s,l)=>s+l.frete,0);
+
+  const out = [];
+  out.push([_matAgrupar==='tipoCliente'?'CATEGORIA':'CLIENTE', ...colunas, 'MOVEMASTER', 'SOMA', '%'].join(';'));
+  Object.entries(grupos).sort((a,b)=>b[1].total-a[1].total).forEach(([nome,g]) => {
+    const pctTxt = totalGeral ? num((g.total/totalGeral)*100)+'%' : '0,00%';
+    out.push([nome, ...colunas.map(c => num(g.porColuna[c]||0)), num(g.total-g.pernas), num(g.total), pctTxt].join(';'));
+  });
+  const totCol = colunas.map(c => num(Object.values(grupos).reduce((s,g)=>s+(g.porColuna[c]||0),0)));
+  const totPernas = Object.values(grupos).reduce((s,g)=>s+g.pernas,0);
+  out.push(['TOTAL POR PLACA', ...totCol, num(totalGeral-totPernas), num(totalGeral), '100,00%'].join(';'));
+
+  const blob = new Blob(['\uFEFF' + out.join('\n')], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const de = document.getElementById('relatFatDe')?.value || '';
+  const ate = document.getElementById('relatFatAte')?.value || '';
+  a.download = `faturamento_matriz_${de}_a_${ate}.csv`;
+  a.click();
+}
+window._matExportar = _matExportar;
+
 // ============================================================
-// AUDITORIA DE REMUNERAÇÃO DO MOTORISTA (no fechamento)
-// Mostra o valor da tabela por pedido e destaca trechos PENDENTES (fora da tabela)
+// EXTRATO DO MOTORISTA
+//
+// Antes esta tela listava pedidos soltos, em sequência, sem separar por
+// viagem. O motorista não conseguia responder as duas perguntas que ele de
+// fato faz — quanto rendeu cada viagem, e quantas viagens fiz no período —
+// porque tudo vinha num amontoado só.
+//
+// Agora é um extrato: um bloco por viagem, com os carros dentro e o total da
+// viagem no cabeçalho. O valor de cada carro é o que foi distribuído àquela
+// PERNA do motorista, não o frete do pedido: num pedido de R$ 700 repartido
+// entre dois motoristas, o Emerson vê 350 no extrato dele e o Gilmar vê 550
+// no dele. O mesmo carro aparece nos dois, com valores diferentes, porque foi
+// isso que aconteceu na estrada.
 // ============================================================
+
+let _extFiltros = { de:'', ate:'', motorista:'', cegonha:'', incluirNaoConferidas:true };
+
+function _extFmt(n){ return 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2}); }
+function _extEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _extData(d){ return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
+
+/* Monta o extrato: para cada viagem do período, quais pernas são do motorista
+   escolhido e quanto foi distribuído em cada uma. */
+function _extMontar(){
+  const n = (t) => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+  const de  = _extFiltros.de  ? new Date(_extFiltros.de  + 'T00:00:00') : null;
+  const ate = _extFiltros.ate ? new Date(_extFiltros.ate + 'T23:59:59') : null;
+
+  const rotas = (rotasGlobais||[]).filter(r => {
+    if (r.status === 'cancelada') return false;
+    if (!_extFiltros.incluirNaoConferidas && !r.conferida_em) return false;
+    if (_extFiltros.motorista && !n(r.motorista_1||'').includes(n(_extFiltros.motorista))) return false;
+    if (_extFiltros.cegonha  && !n(r.placa_cegonha||'').includes(n(_extFiltros.cegonha))) return false;
+    const dt = r.iniciada_em || r.created_at;
+    if (de  && dt && new Date(dt) < de)  return false;
+    if (ate && dt && new Date(dt) > ate) return false;
+    if ((de || ate) && !dt) return false;   // sem data não dá para dizer se é do período
+    return true;
+  }).sort((a,b) => new Date(b.iniciada_em||b.created_at||0) - new Date(a.iniciada_em||a.created_at||0));
+
+  return rotas.map(r => {
+    // pedidos que passaram por esta viagem (vínculo histórico + rota atual)
+    const ids = new Set();
+    (viagemPedidosGlobais||[]).filter(v => String(v.rota_id)===String(r.id)).forEach(v => ids.add(String(v.pedido_id)));
+    (pedidosGlobais||[]).filter(p => String(p.rotaId ?? p.rota_id ?? '')===String(r.id)).forEach(p => ids.add(String(p.id)));
+
+    const carros = [];
+    let totalViagem = 0;
+
+    [...ids].forEach(pid => {
+      const p = (pedidosGlobais||[]).find(x => String(x.id)===String(pid));
+      if (!p) return;
+      const { pernas } = (typeof _confPernasDoPedido === 'function')
+        ? _confPernasDoPedido(p) : { pernas: [] };
+
+      // só as pernas feitas nesta viagem (é o trabalho deste motorista aqui)
+      const minhas = pernas.filter(perna => String(perna.rotaId||'') === String(r.id));
+      const usar = minhas.length ? minhas : pernas.filter(perna =>
+        n(perna.motorista||'') === n(r.motorista_1||''));
+
+      let valorCarro = 0, temValor = false;
+      usar.forEach(perna => {
+        const vp = (typeof _confValorPerna === 'function') ? _confValorPerna(perna, p) : { valor:null };
+        if (vp.valor != null){ valorCarro += Number(vp.valor); temValor = true; }
+      });
+
+      carros.push({
+        id: p.id, placa: p.placa, modelo: p.modelo, cliente: p.cliente,
+        origem: (p.cidadeOrigem||'—').split('/')[0], destino: (p.cidadeDestino||'—').split('/')[0],
+        enderecoColeta: p.romaneioEnderecoColeta || p.enderecoColeta || '',
+        enderecoEntrega: p.romaneioEnderecoEntrega || p.enderecoEntrega || '',
+        cte: p.numeroCte || '', valor: valorCarro, temValor,
+        trechos: usar.map(x => `${x.trechoOrigem} → ${x.trechoDestino}`)
+      });
+      totalViagem += valorCarro;
+    });
+
+    return {
+      id: r.id, nome: r.nome, data: r.iniciada_em || r.created_at,
+      motorista: r.motorista_1 || '—', cegonha: r.placa_cegonha || '—',
+      conferida: !!r.conferida_em, carros, total: totalViagem
+    };
+  }).filter(b => b.carros.length);
+}
+
 function renderizarRemuneracaoMotorista(){
   const cont = document.getElementById('remuneracaoWrap');
   if (!cont) return;
-  const linhas = _relatFatCache || [];
-  if (linhas.length === 0){
-    cont.innerHTML = '<p class="text-muted" style="padding:1rem 0">Nenhum dado no período. Vá em <strong>Faturamento</strong>, ajuste o período e clique em <strong>Gerar</strong>.</p>';
-    return;
-  }
-  // reusa os pedidos do período; recalcula o valor do motorista
-  const dados = linhas.map(l => {
-    const p = (pedidosGlobais||[]).find(x => String(x.id) === String(l.id));
-    const vm = p ? valorMotoristaPedido(p) : { valor:null, origem:'pendente' };
-    return { ...l, valorMot: vm.valor, origemMot: vm.origem, p };
-  });
-  const pendentes = dados.filter(d => d.origemMot === 'pendente');
-  const totalTabela = dados.reduce((s,d)=>s+(d.valorMot||0),0);
-  const totalFrete = dados.reduce((s,d)=>s+d.frete,0);
-  const bonus = totalFrete - totalTabela;
 
-  const selo = o => o==='pedido' ? '<span class="rem-selo rem-selo-ped">ajuste do pedido</span>'
-    : o==='tabela' ? '<span class="rem-selo rem-selo-tab">tabela</span>'
-    : o==='manual' ? '<span class="rem-selo rem-selo-man">manual do trecho</span>'
-    : '<span class="rem-selo rem-selo-pend">⚠️ fora da tabela</span>';
+  const motoristas = [...new Set((rotasGlobais||[]).map(r => r.motorista_1).filter(Boolean))].sort();
+  const cegonhas   = [...new Set((rotasGlobais||[]).map(r => r.placa_cegonha).filter(Boolean))].sort();
+  const blocos = _extMontar();
+
+  const totalGeral = blocos.reduce((s,b) => s + b.total, 0);
+  const totalCarros = blocos.reduce((s,b) => s + b.carros.length, 0);
+  const semValor = blocos.reduce((s,b) => s + b.carros.filter(c => !c.temValor).length, 0);
 
   cont.innerHTML = `
-    <div class="ocup-resumo" style="margin:14px 0">
-      <div class="ocup-resumo-card"><span class="ocup-resumo-label">Total tabela (motoristas)</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">R$ ${totalTabela.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
-      <div class="ocup-resumo-card"><span class="ocup-resumo-label">Bônus/abatimento empresa</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num" style="color:${bonus>=0?'#4ade80':'#f87171'}">R$ ${bonus.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div></div>
-      <div class="ocup-resumo-card ${pendentes.length?'patios-resumo-alerta':''}"><span class="ocup-resumo-label">Trechos fora da tabela</span><div class="ocup-resumo-topo"><span class="ocup-resumo-num">${pendentes.length}</span></div></div>
+    <div class="ext-filtros">
+      <div class="ext-campo"><label>De</label>
+        <input type="date" id="extDe" value="${_extFiltros.de}" onchange="_extSetFiltro('de', this.value)"></div>
+      <div class="ext-campo"><label>Até</label>
+        <input type="date" id="extAte" value="${_extFiltros.ate}" onchange="_extSetFiltro('ate', this.value)"></div>
+      <div class="ext-campo"><label>Motorista</label>
+        <select onchange="_extSetFiltro('motorista', this.value)">
+          <option value="">Todos</option>
+          ${motoristas.map(m => `<option value="${_extEsc(m)}" ${_extFiltros.motorista===m?'selected':''}>${_extEsc(m)}</option>`).join('')}
+        </select></div>
+      <div class="ext-campo"><label>Caminhão</label>
+        <select onchange="_extSetFiltro('cegonha', this.value)">
+          <option value="">Todos</option>
+          ${cegonhas.map(c => `<option value="${_extEsc(c)}" ${_extFiltros.cegonha===c?'selected':''}>${_extEsc(c)}</option>`).join('')}
+        </select></div>
+      <label class="ext-check">
+        <input type="checkbox" ${_extFiltros.incluirNaoConferidas?'checked':''}
+               onchange="_extSetFiltro('incluirNaoConferidas', this.checked)">
+        incluir viagens não conferidas
+      </label>
+      <button class="btn btn-secondary btn-sm" onclick="_extImprimir()">🖨️ Imprimir</button>
     </div>
-    ${pendentes.length ? `<div class="rem-alerta">⚠️ <strong>${pendentes.length} trecho(s) fora da tabela</strong> — informe o valor abaixo (o botão 💾 salva para todos os pedidos do mesmo trecho).</div>` : ''}
-    <table class="corr-tabela">
-      <thead><tr><th>ID</th><th>Motorista</th><th>Trecho</th><th>Categoria</th><th>Frete</th><th>Valor motorista</th><th>Origem</th><th>Ação</th></tr></thead>
-      <tbody>${dados.map(d => {
-        const cat = (d.p?.categoriaVeiculo || d.p?.categoria_veiculo || '—');
-        const pend = d.origemMot === 'pendente';
-        return `<tr class="corr-tr ${pend?'rem-tr-pend':''}">
-          <td class="ct-id">#${d.id}</td>
-          <td>${d.motorista}</td>
-          <td class="ct-rota">${d.trecho}</td>
-          <td>${cat}</td>
-          <td class="ct-frete">R$ ${d.frete.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-          <td class="ct-frete">${d.valorMot!=null ? 'R$ '+d.valorMot.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—'}</td>
-          <td>${selo(d.origemMot)}</td>
-          <td class="ct-acoes">
-            ${pend
-              ? `<input type="text" id="remTrecho_${d.id}" placeholder="valor" style="width:90px" class="ocup-busca"><button class="btn btn-sm btn-primary" onclick="_salvarValorManualTrecho(${d.id})" title="Vale para todos deste trecho">💾</button>`
-              : `<button class="btn btn-sm btn-secondary" onclick="_abrirAjustePedido(${d.id})" title="Pagar valor diferente só neste pedido">✏️</button>`}
-          </td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`;
+
+    <div class="ext-resumo">
+      <div class="ext-resumo-item ext-destaque">
+        <span>Total no período</span><strong>${_extFmt(totalGeral)}</strong>
+      </div>
+      <div class="ext-resumo-item"><span>Viagens</span><strong>${blocos.length}</strong></div>
+      <div class="ext-resumo-item"><span>Carros transportados</span><strong>${totalCarros}</strong></div>
+      ${semValor ? `<div class="ext-resumo-item ext-pend"><span>Sem valor definido</span><strong>${semValor}</strong></div>` : ''}
+    </div>
+
+    ${blocos.length === 0
+      ? '<p class="text-muted" style="padding:2rem 0;text-align:center">Nenhuma viagem no período com esses filtros.</p>'
+      : blocos.map(b => `
+        <div class="ext-viagem">
+          <div class="ext-viagem-cab">
+            <div>
+              <div class="ext-viagem-rota">${_extEsc(b.nome || ('Viagem #'+b.id))}</div>
+              <div class="ext-viagem-sub">
+                📅 ${_extData(b.data)} · 🚛 ${_extEsc(b.cegonha)} · 👤 ${_extEsc(b.motorista)}
+                ${b.conferida
+                  ? '<span class="ext-selo-ok">✅ conferida</span>'
+                  : '<span class="ext-selo-pend">⏳ sujeito a ajuste</span>'}
+              </div>
+            </div>
+            <div class="ext-viagem-total">
+              <span>${b.carros.length} carro(s)</span>
+              <strong>${_extFmt(b.total)}</strong>
+            </div>
+          </div>
+
+          <table class="ext-tab">
+            <thead><tr>
+              <th>Carro</th><th>Cliente</th><th>Trajeto</th><th class="right">Valor</th>
+            </tr></thead>
+            <tbody>
+              ${b.carros.map(c => `<tr>
+                <td>
+                  <strong>${_extEsc(c.placa||'—')}</strong>
+                  <div class="ext-modelo">${_extEsc(c.modelo||'')} · #${c.id}${c.cte?` · 🧾 ${_extEsc(c.cte)}`:''}</div>
+                </td>
+                <td class="ext-cli">${_extEsc((c.cliente||'—').slice(0,30))}</td>
+                <td class="ext-trajeto">
+                  ${_extEsc(c.origem)} → ${_extEsc(c.destino)}
+                  ${c.trechos.length > 1 ? `<div class="ext-pernas">${c.trechos.map(_extEsc).join(' · ')}</div>` : ''}
+                  ${(c.enderecoColeta || c.enderecoEntrega) ? `
+                    <details class="ext-end">
+                      <summary>endereços</summary>
+                      ${c.enderecoColeta?`<div>📍 ${_extEsc(c.enderecoColeta)}</div>`:''}
+                      ${c.enderecoEntrega?`<div>🏁 ${_extEsc(c.enderecoEntrega)}</div>`:''}
+                    </details>` : ''}
+                </td>
+                <td class="right ext-valor ${c.temValor?'':'ext-sem'}">
+                  ${c.temValor ? _extFmt(c.valor) : '—'}
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`).join('')}`;
 }
+
+function _extSetFiltro(campo, valor){
+  _extFiltros[campo] = valor;
+  renderizarRemuneracaoMotorista();
+}
+window._extSetFiltro = _extSetFiltro;
+
+/* Impressão: o motorista costuma querer o extrato no papel ou em PDF para
+   conferir com o pagamento. */
+function _extImprimir(){
+  const cont = document.getElementById('remuneracaoWrap');
+  if (!cont) return;
+  const titulo = _extFiltros.motorista || 'Todos os motoristas';
+  const periodo = (_extFiltros.de || _extFiltros.ate)
+    ? `${_extFiltros.de ? new Date(_extFiltros.de+'T00:00:00').toLocaleDateString('pt-BR') : '...'} a ${_extFiltros.ate ? new Date(_extFiltros.ate+'T00:00:00').toLocaleDateString('pt-BR') : '...'}`
+    : 'período completo';
+  const janela = window.open('', '_blank');
+  if (!janela){ alert('O navegador bloqueou a janela de impressão.'); return; }
+  janela.document.write(`
+    <html><head><title>Extrato — ${_extEsc(titulo)}</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:20px}
+      h1{font-size:17px;margin:0 0 3px} .sub{color:#555;font-size:12px;margin-bottom:16px}
+      .ext-viagem{border:1px solid #ccc;border-radius:7px;margin-bottom:12px;page-break-inside:avoid}
+      .ext-viagem-cab{display:flex;justify-content:space-between;padding:8px 11px;background:#f3f4f6}
+      .ext-viagem-rota{font-weight:bold}
+      .ext-viagem-sub{color:#555;font-size:11px}
+      .ext-viagem-total strong{font-size:15px}
+      table{width:100%;border-collapse:collapse}
+      th{text-align:left;font-size:10px;text-transform:uppercase;color:#666;padding:5px 9px;border-bottom:1px solid #ddd}
+      td{padding:6px 9px;border-bottom:1px solid #eee}
+      .right{text-align:right} .ext-modelo,.ext-pernas{color:#666;font-size:10px}
+      .ext-resumo{display:flex;gap:16px;margin-bottom:16px}
+      .ext-resumo-item{border:1px solid #ccc;border-radius:6px;padding:8px 12px}
+      .ext-resumo-item span{display:block;font-size:10px;color:#666;text-transform:uppercase}
+      .ext-resumo-item strong{font-size:16px}
+      .ext-filtros,.ext-end,details{display:none}
+      .ext-selo-ok{color:#15803d} .ext-selo-pend{color:#b45309}
+    </style></head><body>
+      <h1>Extrato de viagens — ${_extEsc(titulo)}</h1>
+      <div class="sub">${periodo} · emitido em ${new Date().toLocaleString('pt-BR')}</div>
+      ${cont.innerHTML}
+    </body></html>`);
+  janela.document.close();
+  janela.focus();
+  setTimeout(() => janela.print(), 300);
+}
+window._extImprimir = _extImprimir;
+
 
 // Salva valor manual do trecho (vale pra todos os pedidos do mesmo trecho)
 async function _salvarValorManualTrecho(pedidoId){
