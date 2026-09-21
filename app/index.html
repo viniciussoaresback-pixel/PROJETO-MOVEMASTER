@@ -81,7 +81,7 @@
                     <div class="campo-senha">
                         <input type="password" id="loginSenha" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password" required>
                         <button type="button" class="btn-olho-senha" onclick="alternarVerSenha('loginSenha', this)"
-                            aria-label="Mostrar senha" title="Mostrar senha">&#128065;</button>
+                            aria-label="Mostrar senha" title="Mostrar senha"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.6 12S5.5 5 12 5s10.4 7 10.4 7-3.9 7-10.4 7S1.6 12 1.6 12Z"/><circle cx="12" cy="12" r="3.2"/></svg></button>
                     </div>
                 </div>
                 <div id="loginErro" class="login-erro"></div>
@@ -1487,10 +1487,14 @@
                 </div>
                 <div class="cad-subtabs" style="margin-bottom:16px">
                     <button class="cad-subtab-btn ativo" onclick="_relSubaba('faturamento', this)">💰 Faturamento</button>
-                    <button class="cad-subtab-btn" onclick="_relSubaba('remuneracao', this)">🚚 Faturamento por Motorista</button>
+                    <button class="cad-subtab-btn" onclick="_relSubaba('matriz', this)">📊 Matriz por Cliente/Caminhão</button>
+                    <button class="cad-subtab-btn" onclick="_relSubaba('remuneracao', this)">🚚 Extrato do Motorista</button>
                 </div>
                 <div id="relFaturamentoView">
                     <div id="relatFatWrap"></div>
+                </div>
+                <div id="relMatrizView" style="display:none">
+                    <div id="relatMatrizWrap"></div>
                 </div>
                 <div id="relRemuneracaoView" style="display:none">
                     <div id="remuneracaoWrap"></div>
