@@ -198,15 +198,28 @@ async function _sepConfirmar(rotaOrigemId){
     // 1. Viagem de destino
     let destino = destinoId ? (rotasGlobais||[]).find(r => String(r.id)===String(destinoId)) : null;
     if (!destino){
+      /* O nome da coluna é criado_por. Eu havia escrito criada_por_nome, que
+         não existe na tabela — o banco recusava o insert inteiro e a
+         separação parava no primeiro passo, sem mover nenhum carro. */
       const ins = {
         nome, status: rotaOrigem?.status || 'em_andamento',
         placa_cegonha: cegonha || null,
         motorista_1: motorista || null,
         corredor_id: rotaOrigem?.corredor_id || null,
         iniciada_em: rotaOrigem?.iniciada_em || null,
-        criada_por_nome: usuario
+        criado_por: usuario
       };
-      const { data, error } = await supabase.from('rotas_planejadas').insert(ins).select();
+      let { data, error } = await supabase.from('rotas_planejadas').insert(ins).select();
+
+      /* Rede de segurança: se o banco reclamar de alguma coluna que não
+         conhece, tenta de novo só com o essencial. Melhor criar a viagem sem
+         um campo acessório do que travar a correção inteira por causa dele. */
+      if (error && /column|schema cache/i.test(error.message||'')){
+        console.warn('separar: coluna recusada, tentando com o essencial —', error.message);
+        const essencial = { nome, status: ins.status, placa_cegonha: ins.placa_cegonha,
+                            motorista_1: ins.motorista_1, corredor_id: ins.corredor_id };
+        ({ data, error } = await supabase.from('rotas_planejadas').insert(essencial).select());
+      }
       if (error) throw error;
       destino = data && data[0];
       if (!destino) throw new Error('não consegui criar a viagem de destino');
