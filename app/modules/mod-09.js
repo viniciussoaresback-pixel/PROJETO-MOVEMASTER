@@ -1072,6 +1072,25 @@ function _confStatusViagem(v){
   return { chave:'pendente', label:'Pendente', cor:'#f59e0b' };
 }
 
+async function _confRecarregarTabelas(){
+  try {
+    const [a, b] = await Promise.all([
+      supabase.from('tabela_precos').select('*').order('cidade_origem'),
+      supabase.from('precos_manuais_trecho').select('*')
+    ]);
+    const assinatura = (arr) => JSON.stringify((arr||[]).map(x => [x.id, x.valor_comum, x.valor_suv]));
+    let mudou = false;
+    if (a && a.data && assinatura(a.data) !== assinatura(tabelaPrecosGlobais)){
+      tabelaPrecosGlobais = a.data; mudou = true;
+    }
+    if (b && b.data && assinatura(b.data) !== assinatura(precosManuaisTrechoGlobais)){
+      precosManuaisTrechoGlobais = b.data; mudou = true;
+    }
+    return mudou;
+  } catch(e){ console.warn('releitura da tabela de trechos:', e?.message); return false; }
+}
+window._confRecarregarTabelas = _confRecarregarTabelas;
+
 function renderizarCentralConferencia(){
   // Se os dados ainda não chegaram, mostra o contorno da tela em vez de
   // deixá-la em branco. O render real roda de novo quando os dados vierem.
@@ -1089,6 +1108,18 @@ function renderizarCentralConferencia(){
 
   const cont = document.getElementById('conferenciaConteudo');
   if (!cont) return;
+
+  /* A tabela de trechos era lida uma única vez, no login. Um trecho
+     cadastrado depois — por você em outra aba ou por outra pessoa — só
+     entrava na conferência com F5, e até lá as pernas apareciam "sem valor".
+     Agora ela é relida ao abrir a conferência, no máximo a cada 30 s para
+     não martelar o banco a cada redesenho. */
+  const _agora = Date.now();
+  if (!window._confTabelaLidaEm || _agora - window._confTabelaLidaEm > 30000){
+    window._confTabelaLidaEm = _agora;
+    _confRecarregarTabelas().then(mudou => { if (mudou) renderizarCentralConferencia(); });
+  }
+
   // carrega fechamentos uma vez
   if (window._fechamentosPeriodo === undefined){ window._fechamentosPeriodo = {}; _confCarregarFechamentos().then(()=>renderizarCentralConferencia()); }
   // carrega a tabela de frete uma vez (para conferência automática)
