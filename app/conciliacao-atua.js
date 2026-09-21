@@ -239,6 +239,37 @@ async function _atuaProcessarInterno(arq, corpo){
      igualmente. A tabela de trecho é a única referência independente. */
   const conferem = [], divergentes = [], soAtua = [], soSistema = [], cancelados = [], foraTabela = [];
 
+  /* O QUE JÁ FOI CONFERIDO SAI DA CONTA.
+     Subir o relatório de novo trazia de volta tudo, inclusive o que já tinha
+     sido conferido e resolvido — e o trabalho de exceção virava refazer o
+     mês inteiro. Agora fica fora do cruzamento o CT-e cuja viagem já está
+     conferida e o que tem pendência resolvida. Eles só aparecem somados, para
+     o total do relatório continuar fechando. */
+  const jaConferidos = new Set();
+  let qtJaConferidos = 0, valorJaConferidos = 0;
+  const _rotaDoPed = (pid) => {
+    const p = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : []).find(x => String(x.id)===String(pid));
+    return p ? (p.rotaId || p.rota_id || null) : null;
+  };
+  Object.values(sistema).forEach(item => {
+    const rid = _rotaDoPed(item.pedidoId);
+    const rota = rid ? (typeof rotasGlobais !== 'undefined' ? rotasGlobais : []).find(r => String(r.id)===String(rid)) : null;
+    if (rota && rota.conferida_em) jaConferidos.add(String(item.numero).replace(/\D/g,''));
+  });
+  try {
+    const { data: resolvidas } = await supabase.from('conciliacao_pendencias')
+      .select('numero_cte').eq('status','resolvida');
+    (resolvidas||[]).forEach(r => jaConferidos.add(String(r.numero_cte).replace(/\D/g,'')));
+  } catch(_){ /* sem a tabela de pendências, vale só o critério da viagem */ }
+
+  Object.keys(atua).forEach(num => {
+    if (jaConferidos.has(num)){
+      qtJaConferidos++; valorJaConferidos += Number(atua[num].valor || 0);
+      delete atua[num];
+    }
+  });
+  Object.keys(sistema).forEach(num => { if (jaConferidos.has(num)) delete sistema[num]; });
+
   const _valorEsperado = (pedidoId) => {
     if (!pedidoId || typeof valorTabelaFretePedido !== 'function') return null;
     const p = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : []).find(x => String(x.id)===String(pedidoId));
@@ -266,6 +297,25 @@ async function _atuaProcessarInterno(arq, corpo){
     conferem.push(a);
   });
   Object.keys(sistema).forEach(num => { if (!atua[num]) soSistema.push(sistema[num]); });
+
+  /* PEDIDOS SEM CT-e.
+     Carro transportado e sem documento emitido é faturamento que não vai ser
+     cobrado. O cruzamento anterior só enxergava pedidos que JÁ tinham CT-e,
+     então esses nunca apareciam — ficavam invisíveis justamente por faltar o
+     número que servia de chave. */
+  const semCte = (typeof pedidosGlobais !== 'undefined' ? pedidosGlobais : []).filter(p => {
+    if (p.numeroCte) return false;
+    if (['Cancelado','Pendente','Intenção Agendada'].includes(p.status||'')) return false;
+    // só o que já rodou: tem viagem ou foi entregue
+    if (!(p.rotaId || p.rota_id || p.status === 'Entregue' || p.status === 'Em Transporte')) return false;
+    const rid = p.rotaId || p.rota_id;
+    const rota = rid ? (typeof rotasGlobais !== 'undefined' ? rotasGlobais : []).find(r => String(r.id)===String(rid)) : null;
+    const d = String((rota && rota.iniciada_em) || p.dataSolicitacao || '').slice(0,10);
+    if (de && d && d < de) return false;
+    if (ate && d && d > ate) return false;
+    return true;
+  }).map(p => ({ numero: '—', pedidoId: p.id, cliente: p.cliente, valor: Number(p.valorFrete||0),
+                 placa: p.placa, rotaId: p.rotaId || p.rota_id || null }));
 
   /* ---- Integração com a Central de Conferência ----
      Até aqui a conciliação era só leitura: mostrava o resultado e o perdia ao
@@ -322,7 +372,7 @@ async function _atuaProcessarInterno(arq, corpo){
   };
   window._atuaColunaValor = (linhas[iCab]||[])[mapa.valor] || '(não encontrada)';
   _atuaRenderizar({ conferem, divergentes, soAtua, soSistema, cancelados, foraTabela,
-                    viagensOk, viagensPendentes, origem });
+                    viagensOk, viagensPendentes, origem, semCte, qtJaConferidos, valorJaConferidos });
 
   // Grava a rodada e as pendências, em segundo plano — se falhar, a tela
   // continua útil; o aviso vai para o console.
@@ -371,11 +421,15 @@ function _atuaLinhas(r){
   }));
   add('so_atua', r.soAtua, d => ({
     numero: d.numero, cliente: d.cliente, valor: d.valor,
-    detalhe: 'emitido no ATUA, sem pedido no sistema'
+    detalhe: 'CT-e emitido no ATUA e não vinculado a nenhum pedido'
   }));
   add('so_sistema', r.soSistema, d => ({
     numero: d.numero, cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
     valor: d.valor, detalhe: 'no sistema, não encontrado no ATUA'
+  }));
+  add('sem_cte', r.semCte, d => ({
+    numero: '—', cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
+    valor: d.valor, detalhe: `carro ${d.placa||''} transportado e sem CT-e emitido`
   }));
   add('cancelado', r.cancelados, d => ({
     numero: d.numero, cliente: d.cliente, pedidoId: d.pedidoId, rotaId: d.rotaId,
@@ -388,8 +442,9 @@ const _ATUA_SIT = {
   confere:     { rotulo:'Conferido',     classe:'ok'    },
   divergente:  { rotulo:'Divergente',    classe:'div'   },
   fora_tabela: { rotulo:'Fora da tabela',classe:'fora'  },
-  so_atua:     { rotulo:'Só no ATUA',    classe:'erro'  },
-  so_sistema:  { rotulo:'Sem documento', classe:'cinza' },
+  so_atua:     { rotulo:'CT-e sem pedido', classe:'erro'  },
+  so_sistema:  { rotulo:'Não está no ATUA', classe:'cinza' },
+  sem_cte:     { rotulo:'Pedido sem CT-e', classe:'erro'  },
   cancelado:   { rotulo:'Cancelado',     classe:'cinza' }
 };
 
@@ -411,7 +466,7 @@ function _atuaTelaHTML(r){
   const visiveis = linhas.filter(l => {
     if (_atuaFiltro === 'pendentes' && !pendentes.includes(l.situacao)) return false;
     if (_atuaFiltro === 'confere'   && l.situacao !== 'confere') return false;
-    if (_atuaFiltro === 'sem_doc'   && !['so_atua','so_sistema','cancelado'].includes(l.situacao)) return false;
+    if (_atuaFiltro === 'sem_doc'   && !['so_atua','so_sistema','cancelado','sem_cte'].includes(l.situacao)) return false;
     if (_atuaBuscaTxt){
       const t = _atuaBuscaTxt.toLowerCase();
       if (!`${l.numero} ${l.cliente||''} ${l.pedidoId||''}`.toLowerCase().includes(t)) return false;
@@ -437,10 +492,16 @@ function _atuaTelaHTML(r){
         </button>` : ''}
     </div>
 
+    ${r.qtJaConferidos ? `
+      <div class="atua-ja-conf">
+        ✓ <strong>${r.qtJaConferidos}</strong> CT-e(s) do relatório já estavam conferidos
+        (${_atuaFmt(r.valorJaConferidos)}) e ficaram fora desta análise.
+      </div>` : ''}
+
     <div class="atua-kpis">
       ${kpi('ok',   '✅', 'Conferidos',   conta(['confere']),   soma(['confere']),   'confere')}
       ${kpi('pend', '⚠️', 'Pendentes',    conta(pendentes),     soma(pendentes),     'pendentes')}
-      ${kpi('erro', '❌', 'Sem documento',conta(['so_atua','so_sistema','cancelado']), soma(['so_atua','so_sistema','cancelado']), 'sem_doc')}
+      ${kpi('erro', '❌', 'Sem vínculo',  conta(['so_atua','so_sistema','cancelado','sem_cte']), soma(['so_atua','so_sistema','cancelado','sem_cte']), 'sem_doc')}
       ${kpi('todos','📋', 'Todos',        linhas.length,        soma(Object.keys(_ATUA_SIT)), 'todos')}
     </div>
 
