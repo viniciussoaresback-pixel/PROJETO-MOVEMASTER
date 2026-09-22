@@ -10,7 +10,7 @@
   // mas ninguém os carregava — o JS da conciliação rodava e o modal aparecia
   // sem estilo nenhum, cru no canto da página. CSS ausente falha calado: não
   // dá erro no console, só fica feio.
-  ['tema-claro.css', 'refinamento-8.css', 'microinteracoes.css', 'tabelas-leves.css', 'refinamento-9.css', 'tema-claro-fix.css', 'tema-claro-cores.css', 'refinamento-10.css', 'refinamento-11.css', 'refinamento-12.css', 'refinamento-13.css', 'skeletons.css', 'trajetoria.css', 'cte-situacao.css', 'conciliacao-atua.css', 'layout-amplo.css'].forEach(function (css) {
+  ['tema-claro.css', 'refinamento-8.css', 'microinteracoes.css', 'tabelas-leves.css', 'refinamento-9.css', 'tema-claro-fix.css', 'tema-claro-cores.css', 'refinamento-10.css', 'refinamento-11.css', 'refinamento-12.css', 'refinamento-13.css', 'skeletons.css', 'trajetoria.css', 'cte-situacao.css', 'conciliacao-atua.css', 'campo-mobile.css', 'layout-amplo.css'].forEach(function (css) {
     var l = document.createElement('link');
     l.rel = 'stylesheet';
     l.href = css;
