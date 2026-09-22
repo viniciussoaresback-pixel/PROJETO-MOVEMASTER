@@ -981,6 +981,8 @@ async function consultarCNPJ(cnpjBruto){
   const est = d.estabelecimento || {};
   return {
     razaoSocial: d.razao_social || est.nome_fantasia || '',
+    // o fantasia é o nome da placa na fachada — o que o motorista procura
+    nomeFantasia: est.nome_fantasia || '',
     logradouro: [est.tipo_logradouro, est.logradouro].filter(Boolean).join(' ').trim(),
     numero: est.numero || '',
     complemento: est.complemento || '',
@@ -1030,6 +1032,10 @@ async function autoPreencherCNPJLocal(qual){ // qual = 'Coleta' | 'Entrega'
     if (!dados) return;
     const endereco = [dados.logradouro, dados.numero, dados.bairro].filter(Boolean).join(', ');
     _setVal('endereco' + qual, endereco);
+    // o nome de quem está lá — só preenche se estiver vazio, para não apagar
+    // o que foi digitado (às vezes o nome conhecido é o fantasia, não a razão)
+    const campoNome = document.getElementById('nomeLocal' + qual);
+    if (campoNome && !campoNome.value.trim()) campoNome.value = dados.nomeFantasia || dados.razaoSocial || '';
     _setVal('cep' + qual, _fmtCEP(dados.cep));
     if (qual === 'Coleta'){ _setVal('cidadeOrigem', dados.cidade); _setVal('ufOrigem', dados.uf); }
     else { _setVal('cidadeDestino', dados.cidade); _setVal('ufDestino', dados.uf); }
