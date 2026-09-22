@@ -1854,6 +1854,7 @@ function _extMontar(){
       carros.push({
         id: p.id, placa: p.placa, modelo: p.modelo, cliente: p.cliente,
         origem: (p.cidadeOrigem||'—').split('/')[0], destino: (p.cidadeDestino||'—').split('/')[0],
+        nomeLocalColeta: p.nomeLocalColeta || '', nomeLocalEntrega: p.nomeLocalEntrega || '',
         enderecoColeta: p.romaneioEnderecoColeta || p.enderecoColeta || '',
         enderecoEntrega: p.romaneioEnderecoEntrega || p.enderecoEntrega || '',
         cte: p.numeroCte || '', valor: valorCarro, temValor,
@@ -1972,8 +1973,8 @@ function renderizarRemuneracaoMotorista(){
                   ${(c.enderecoColeta || c.enderecoEntrega) ? `
                     <details class="ext-end">
                       <summary>endereços</summary>
-                      ${c.enderecoColeta?`<div>📍 ${_extEsc(c.enderecoColeta)}</div>`:''}
-                      ${c.enderecoEntrega?`<div>🏁 ${_extEsc(c.enderecoEntrega)}</div>`:''}
+                      ${c.enderecoColeta?`<div>📍 ${typeof _romaneioLocalComNome==='function' ? _romaneioLocalComNome({cliente:c.cliente,cidadeOrigem:c.origem,cidadeDestino:c.destino,nomeLocalColeta:c.nomeLocalColeta,nomeLocalEntrega:c.nomeLocalEntrega},'coleta',_extEsc(c.enderecoColeta)) : _extEsc(c.enderecoColeta)}</div>`:''}
+                      ${c.enderecoEntrega?`<div>🏁 ${typeof _romaneioLocalComNome==='function' ? _romaneioLocalComNome({cliente:c.cliente,cidadeOrigem:c.origem,cidadeDestino:c.destino,nomeLocalColeta:c.nomeLocalColeta,nomeLocalEntrega:c.nomeLocalEntrega},'entrega',_extEsc(c.enderecoEntrega)) : _extEsc(c.enderecoEntrega)}</div>`:''}
                     </details>` : ''}
                 </td>
                 <td class="right ext-valor ${c.temValor?'':'ext-sem'}">
