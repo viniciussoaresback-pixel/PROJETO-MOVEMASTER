@@ -20,6 +20,48 @@ function _mmPreservarFoco(fn){
   }
   if (document.scrollingElement) document.scrollingElement.scrollTop = sc;
 }
+/* Placa no formato Mercosul — branca, faixa azul em cima com "BRASIL".
+   Nas telas de campo a placa é o que o motorista e a equipe procuram com o
+   olho no pátio. Desenhada como a placa real, ela é achada na lista do mesmo
+   jeito que é achada no carro, sem precisar ler linha por linha.
+   Placas antigas (ABC-1234) também recebem o formato: o que importa é o
+   reconhecimento visual, não a norma da placa. */
+/* Insere pedidos tolerando colunas que o banco ainda não tem.
+   Campos novos (nome do local, motivo de cancelamento) dependem de um SQL que
+   pode não ter sido rodado ainda. Sem esta proteção, a coluna desconhecida
+   faz o banco recusar o insert inteiro — e aí NENHUM pedido é lançado, por
+   causa de um campo acessório. Aqui, se a recusa for por coluna, os campos
+   opcionais saem e a gravação é refeita. */
+const _CAMPOS_OPCIONAIS_PEDIDO = ['nome_local_coleta','nome_local_entrega',
+  'motivo_cancelamento','cancelado_em','cancelado_por','status_antes_cancelar'];
+
+async function mmInserirPedidos(registros){
+  const lista = Array.isArray(registros) ? registros : [registros];
+  let { data, error } = await supabase.from('pedidos').insert(lista).select();
+  if (error && /column|schema cache/i.test(error.message || '')){
+    console.warn('pedidos: coluna opcional ausente no banco, gravando sem ela —', error.message);
+    const limpos = lista.map(r => {
+      const c = { ...r };
+      _CAMPOS_OPCIONAIS_PEDIDO.forEach(k => delete c[k]);
+      return c;
+    });
+    ({ data, error } = await supabase.from('pedidos').insert(limpos).select());
+  }
+  return { data, error };
+}
+window.mmInserirPedidos = mmInserirPedidos;
+
+function placaMercosul(placa, tamanho){
+  const p = String(placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!p) return '<span class="placa-mc placa-mc-vazia">sem placa</span>';
+  // placa de 7 caracteres ganha o respiro no meio, como na placa física
+  const txt = p.length === 7 ? p.slice(0,3) + ' ' + p.slice(3) : p;
+  return `<span class="placa-mc ${tamanho === 'g' ? 'placa-mc-g' : ''}" aria-label="placa ${p}">` +
+         `<span class="placa-mc-faixa">BRASIL</span>` +
+         `<span class="placa-mc-num">${txt}</span></span>`;
+}
+window.placaMercosul = placaMercosul;
+
 function _mmDeb(chave, fn, ms){
   clearTimeout(window._mmDebTimers[chave]);
   window._mmDebTimers[chave] = setTimeout(function(){ _mmPreservarFoco(fn); }, ms || 250);
@@ -91,6 +133,8 @@ function normalizarPedido(p) {
         enderecoColeta: p.endereco_coleta,
         cnpjColeta: p.cnpj_coleta || null,
         cnpjEntrega: p.cnpj_entrega || null,
+        nomeLocalColeta: p.nome_local_coleta || null,
+        nomeLocalEntrega: p.nome_local_entrega || null,
         enderecoEntrega: p.endereco_entrega,
         valorFrete: p.valor_frete,
         freteTipo: p.frete_tipo || 'cheio',
@@ -156,6 +200,10 @@ function normalizarPedido(p) {
         // São coisas diferentes: misturar os dois fazia o serviço nascer
         // "concluído" e sumir da lista de quem deveria executá-lo.
         entregaDirecionadaEm: p.entrega_direcionada_em || null,
+        motivoCancelamento: p.motivo_cancelamento || null,
+        canceladoEm: p.cancelado_em || null,
+        canceladoPor: p.cancelado_por || null,
+        statusAntesCancelar: p.status_antes_cancelar || null,
         coletaDirecionadaEm: p.coleta_direcionada_em || null,
         coletaConfirmadaEm: p.coleta_confirmada_em || null,
         coletaConfirmadaPor: p.coleta_confirmada_por || null,
@@ -560,6 +608,8 @@ function mapearPedidoDoBanco(p) {
     enderecoColeta: p.endereco_coleta,
     cnpjColeta: p.cnpj_coleta || null,
     cnpjEntrega: p.cnpj_entrega || null,
+    nomeLocalColeta: p.nome_local_coleta || null,
+    nomeLocalEntrega: p.nome_local_entrega || null,
     enderecoEntrega: p.endereco_entrega,
     valorFrete: p.valor_frete,
     freteTipo: p.frete_tipo || 'cheio',
@@ -1242,6 +1292,9 @@ async function _evoConfirmarImportacao(){
           cidade_destino: c.entCidade || null, uf_destino: c.entUf || null,
           endereco_coleta: [c.colRua, c.colNum, c.colBairro].filter(Boolean).join(', ') || null,
           endereco_entrega: [c.entRua, c.entNum, c.entBairro].filter(Boolean).join(', ') || null,
+          // o nome de quem está no endereço — antes lido da planilha e descartado
+          nome_local_coleta:  c.colLocal ? String(c.colLocal).trim() : null,
+          nome_local_entrega: c.entLocal ? String(c.entLocal).trim() : null,
           cnpj_coleta: c.colCnpj ? String(c.colCnpj) : null,
           cnpj_entrega: c.entCnpj ? String(c.entCnpj) : null,
           cep_coleta: c.colCep ? String(c.colCep) : null,
@@ -1255,7 +1308,7 @@ async function _evoConfirmarImportacao(){
           origem_lancamento: (typeof perfilAtual !== 'undefined' ? perfilAtual : null),
           criado_por_nome: 'Importado do Evo'
         };
-        const { error } = await supabase.from('pedidos').insert(novoPedido);
+        const { error } = await mmInserirPedidos(novoPedido);
         if (!error) criados++;
         else {
           console.error('Evo import erro no pedido', carro.placa, '| MENSAGEM:', error.message, '| DETALHES:', error.details, '| DICA:', error.hint, '| CODE:', error.code);
@@ -1379,6 +1432,8 @@ async function salvarPedidoComercial(event) {
                 cnpj_coleta: document.getElementById('cnpjColeta')?.value.trim() || null,
                 cep_entrega: document.getElementById('cepEntrega')?.value || null,
                 endereco_entrega: pedido.enderecoEntrega,
+                nome_local_coleta:  document.getElementById('nomeLocalColeta')?.value.trim()  || null,
+                nome_local_entrega: document.getElementById('nomeLocalEntrega')?.value.trim() || null,
                 cnpj_entrega: document.getElementById('cnpjEntrega')?.value.trim() || null,
                 valor_frete: pedido.valorFrete,
                 frete_tipo: document.getElementById('freteTipo')?.value || 'cheio',
@@ -1438,7 +1493,7 @@ async function salvarPedidoComercial(event) {
                 linhasParaInserir = [{ ...dadosParaSalvar, valor_frete: _valoresCarro[0] }];
             }
 
-            const { error } = await supabase.from('pedidos').insert(linhasParaInserir);
+            const { error } = await mmInserirPedidos(linhasParaInserir);
             if (error) throw error;
 
             await recarregarPedidos();
