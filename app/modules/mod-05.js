@@ -644,50 +644,171 @@ async function verItensManifesto(manifestoId, placa) {
 // ---------- CANCELAR / EXCLUIR PEDIDO PENDENTE ----------
 
 // Cancela: marca como Cancelado, sai da operação mas fica no histórico
-async function cancelarPedido(pedidoId) {
-    const p = pedidosGlobais.find(x => String(x.id) === String(pedidoId));
-    if (!p || !supabase) return;
-    if (p.status !== 'Pendente') {
-        exibirMensagem('mensagemLogistica', 'Só é possível cancelar pedidos pendentes por aqui. Para outros status, use Avançar → Cancelado.', 'error');
-        return;
+/* ============================================================================
+   CANCELAR PEDIDO
+
+   Antes: cancelar só era possível com o pedido Pendente, o motivo era
+   opcional e ia apenas para o histórico — onde ninguém procura. E a lixeira
+   APAGAVA o pedido do banco, levando junto o histórico e as ocorrências.
+   Um transporte combinado e desfeito sumia sem deixar rastro, e o
+   faturamento do período mudava sem explicação.
+
+   Agora a lixeira cancela. O pedido fica com status Cancelado, o motivo é
+   obrigatório e fica gravado no próprio pedido, visível na lista e no
+   rastreio. Excluir de vez continua existindo, mas só para lançamento feito
+   por engano e só para admin.
+   ============================================================================ */
+const MOTIVOS_CANCELAMENTO = [
+  'Cliente desistiu do transporte',
+  'Pedido lançado em duplicidade',
+  'Erro no lançamento',
+  'Veículo não liberado pelo cliente',
+  'Transporte feito por outra empresa',
+  'Outro'
+];
+
+function cancelarPedido(pedidoId) {
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p) return;
+  if (p.status === 'Cancelado'){ alert(`O pedido #${p.id} já está cancelado.\n\nMotivo: ${p.motivoCancelamento || 'não informado'}`); return; }
+  if (p.status === 'Entregue'){
+    alert('Pedido já entregue não pode ser cancelado — o transporte aconteceu. Se houve cobrança indevida, ajuste pela Cobrança.');
+    return;
+  }
+  const naCarga = !!(p.rotaId || p.rota_id || p.placaCegonha);
+  const temCte = !!(p.numeroCte || p.numero_cte);
+  const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : '';
+
+  const old = document.getElementById('modalCancelarPedido'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalCancelarPedido';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100070;padding:2vh 1vw';
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:500px;width:95%;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">🚫 Cancelar pedido #${p.id}</h2>
+      <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">
+        ${p.cliente || '—'} · ${p.placa || 'sem placa'}${p.modelo ? ' · ' + p.modelo : ''}<br>
+        ${(p.cidadeOrigem||'—').split('/')[0]} → ${(p.cidadeDestino||'—').split('/')[0]} · status atual: <strong>${p.status || '—'}</strong>
+      </p>
+
+      ${naCarga ? `<div class="canc-aviso">🚛 Este carro está numa viagem${p.placaCegonha ? ' (' + p.placaCegonha + ')' : ''}. Ao cancelar, ele sai da carga e a vaga é liberada.</div>` : ''}
+      ${temCte ? `<div class="canc-aviso canc-aviso-cte">🧾 Tem CT-e ${p.numeroCte || p.numero_cte} emitido. O fiscal será avisado para cancelar o documento.</div>` : ''}
+
+      <div class="form-group">
+        <label>Por que está sendo cancelado?</label>
+        <select id="cancMotivo" onchange="document.getElementById('cancOutroWrap').style.display = this.value==='Outro' ? '' : 'none'">
+          <option value="">Escolha o motivo...</option>
+          ${MOTIVOS_CANCELAMENTO.map(m => `<option value="${m}">${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" id="cancOutroWrap" style="display:none">
+        <label>Descreva</label>
+        <input type="text" id="cancOutro" placeholder="O que aconteceu">
+      </div>
+      <div class="form-group">
+        <label>Observação (opcional)</label>
+        <input type="text" id="cancObs" placeholder="Detalhe, se houver">
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1;background:#dc2626" id="btnConfirmCancelar">🚫 Cancelar pedido</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalCancelarPedido').remove()">Voltar</button>
+      </div>
+      ${perfil === 'admin' ? `
+        <p class="canc-excluir">
+          Lançado por engano e nunca existiu?
+          <a href="#" onclick="event.preventDefault();document.getElementById('modalCancelarPedido').remove();_excluirPedidoDefinitivo(${p.id})">Excluir de vez</a>
+        </p>` : ''}
+    </div>`;
+  document.body.appendChild(div);
+  document.getElementById('btnConfirmCancelar').onclick = () => {
+    const sel = document.getElementById('cancMotivo')?.value || '';
+    if (!sel){ alert('Escolha o motivo do cancelamento.'); return; }
+    let motivo = sel;
+    if (sel === 'Outro'){
+      const txt = (document.getElementById('cancOutro')?.value || '').trim();
+      if (!txt){ alert('Descreva o motivo.'); return; }
+      motivo = txt;
     }
-
-    const motivo = prompt(`Cancelar o pedido #${p.id} (${p.cliente || ''})?\n\nMotivo do cancelamento (opcional):`);
-    if (motivo === null) return; // desistiu
-
-    const usuarioNome = _usuarioAtualNome() || 'Logística';
-    try {
-        const { error } = await supabase.from('pedidos')
-            .update({ status: 'Cancelado' }).eq('id', pedidoId);
-        if (error) throw error;
-
-        await supabase.from('historico_status').insert({
-            pedido_id: parseInt(pedidoId),
-            status_anterior: 'Pendente',
-            status_novo: 'Cancelado',
-            usuario_nome: usuarioNome,
-            usuario_perfil: typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica',
-            observacao: `🚫 Pedido cancelado${motivo.trim() ? ': ' + motivo.trim() : ''}`
-        });
-
-        // Sino: avisa o comercial responsável do cancelamento
-        try { notificarMudancaStatus(p, 'Pendente', 'Cancelado'); } catch (e) {}
-
-        await aposMutacaoPedidos();
-        renderizarPedidosDrag();
-        if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
-        exibirMensagem('mensagemLogistica', `✅ Pedido #${pedidoId} cancelado. Ele sai da operação e fica registrado no histórico.`, 'success');
-    } catch (e) {
-        exibirMensagem('mensagemLogistica', 'Erro ao cancelar: ' + e.message, 'error');
-    }
+    const obs = (document.getElementById('cancObs')?.value || '').trim();
+    document.getElementById('modalCancelarPedido').remove();
+    _confirmarCancelamento(p.id, obs ? `${motivo} — ${obs}` : motivo);
+  };
 }
+window.cancelarPedido = cancelarPedido;
 
-// Exclui de vez: para pedido criado por engano (apaga do banco)
-async function excluirPedido(pedidoId) {
+async function _confirmarCancelamento(pedidoId, motivo){
+  const p = (pedidosGlobais||[]).find(x => String(x.id) === String(pedidoId));
+  if (!p) return;
+  const usuario = (typeof _usuarioAtualNome === 'function') ? _usuarioAtualNome() : 'Logística';
+  const statusAntes = p.status;
+  const rotaAntes = p.rotaId || p.rota_id || null;
+  const agora = new Date().toISOString();
+  try {
+    const upd = {
+      status: 'Cancelado', status_planilha: 'Cancelado',
+      motivo_cancelamento: motivo, cancelado_em: agora, cancelado_por: usuario,
+      status_antes_cancelar: statusAntes,
+      // sai da carga: a vaga na cegonha fica livre para outro carro
+      rota_id: null, placa_cegonha: null, corredor_manual_id: null
+    };
+    let { error } = await supabase.from('pedidos').update(upd).eq('id', parseInt(pedidoId));
+    // Sem as colunas novas no banco ainda: cancela mesmo assim, e o motivo
+    // fica só no histórico até o SQL ser aplicado.
+    if (error && /column|schema cache/i.test(error.message || '')){
+      console.warn('cancelamento: colunas do motivo ausentes, gravando só o status —', error.message);
+      ({ error } = await supabase.from('pedidos').update({
+        status: 'Cancelado', status_planilha: 'Cancelado',
+        rota_id: null, placa_cegonha: null, corredor_manual_id: null
+      }).eq('id', parseInt(pedidoId)));
+    }
+    if (error) throw error;
+
+    Object.assign(p, { status:'Cancelado', statusPlanilha:'Cancelado',
+      motivoCancelamento: motivo, canceladoEm: agora, canceladoPor: usuario,
+      statusAntesCancelar: statusAntes, rotaId:null, rota_id:null, placaCegonha:null, corredorManualId:null });
+
+    if (rotaAntes && typeof _marcarSaidaTransbordo === 'function'){
+      try { await _marcarSaidaTransbordo(rotaAntes, pedidoId, `cancelado: ${motivo}`, null); } catch(_){}
+    }
+    await supabase.from('historico_status').insert({
+      pedido_id: parseInt(pedidoId), status_anterior: statusAntes, status_novo: 'Cancelado',
+      usuario_nome: usuario, usuario_perfil: (typeof perfilAtual !== 'undefined' ? perfilAtual : 'logistica'),
+      observacao: `🚫 Pedido cancelado: ${motivo}`
+    });
+
+    try { notificarMudancaStatus(p, statusAntes, 'Cancelado'); } catch(_){}
+    if ((p.numeroCte || p.numero_cte) && typeof notificar === 'function'){
+      try { notificar({ perfil:'fiscal', tipo:'status', pedidoId: parseInt(pedidoId),
+        titulo:'🧾 Pedido com CT-e cancelado',
+        mensagem:`#${pedidoId} (${p.placa||''}) foi cancelado: ${motivo}. Cancele o CT-e ${p.numeroCte || p.numero_cte}.` }); } catch(_){}
+    }
+
+    if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+    if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
+    if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional(true);
+    if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
+    if (typeof renderizarPedidosComercial === 'function') renderizarPedidosComercial();
+    if (typeof mmToast === 'function') mmToast(`🚫 Pedido #${pedidoId} cancelado.`);
+  } catch(e){
+    alert('Erro ao cancelar: ' + (e.message || e));
+  }
+}
+window._confirmarCancelamento = _confirmarCancelamento;
+
+/* A lixeira chama excluirPedido em vários lugares da tela. Em vez de trocar
+   cada botão, a própria função passa a abrir o cancelamento. */
+function excluirPedido(pedidoId){ cancelarPedido(pedidoId); }
+window.excluirPedido = excluirPedido;
+window._excluirPedidoDefinitivo = null; // atribuído logo abaixo
+
+async function _excluirPedidoDefinitivo(pedidoId) {
     const p = pedidosGlobais.find(x => String(x.id) === String(pedidoId));
     if (!p || !supabase) return;
     const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
-    if (!['comercial','logistica','admin'].includes(perfil)){ alert('Você não tem permissão para excluir pedidos.'); return; }
+    // Excluir de vez apaga histórico e ocorrências — só admin, e só para
+    // lançamento feito por engano. Todo o resto é cancelamento.
+    if (perfil !== 'admin'){ alert('Somente o administrador pode excluir um pedido definitivamente. Use Cancelar.'); return; }
     const temCte = (typeof cteInfoDoPedido === 'function') ? !!cteInfoDoPedido(p.id) : false;
     const comprometido = p.placaCegonha || p.rotaId || p.rota_id || p.status === 'Entregue' || temCte;
     let msg;
@@ -1797,3 +1918,5 @@ function renderizarDiretoria() {
 // Registra folgas/ferias/atestados e avisa na alocacao
 // quando o motorista esta indisponivel.
 // ============================================
+
+window._excluirPedidoDefinitivo = _excluirPedidoDefinitivo;
