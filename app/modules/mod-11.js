@@ -1286,7 +1286,7 @@ function _viagemModalFormaColeta(rota, ids){
 }
 
 // (a) já coletado — comportamento que existia antes
-async function _viagemColetaFeita(ids){
+async function _viagemColetaFeita(rota, ids){
   /* "evento na viagem" não diz nada a quem lê o histórico meses depois.
      A linha do tempo precisa responder: o que aconteceu, com qual cegonha,
      em que trajeto. */
