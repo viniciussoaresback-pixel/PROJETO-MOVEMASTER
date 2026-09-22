@@ -13,6 +13,32 @@ function _rmToastConfirmacao(texto){
   setTimeout(() => { t.classList.add('sai'); setTimeout(()=>t.remove(), 400); }, 2400);
 }
 
+/* Endereço com quem está lá — "ZACARIAS · Cascavel — Av. Brasil, 1500".
+   Só o endereço não basta para o motorista: numa avenida com três lojas ele
+   precisa saber em qual parar e por quem perguntar. O nome vem do cliente do
+   pedido; a cidade, da origem (coleta) ou do destino (entrega).
+   Pátio fica como está — "PÁTIO CASCAVEL" já diz tudo — e não se repete o
+   nome quando ele já está escrito no endereço. */
+function _romaneioLocalComNome(p, qual, endereco){
+  const end = String(endereco || '').trim();
+  if (!end || end === '—') return '—';
+  if (/^\s*(🅿️\s*)?p[aá]tio\b/i.test(end)) return end;
+  /* O nome certo é o do LOCAL — quem está naquele endereço. Vem da coluna
+     LOCAL da planilha da Evo, ou do campo "nome do local" do lançamento.
+     Sem ele: na coleta o local costuma ser o próprio cliente, então o
+     cliente serve; na entrega não — quem recebe é outra loja —, então fica
+     só o endereço, em vez de pôr um nome que pode estar errado. */
+  const nomeLocal = qual === 'coleta' ? p.nomeLocalColeta : p.nomeLocalEntrega;
+  const nome = String(nomeLocal || (qual === 'coleta' ? p.cliente : '') || '').trim();
+  const cidade = String((qual === 'coleta' ? p.cidadeOrigem : p.cidadeDestino) || '').split('/')[0].trim();
+  const n = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  const primeiraPalavra = n(nome).split(/\s+/)[0] || '';
+  const jaTemNome = primeiraPalavra.length > 2 && n(end).includes(primeiraPalavra);
+  if (!nome || jaTemNome) return cidade && !n(end).includes(n(cidade)) ? `${cidade} — ${end}` : end;
+  return `<strong>${nome}</strong>${cidade ? ' · ' + cidade : ''} — ${end}`;
+}
+window._romaneioLocalComNome = _romaneioLocalComNome;
+
 function _gerarPdfRomaneio(rotaId){
   const d = _romaneioDados(rotaId);
   if (!d) return;
@@ -26,8 +52,8 @@ function _gerarPdfRomaneio(rotaId){
       <td>#${p.id}</td><td><strong>${p.placa||'—'}</strong></td><td>${p.modelo||'—'}</td>
       <td>${p.cliente||'—'}</td>
       <td>${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}</td>
-      <td>${p._local || p.romaneioEnderecoColeta || p.enderecoColeta || '—'}</td>
-      <td>${p.romaneioEnderecoEntrega || p.enderecoEntrega || '—'}</td>
+      <td>${_romaneioLocalComNome(p, 'coleta', p._local || p.romaneioEnderecoColeta || p.enderecoColeta)}</td>
+      <td>${_romaneioLocalComNome(p, 'entrega', p.romaneioEnderecoEntrega || p.enderecoEntrega)}</td>
     </tr>${p.observacaoPedido?`<tr><td colspan="7" style="background:#fff8f0;color:#b45309;font-size:11px;padding:4px 8px">📝 <strong>Obs. #${p.id}:</strong> ${p.observacaoPedido}</td></tr>`:''}`).join('');
   const corpo = `
     <div class="resumo">
@@ -1265,7 +1291,7 @@ function _viagemModalFormaColeta(rota, ids){
       <h2 style="margin:0 0 4px">🚚 Como foi a coleta?</h2>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} veículo(s).</p>
 
-      <button class="forma-entrega-opt" onclick="_viagemColetaFeita(${rota.id}, [${ids.join(',')}])">
+      <button class="forma-entrega-opt" onclick="_viagemColetaFeita([${ids.join(',')}], ${rota && rota.id != null ? rota.id : 'null'})">
         <div class="feo-ic">✅</div>
         <div><div class="feo-tit">Já coletado</div><div class="feo-sub">O carro já está com a cegonha. Registra a coleta agora.</div></div>
       </button>
@@ -1285,40 +1311,29 @@ function _viagemModalFormaColeta(rota, ids){
   document.body.appendChild(div);
 }
 
-async function _viagemColetaFeita(rotaId, ids){
-  /* Coleta direta: recupera a rota pelo ID recebido pelo botão.
-     Assim a função não depende de window.rotaAtual ou window.rota. */
+// (a) já coletado — comportamento que existia antes
+async function _viagemColetaFeita(ids, rotaId){
+  /* "evento na viagem" não diz nada a quem lê o histórico meses depois.
+     A linha do tempo precisa responder: o que aconteceu, com qual cegonha,
+     em que trajeto.
 
-  const rota = (rotasGlobais || []).find(
-    r => String(r.id) === String(rotaId)
-  );
-
+     A viagem chega pelo id, vindo do botão. A versão anterior usava uma
+     variável `rota` que não existia nesta função — o texto do histórico era
+     montado antes de gravar, então o erro derrubava a coleta inteira: o
+     botão "Já coletado" simplesmente não fazia nada. */
+  let rota = (rotasGlobais||[]).find(r => String(r.id) === String(rotaId));
   if (!rota){
-    alert('Não foi possível localizar a viagem desta coleta.');
-    return;
+    // sem o id (chamada antiga), deduz pela viagem do primeiro carro
+    const p = (pedidosGlobais||[]).find(x => String(x.id) === String(ids[0]));
+    rota = p ? (rotasGlobais||[]).find(r => String(r.id) === String(p.rotaId || p.rota_id)) : null;
   }
-
-  const _ctx = rota.placa_cegonha
-    ? `cegonha ${rota.placa_cegonha}`
-    : `viagem ${rota.nome || '#'+rota.id}`;
-
-  try {
-    await _viagemMudarStatusCarros(
-      ids,
-      'Em Coleta',
-      'Coletado',
-      `🚚 Coleta confirmada — carro carregado na ${_ctx}${rota.motorista_1 ? ' com '+rota.motorista_1 : ''}`
-    );
-
-    document.getElementById('modalFormaColeta')?.remove();
-
-    if (typeof renderizarViagensAndamento === 'function'){
-      renderizarViagensAndamento();
-    }
-
-  } catch(e){
-    alert('Erro ao registrar coleta: ' + (e.message || e));
-  }
+  const _ctx = rota
+    ? (rota.placa_cegonha ? 'cegonha ' + rota.placa_cegonha : 'viagem ' + (rota.nome || '#' + rota.id))
+    : 'cegonha';
+  await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado',
+    `🚚 Coleta confirmada — carro carregado na ${_ctx}${rota && rota.motorista_1 ? ' com ' + rota.motorista_1 : ''}`);
+  document.getElementById('modalFormaColeta')?.remove();
+  renderizarViagensAndamento();
 }
 
 // (b) equipe de coleta — reaproveita o modal da Central de Operações
@@ -2517,45 +2532,88 @@ function _planPedidosListaHTML(cor){
 let _planVdPedidos = [];   // seleção corrente
 let _planVdCidades = [];   // sequência de cidades do corredor a criar
 
-function _planViagemDireta(){
-  const disponiveis = (typeof _planFiltraBusca === 'function')
-    ? _planFiltraBusca(_planPedidosSemRota()) : _planPedidosSemRota();
+function _planViagemDireta(preSelecionados){
+  // Chamada pelo desmembrar, recebe só os carros escolhidos lá; chamada pelo
+  // botão de "Sem rota", oferece todos os sem rota como antes.
+  const disponiveis = (Array.isArray(preSelecionados) && preSelecionados.length)
+    ? preSelecionados
+    : ((typeof _planFiltraBusca === 'function')
+        ? _planFiltraBusca(_planPedidosSemRota()) : _planPedidosSemRota());
   if (!disponiveis.length){ alert('Não há pedidos sem rota para montar uma viagem.'); return; }
 
+  /* Mesmo formato amplo do criar viagem e do puxar pedido: cartões em grade
+     à esquerda, rota e prazo à direita. Era uma caixa de 560px com os carros
+     numa lista de 230px de altura. */
   const old = document.getElementById('modalViagemDireta'); if (old) old.remove();
   const div = document.createElement('div');
   div.id = 'modalViagemDireta';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100060';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100060;padding:2vh 1vw';
+
+  // agrupa por cliente, como no criar viagem
+  const grupos = {};
+  disponiveis.forEach(p => { const c = p.cliente || 'Sem cliente'; (grupos[c] = grupos[c] || []).push(p); });
+
   div.innerHTML = `
-    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:560px;width:95%;max-height:90vh;overflow:auto;border-radius:14px;padding:22px">
-      <h2 style="margin:0 0 4px">🚛 Criar viagem direta</h2>
-      <p class="text-muted" style="font-size:.84rem;margin:.2rem 0 1rem">
-        Para destinos que não têm corredor. A rota é criada automaticamente a partir
-        das cidades dos carros e sai da lista quando a viagem terminar.
-      </p>
-
-      <div class="vd-lista">
-        ${disponiveis.map(p => `
-          <label class="vd-item">
-            <input type="checkbox" class="vd-chk" value="${p.id}" checked onchange="_planVdAtualizar()">
-            <span>
-              <strong>#${p.id}</strong> ${p.placa||'—'}${p.modelo?' · '+p.modelo:''}
-              <span class="text-muted"> · ${p.cliente||''}</span>
-              <div class="vd-item-rota">${(p.patioAtual||p.cidadeOrigem||'—')} → <strong>${p.cidadeDestino||'—'}</strong></div>
-            </span>
-          </label>`).join('')}
+    <div class="modal-box pv-box">
+      <div class="pv-cab">
+        <div>
+          <h2 style="margin:0">🚛 Criar viagem direta</h2>
+          <p class="text-muted" style="font-size:.84rem;margin:.25rem 0 0">
+            Para destinos que não têm corredor. A rota é criada a partir das cidades dos carros e sai da lista quando a viagem terminar.
+          </p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modalViagemDireta').remove()">✕</button>
       </div>
 
-      <div id="vdResumo" class="vd-resumo"></div>
+      <div class="pv-corpo">
+        <div class="pv-carros">
+          <div class="pv-ferramentas">
+            <div class="pv-acoes-sel">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.vd-chk').forEach(c=>c.checked=true);_planVdAtualizar()">Marcar todos</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.vd-chk').forEach(c=>c.checked=false);_planVdAtualizar()">Desmarcar</button>
+            </div>
+          </div>
+          <div class="pv-grade">
+            ${Object.entries(grupos).sort((a,b) => b[1].length - a[1].length).map(([cliente, itens]) => `
+              <div class="pv-grupo">
+                <div class="pv-grupo-cab">
+                  <span style="font-size:.82rem;font-weight:700">👤 ${cliente}</span>
+                  <span class="pv-grupo-cont">${itens.length} carro(s)</span>
+                </div>
+                <div class="pv-grupo-cards">
+                  ${itens.map(p => {
+                    const selos = (typeof _selosPedidoHTML === 'function') ? _selosPedidoHTML(p) : '';
+                    return `
+                    <label class="pv-card">
+                      <input type="checkbox" class="vd-chk" value="${p.id}" checked onchange="_planVdAtualizar()">
+                      <div class="pv-card-corpo">
+                        <div class="pv-card-placa">${p.placa||'—'}
+                          ${p.valorFrete?`<span class="pv-card-valor">R$ ${Number(p.valorFrete).toLocaleString('pt-BR')}</span>`:''}
+                        </div>
+                        <div class="pv-card-modelo">${p.modelo||'—'}</div>
+                        ${p.referencia?`<div class="pv-card-ref">🏷️ ${String(p.referencia).replace(/"/g,'&quot;')}</div>`:''}
+                        <div class="pv-card-rota">${(p.patioAtual||p.cidadeOrigem||'—').split('/')[0]} → ${(p.cidadeDestino||'—').split('/')[0]}</div>
+                        ${selos?`<div class="pv-card-selos">${selos}</div>`:''}
+                        <div class="pv-card-id">#${p.id}</div>
+                      </div>
+                    </label>`;
+                  }).join('')}
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>
 
-      <div class="form-group" style="margin-top:10px">
-        <label>Prazo estimado da viagem (SLA em horas) — usado para calcular o ETA</label>
-        <input type="number" id="vdSla" min="1" step="1" value="24">
-      </div>
-
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn btn-primary" style="flex:1" id="btnVdCriar">🚛 Continuar</button>
-        <button class="btn btn-secondary" onclick="document.getElementById('modalViagemDireta').remove()">Cancelar</button>
+        <div class="pv-lateral">
+          <div id="vdResumo" class="vd-resumo" style="margin-top:0"></div>
+          <div class="form-group" style="margin-top:12px">
+            <label>Prazo estimado (SLA em horas)</label>
+            <input type="number" id="vdSla" min="1" step="1" value="24">
+          </div>
+          <div class="pv-rodape">
+            <button class="btn btn-primary" style="width:100%" id="btnVdCriar">🚛 Continuar</button>
+            <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalViagemDireta').remove()">Cancelar</button>
+          </div>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(div);
@@ -2584,6 +2642,13 @@ function _planVdAtualizar(){
   origens.sort((a,b) => (cont[n(b)]||0) - (cont[n(a)]||0));
 
   _planVdCidades = [...origens, ...destinos.filter(d => !origens.some(o => n(o)===n(d)))];
+
+  /* Serviço local — Cascavel → Cascavel. Origem e destino são a mesma cidade,
+     então o filtro acima descarta o destino e sobra uma cidade só. A viagem
+     direta exigia duas e recusava o pedido, deixando o carro preso em "Sem
+     rota" sem jeito de chegar a um motorista. Rota local tem a cidade nas
+     duas pontas. */
+  if (_planVdCidades.length === 1) _planVdCidades = [_planVdCidades[0], _planVdCidades[0]];
 
   const precisaOrdenar = destinos.length > 1;
   box.innerHTML = `
@@ -2622,7 +2687,7 @@ async function _planVdConfirmar(){
   const sla = parseInt(document.getElementById('vdSla')?.value, 10) || 24;
   const origem = _planVdCidades[0];
   const destino = _planVdCidades[_planVdCidades.length - 1];
-  const nome = `${origem} → ${destino}`;
+  const nome = (origem === destino) ? `${origem} — serviço local` : `${origem} → ${destino}`;
 
   const btn = document.getElementById('btnVdCriar');
   if (btn){ btn.disabled = true; btn.textContent = '⏳ Criando rota...'; }
@@ -2740,7 +2805,13 @@ function _planDesmembrar(ids){
   const itens = _pdIds.map(id => (pedidosGlobais||[]).find(p => String(p.id)===String(id))).filter(Boolean);
   if (!itens.length) return;
   const lider = itens[0];
-  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
+  /* Em "Sem rota" (e nas abas de transbordo e aprovação), _planCorredorSel
+     não é um corredor — é um marcador como '__semrota__'. A versão anterior
+     tratava isso como "sem corredor": o botão de direcionar sumia e o de
+     criar viagem abria o fluxo de viagem direta ignorando os carros marcados.
+     Agora o corredor é escolhido aqui, com o atual como sugestão. */
+  const corAtual = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
+  const corredores = (corredoresGlobais||[]).slice().sort((a,b) => String(a.nome).localeCompare(String(b.nome)));
 
   const old = document.getElementById('modalDesmembrar'); if (old) old.remove();
   const div = document.createElement('div');
@@ -2774,9 +2845,16 @@ function _planDesmembrar(ids){
         </div>
         <div class="pv-lateral">
           <div class="pv-contador" id="pdContador"></div>
+          <div class="form-group">
+            <label>Corredor</label>
+            <select id="pdCorredor">
+              <option value="">— sem corredor (rota excepcional) —</option>
+              ${corredores.map(c => `<option value="${c.id}" ${corAtual && String(corAtual.id)===String(c.id)?'selected':''}>${c.nome}</option>`).join('')}
+            </select>
+          </div>
           <div class="pv-rodape">
             <button class="btn btn-primary" style="width:100%" onclick="_pdCriarViagem()">🚛 Criar viagem com os marcados</button>
-            ${cor ? `<button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="_pdDirecionar()">📌 Direcionar ao corredor ${cor.nome}</button>` : ''}
+            <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="_pdDirecionar()">📌 Só direcionar ao corredor</button>
             <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="document.getElementById('modalDesmembrar').remove()">Cancelar</button>
           </div>
         </div>
@@ -2842,14 +2920,14 @@ function _pdSelecionados(){
 function _pdCriarViagem(){
   const sel = _pdSelecionados();
   if (!sel.length){ alert('Marque os carros que vão nesta viagem.'); return; }
+  const corId = document.getElementById('pdCorredor')?.value || '';
+  const cor = corId ? (corredoresGlobais||[]).find(c => String(c.id)===String(corId)) : null;
   document.getElementById('modalDesmembrar')?.remove();
-  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
   if (cor && typeof _planAbrirModalViagem === 'function'){
     _planAbrirModalViagem(cor, sel);
   } else if (typeof _planViagemDireta === 'function'){
-    // sem corredor selecionado (modo "Sem rota"): cria a rota excepcional
-    _planVdPedidos = sel;
-    _planViagemDireta();
+    // sem corredor: rota excepcional, mas SÓ com os carros marcados
+    _planViagemDireta(sel);
   }
 }
 window._pdCriarViagem = _pdCriarViagem;
@@ -2857,8 +2935,9 @@ window._pdCriarViagem = _pdCriarViagem;
 async function _pdDirecionar(){
   const sel = _pdSelecionados();
   if (!sel.length){ alert('Marque os carros primeiro.'); return; }
-  const cor = (corredoresGlobais||[]).find(c => String(c.id)===String(_planCorredorSel));
-  if (!cor) return;
+  const corId = document.getElementById('pdCorredor')?.value || '';
+  const cor = corId ? (corredoresGlobais||[]).find(c => String(c.id)===String(corId)) : null;
+  if (!cor){ alert('Escolha o corredor para onde os carros vão.'); return; }
   try {
     const ids = sel.map(p => p.id);
     await supabase.from('pedidos').update({ corredor_manual_id: cor.id }).in('id', ids);
@@ -2866,6 +2945,8 @@ async function _pdDirecionar(){
     if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
     document.getElementById('modalDesmembrar')?.remove();
     if (typeof _rmToastConfirmacao === 'function') _rmToastConfirmacao(`📌 ${ids.length} carro(s) no corredor ${cor.nome}.`);
+    // leva direto ao corredor de destino, onde os carros agora estão
+    _planCorredorSel = cor.id;
     renderizarPlanejamentoRotas();
   } catch(e){ alert('Erro: '+(e.message||e)); }
 }
@@ -2955,7 +3036,7 @@ function renderizarColetasDirecionadas(){
       </div>
       <div class="mpedido-cliente">${p.cliente || '—'}</div>
       <div class="mpedido-rota">📍 ${p.cidadeOrigem || ''}/${p.ufOrigem || ''} → 🏁 ${p.cidadeDestino || ''}/${p.ufDestino || ''}</div>
-      <div class="mpedido-veiculo">🚗 ${p.modelo || ''} · <strong>${p.placa || ''}</strong></div>
+      <div class="mpedido-veiculo">${typeof placaMercosul==='function' ? placaMercosul(p.placa,'g') : `<strong>${p.placa||''}</strong>`}<span class="mpedido-modelo">${p.modelo || ''}</span></div>
       ${endereco ? `<div class="mpedido-data">🏠 ${endereco}</div>` : ''}
       ${quando ? `<div class="mpedido-data">📅 Direcionada em ${new Date(quando).toLocaleString('pt-BR')}</div>` : ''}
       <div class="mpedido-acoes">
