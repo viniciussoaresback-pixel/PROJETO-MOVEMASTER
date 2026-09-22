@@ -1286,15 +1286,16 @@ function _viagemModalFormaColeta(rota, ids){
 }
 
 // (a) já coletado — comportamento que existia antes
-async function _viagemColetaFeita(rota, ids){
-  /* "evento na viagem" não diz nada a quem lê o histórico meses depois.
-     A linha do tempo precisa responder: o que aconteceu, com qual cegonha,
-     em que trajeto. */
-  const _ctx = `${rota.placa_cegonha ? 'cegonha '+rota.placa_cegonha : 'viagem '+(rota.nome||'#'+rota.id)}`;
-  await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado',
-    `🚚 Coleta confirmada — carro carregado na ${_ctx}${rota.motorista_1?' com '+rota.motorista_1:''}`);
-  document.getElementById('modalFormaColeta')?.remove();
-  renderizarViagensAndamento();
+async function _viagemColetaFeita(ids){
+    /* "evento na viagem" não diz nada a quem lê o histórico meses depois.
+       A linha do tempo precisa responder: o que aconteceu, com qual cegonha,
+       em que trajeto. */
+    const rota = window.rotaAtual || window.rota || {};
+    const _ctx = `${rota.placa_cegonha ? 'cegonha '+rota.placa_cegonha : 'viagem '+(rota.nome||'#'+(rota.id||''))}`;
+    await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado',
+      `🚚 Coleta confirmada — carro carregado na ${_ctx}${rota.motorista_1 ? ' com '+rota.motorista_1:''}`);
+    document.getElementById('modalFormaColeta')?.remove();
+    renderizarViagensAndamento();
 }
 
 // (b) equipe de coleta — reaproveita o modal da Central de Operações
