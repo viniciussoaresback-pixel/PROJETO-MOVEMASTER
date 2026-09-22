@@ -744,7 +744,10 @@ function _viagemPuxarPedido(rota, carros){
 
   // Candidatos: pedidos ativos, sem rota, OU aguardando transbordo — que não estão já nesta viagem
   const candidatos = (pedidosGlobais||[]).filter(p => {
-    if (['Entregue','Cancelado'].includes(p.status||'')) return false;
+    // Ocorrência fica de fora: o carro está parado esperando decisão, e só
+    // volta ao fluxo quando alguém reverte em Pedidos. Oferecê-lo aqui
+    // permitia carregar numa cegonha um carro com problema em aberto.
+    if (['Entregue','Cancelado','Ocorrência'].includes(p.status||'')) return false;
     if (String(p.rotaId||p.rota_id) === String(rota.id)) return false; // já está nesta viagem
     const semRota = !p.rotaId && !p.rota_id && !p.placaCegonha;
     const emTransbordo = p.status === 'Transbordo';
@@ -1823,6 +1826,12 @@ function _cgPedidosFiltrados(){
 }
 
 function _cgStatusPill(p){
+  // Cancelado mostra o motivo ao passar o mouse, e um resumo curto embaixo
+  if (p && p.status === 'Cancelado'){
+    const m = String(p.motivoCancelamento || 'motivo não informado');
+    return `<span class="pill-cancelado" title="Cancelado${p.canceladoPor?' por '+p.canceladoPor:''}${p.canceladoEm?' em '+new Date(p.canceladoEm).toLocaleDateString('pt-BR'):''}: ${m.replace(/"/g,'&quot;')}">🚫 Cancelado</span>` +
+           `<div class="pill-cancelado-motivo">${m.length > 38 ? m.slice(0,38)+'…' : m}</div>`;
+  }
   return typeof _statusPillPlanilha === 'function' ? _statusPillPlanilha(p) : (statusPlanilhaDoPedido(p)||'—');
 }
 
@@ -2131,6 +2140,12 @@ async function _cgAbrirRastreio(pedidoId){
 
       ${!['Entregue','Cancelado','Ocorrência'].includes(p.status) ? `<div class="cg-acoes-rapidas">
         <button class="btn btn-sm btn-secondary" onclick="_abrirModalAlterarDestino(${p.id}, (rotasGlobais||[]).find(r=>String(r.id)===String(${p.rotaId||p.rota_id||0})))">📍 Alterar destino</button>
+      </div>` : ''}
+
+      ${p.status === 'Cancelado' ? `<div class="cg-canc-bloco">
+        <div class="cg-canc-tit">🚫 Pedido cancelado</div>
+        <div class="cg-canc-motivo">${p.motivoCancelamento || 'Motivo não informado.'}</div>
+        <div class="cg-canc-meta">${p.canceladoPor ? 'por ' + p.canceladoPor : ''}${p.canceladoEm ? ' em ' + new Date(p.canceladoEm).toLocaleString('pt-BR') : ''}${p.statusAntesCancelar ? ' · estava em ' + p.statusAntesCancelar : ''}</div>
       </div>` : ''}
 
       ${p.status === 'Ocorrência' ? `<div class="cg-ocor-bloco">
