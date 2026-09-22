@@ -685,17 +685,22 @@ function cancelarPedido(pedidoId) {
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100070;padding:2vh 1vw';
   div.innerHTML = `
     <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:500px;width:95%;border-radius:14px;padding:22px">
-      <h2 style="margin:0 0 4px">🚫 Cancelar pedido #${p.id}</h2>
+      <h2 style="margin:0 0 4px">🗑️ Remover pedido #${p.id}</h2>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">
         ${p.cliente || '—'} · ${p.placa || 'sem placa'}${p.modelo ? ' · ' + p.modelo : ''}<br>
         ${(p.cidadeOrigem||'—').split('/')[0]} → ${(p.cidadeDestino||'—').split('/')[0]} · status atual: <strong>${p.status || '—'}</strong>
       </p>
 
+      <div class="canc-escolha">
+        <div class="canc-escolha-item"><strong>🚫 Cancelar</strong> mantém o pedido no histórico com o motivo. Use quando o transporte foi combinado e desmarcado.</div>
+        ${perfil === 'admin' ? `<div class="canc-escolha-item"><strong>🗑️ Excluir</strong> apaga tudo — histórico, ocorrências, do faturamento. Só para lançamento feito por engano, sem volta.</div>` : ''}
+      </div>
+
       ${naCarga ? `<div class="canc-aviso">🚛 Este carro está numa viagem${p.placaCegonha ? ' (' + p.placaCegonha + ')' : ''}. Ao cancelar, ele sai da carga e a vaga é liberada.</div>` : ''}
       ${temCte ? `<div class="canc-aviso canc-aviso-cte">🧾 Tem CT-e ${p.numeroCte || p.numero_cte} emitido. O fiscal será avisado para cancelar o documento.</div>` : ''}
 
       <div class="form-group">
-        <label>Por que está sendo cancelado?</label>
+        <label>Motivo <span class="canc-obrig">(obrigatório para cancelar)</span></label>
         <select id="cancMotivo" onchange="document.getElementById('cancOutroWrap').style.display = this.value==='Outro' ? '' : 'none'">
           <option value="">Escolha o motivo...</option>
           ${MOTIVOS_CANCELAMENTO.map(m => `<option value="${m}">${m}</option>`).join('')}
@@ -710,15 +715,11 @@ function cancelarPedido(pedidoId) {
         <input type="text" id="cancObs" placeholder="Detalhe, se houver">
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:16px">
-        <button class="btn btn-primary" style="flex:1;background:#dc2626" id="btnConfirmCancelar">🚫 Cancelar pedido</button>
+      <div class="canc-botoes">
+        <button class="btn btn-primary" style="background:#dc2626" id="btnConfirmCancelar">🚫 Cancelar (mantém histórico)</button>
+        ${perfil === 'admin' ? `<button class="btn" style="background:#7f1d1d;color:#fff" id="btnExcluirPedido">🗑️ Excluir de vez</button>` : ''}
         <button class="btn btn-secondary" onclick="document.getElementById('modalCancelarPedido').remove()">Voltar</button>
       </div>
-      ${perfil === 'admin' ? `
-        <p class="canc-excluir">
-          Lançado por engano e nunca existiu?
-          <a href="#" onclick="event.preventDefault();document.getElementById('modalCancelarPedido').remove();_excluirPedidoDefinitivo(${p.id})">Excluir de vez</a>
-        </p>` : ''}
     </div>`;
   document.body.appendChild(div);
   document.getElementById('btnConfirmCancelar').onclick = () => {
@@ -733,6 +734,13 @@ function cancelarPedido(pedidoId) {
     const obs = (document.getElementById('cancObs')?.value || '').trim();
     document.getElementById('modalCancelarPedido').remove();
     _confirmarCancelamento(p.id, obs ? `${motivo} — ${obs}` : motivo);
+  };
+  const btnEx = document.getElementById('btnExcluirPedido');
+  if (btnEx) btnEx.onclick = () => {
+    // Excluir não exige motivo — o pedido vai deixar de existir. Fecha este
+    // modal e passa para a confirmação do excluir, que já explica o risco.
+    document.getElementById('modalCancelarPedido').remove();
+    _excluirPedidoDefinitivo(p.id);
   };
 }
 window.cancelarPedido = cancelarPedido;
