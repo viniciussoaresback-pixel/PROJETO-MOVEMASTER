@@ -1265,7 +1265,7 @@ function _viagemModalFormaColeta(rota, ids){
       <h2 style="margin:0 0 4px">🚚 Como foi a coleta?</h2>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} veículo(s).</p>
 
-      <button class="forma-entrega-opt" onclick="_viagemColetaFeita([${ids.join(',')}])">
+      <button class="forma-entrega-opt" onclick="_viagemColetaFeita(window.rotaAtual || {}, [${ids.join(',')}])">
         <div class="feo-ic">✅</div>
         <div><div class="feo-tit">Já coletado</div><div class="feo-sub">O carro já está com a cegonha. Registra a coleta agora.</div></div>
       </button>
