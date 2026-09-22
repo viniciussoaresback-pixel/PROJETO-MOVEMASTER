@@ -2568,7 +2568,7 @@ async function carregarPedidosMotorista() {
             </div>
             <div class="mpedido-cliente">${p.cliente || '—'}</div>
             <div class="mpedido-rota">${rotaFn(p)}</div>
-            <div class="mpedido-veiculo">🚗 ${p.modelo || ''} · <strong>${p.placa || ''}</strong> | 🚛 ${p.placaCegonha || '—'}</div>
+            <div class="mpedido-veiculo">${typeof placaMercosul==='function' ? placaMercosul(p.placa,'g') : `<strong>${p.placa||''}</strong>`}<span class="mpedido-modelo">${p.modelo || ''}${p.placaCegonha ? ` · cegonha ${p.placaCegonha}` : ''}</span></div>
             ${p.dataPrevColeta ? `<div class="mpedido-data">📅 Coleta: ${new Date(p.dataPrevColeta).toLocaleString('pt-BR')}</div>` : ''}
             <div class="mpedido-acoes">
                 ${podeFoto ? `<button class="btn-motorista-acao btn-macao-foto" onclick="abrirEnvioFotoRapido(${p.id})">📸 Foto da Placa</button>` : ''}
