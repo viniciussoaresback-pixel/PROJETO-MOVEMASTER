@@ -620,19 +620,21 @@ function renderizarEquipesPainel(){
         ? (p.enderecoEntrega ? `🏁 <strong>Entregar em:</strong> ${p.enderecoEntrega}` : '')
         : '';
       const endLinha = endereco ? `<tr class="eq-end-linha"><td colspan="6" class="eq-end-cel">${endereco}</td></tr>` : '';
-      return `<tr class="corr-tr">
-        <td class="ct-id">#${p.id}</td>
-        <td class="ct-placa"><strong>${p.placa||'—'}</strong> ${selCTEDoPedido(p.id)}</td>
-        <td class="ct-modelo">${p.modelo||'—'}</td>
-        <td class="ct-rota">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
-        <td class="ct-cli" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
-        <td class="ct-acoes">${info}${selMembro} ${btn}</td>
+      /* data-rotulo: no celular a tabela vira cartão (ver .eq-campo no CSS),
+         e cada célula precisa dizer o que é, já que o cabeçalho some. */
+      return `<tr class="corr-tr eq-linha">
+        <td class="ct-id" data-rotulo="Pedido">#${p.id}</td>
+        <td class="ct-placa" data-rotulo="Placa">${typeof placaMercosul==='function' ? placaMercosul(p.placa) : `<strong>${p.placa||'—'}</strong>`} ${selCTEDoPedido(p.id)}</td>
+        <td class="ct-modelo" data-rotulo="Modelo">${p.modelo||'—'}</td>
+        <td class="ct-rota" data-rotulo="Trajeto">${p.cidadeOrigem||'—'} <span class="cpl-seta">→</span> <strong>${p.cidadeDestino||'—'}</strong></td>
+        <td class="ct-cli" data-rotulo="Cliente" title="${(p.cliente||'').replace(/"/g,'&quot;')}"><strong>${p.cliente||'—'}</strong></td>
+        <td class="ct-acoes" data-rotulo="">${info}${selMembro} ${btn}</td>
       </tr>${endLinha}`;
     };
 
     const tabela = (itens, tipo, vazio) => itens.length === 0
       ? `<p class="text-muted" style="padding:.6rem 0">${vazio}</p>`
-      : `<table class="corr-tabela"><thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th></th></tr></thead><tbody>${itens.map(p=>linha(p,tipo)).join('')}</tbody></table>`;
+      : `<table class="corr-tabela eq-tabela"><thead><tr><th>ID</th><th>Placa</th><th>Modelo</th><th>Origem → Destino</th><th>Cliente</th><th></th></tr></thead><tbody>${itens.map(p=>linha(p,tipo)).join('')}</tbody></table>`;
 
     return `<div class="corredor-card" style="margin-bottom:16px">
       <div class="corredor-card-cab">
