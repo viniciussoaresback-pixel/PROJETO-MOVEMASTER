@@ -1730,6 +1730,31 @@ async function _confCarregarPernas(){
 }
 
 // Salva os valores das pernas definidos manualmente
+/* Repasse em lote: aplica o valor do pedido na perna única de todos os
+   pedidos elegíveis da viagem, e já salva. Com uma carga de 11 carros de
+   frete cheio, era clicar onze vezes no botão individual e depois em salvar.
+   Aqui é um clique e uma confirmação. */
+async function _confRepassarViagem(viagemId){
+  const lote = window._remRepasseLote || [];
+  if (!lote.length){ alert('Nenhum pedido de perna única nesta viagem.'); return; }
+  const fmt = (n) => 'R$ ' + Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const soma = lote.reduce((a,x) => a + x.valor, 0);
+  const jaTem = lote.filter(x => (window._confValoresPerna||{})[`${x.pedidoId}|${x.origem}|${x.destino}`] != null).length;
+
+  if (!confirm(
+    `Repassar o frete de ${lote.length} pedido(s) ao motorista?\n\n` +
+    `Total: ${fmt(soma)}\n` +
+    (jaTem ? `\n⚠️ ${jaTem} deles já têm valor informado, que será substituído pelo valor do pedido.\n` : '') +
+    `\nPedidos com mais de uma perna não são alterados.`
+  )) return;
+
+  lote.forEach(x => _confSetValorPerna(`${x.pedidoId}|${x.origem}|${x.destino}`, x.valor));
+  await _confSalvarPernas(viagemId);
+  if (typeof _confRenderPainel === 'function') _confRenderPainel();
+  else if (typeof renderizarCentralConferencia === 'function') renderizarCentralConferencia();
+}
+window._confRepassarViagem = _confRepassarViagem;
+
 async function _confSalvarPernas(viagemId){
   const chavePeriodo = `${_confFiltros.de}|${_confFiltros.ate}`;
   if ((window._fechamentosPeriodo||{})[chavePeriodo]){ alert('🔒 Este período está fechado. Reabra o fechamento para editar.'); return; }
@@ -1878,9 +1903,22 @@ function _confAbaConteudo(v){
     let totalPedidos = 0;     // receita informada pelo comercial
     let temPendente = false, temNaoFinalizado = false;
 
+    // Candidatos ao repasse em lote: só pedidos de perna única, os mesmos em
+    // que o botão individual aparece. Os de duas ou mais pernas ficam de fora
+    // — repassar o frete inteiro a um motorista deixaria a outra perna sem
+    // lastro e a soma acima do pedido.
+    const repasseLote = [];
+    let pedidosMultiPerna = 0;
+
     const blocos = v.pedidos.map(p => {
       const { pernas, finalizado } = _confPernasDoPedido(p);
       if (!finalizado) temNaoFinalizado = true;
+      if (pernas.length === 1){
+        repasseLote.push({ pedidoId: p.id, valor: Number(p.valorFrete||0),
+                           origem: pernas[0].trechoOrigem, destino: pernas[0].trechoDestino });
+      } else if (pernas.length > 1){
+        pedidosMultiPerna++;
+      }
 
       const valorPedido = Number(p.valorFrete || 0);
       totalPedidos += valorPedido;
@@ -2004,6 +2042,20 @@ function _confAbaConteudo(v){
           <small>receita − pernas</small>
         </div>
       </div>
+
+      ${(() => {
+        window._remRepasseLote = repasseLote;
+        if (!repasseLote.length) return '';
+        const soma = repasseLote.reduce((a,x) => a + x.valor, 0);
+        return `
+        <div class="rem-lote">
+          <div class="rem-lote-txt">
+            <strong>Frete cheio para a viagem inteira</strong>
+            <span>${repasseLote.length} pedido(s) de perna única · ${fmt(soma)}${pedidosMultiPerna ? ` · ${pedidosMultiPerna} com várias pernas ficam de fora` : ''}</span>
+          </div>
+          <button class="btn btn-primary" onclick="_confRepassarViagem(${v.id})">⬇️ Repassar o frete de todos ao motorista</button>
+        </div>`;
+      })()}
 
       ${temNaoFinalizado?'<div class="rem-aviso">⚠️ Há carros com trajeto não finalizado. Os valores podem mudar quando as pernas restantes forem registradas.</div>':''}
       ${temPendente?'<div class="rem-aviso">🔴 Há pernas sem valor. Enquanto isso, a soma está incompleta.</div>':''}
