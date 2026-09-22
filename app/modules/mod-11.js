@@ -1265,7 +1265,7 @@ function _viagemModalFormaColeta(rota, ids){
       <h2 style="margin:0 0 4px">🚚 Como foi a coleta?</h2>
       <p class="text-muted" style="font-size:.85rem;margin:.2rem 0 1rem">${ids.length} veículo(s).</p>
 
-      <button class="forma-entrega-opt" onclick="_viagemColetaFeita(window.rotaAtual || {}, [${ids.join(',')}])">
+      <button class="forma-entrega-opt" onclick="_viagemColetaFeita(${rota.id}, [${ids.join(',')}])">
         <div class="feo-ic">✅</div>
         <div><div class="feo-tit">Já coletado</div><div class="feo-sub">O carro já está com a cegonha. Registra a coleta agora.</div></div>
       </button>
@@ -1285,17 +1285,40 @@ function _viagemModalFormaColeta(rota, ids){
   document.body.appendChild(div);
 }
 
-// (a) já coletado — comportamento que existia antes
-async function _viagemColetaFeita(ids){
-    /* "evento na viagem" não diz nada a quem lê o histórico meses depois.
-       A linha do tempo precisa responder: o que aconteceu, com qual cegonha,
-       em que trajeto. */
-    const rota = window.rotaAtual || window.rota || {};
-    const _ctx = `${rota.placa_cegonha ? 'cegonha '+rota.placa_cegonha : 'viagem '+(rota.nome||'#'+(rota.id||''))}`;
-    await _viagemMudarStatusCarros(ids, 'Em Coleta', 'Coletado',
-      `🚚 Coleta confirmada — carro carregado na ${_ctx}${rota.motorista_1 ? ' com '+rota.motorista_1:''}`);
+async function _viagemColetaFeita(rotaId, ids){
+  /* Coleta direta: recupera a rota pelo ID recebido pelo botão.
+     Assim a função não depende de window.rotaAtual ou window.rota. */
+
+  const rota = (rotasGlobais || []).find(
+    r => String(r.id) === String(rotaId)
+  );
+
+  if (!rota){
+    alert('Não foi possível localizar a viagem desta coleta.');
+    return;
+  }
+
+  const _ctx = rota.placa_cegonha
+    ? `cegonha ${rota.placa_cegonha}`
+    : `viagem ${rota.nome || '#'+rota.id}`;
+
+  try {
+    await _viagemMudarStatusCarros(
+      ids,
+      'Em Coleta',
+      'Coletado',
+      `🚚 Coleta confirmada — carro carregado na ${_ctx}${rota.motorista_1 ? ' com '+rota.motorista_1 : ''}`
+    );
+
     document.getElementById('modalFormaColeta')?.remove();
-    renderizarViagensAndamento();
+
+    if (typeof renderizarViagensAndamento === 'function'){
+      renderizarViagensAndamento();
+    }
+
+  } catch(e){
+    alert('Erro ao registrar coleta: ' + (e.message || e));
+  }
 }
 
 // (b) equipe de coleta — reaproveita o modal da Central de Operações
