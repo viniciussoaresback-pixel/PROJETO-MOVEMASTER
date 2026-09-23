@@ -402,7 +402,9 @@ function _fiscalNumerosCteHTML(rotaId){
           <span style="color:var(--text-secondary,#9ca3af);font-size:.78rem">${lider.cliente||'—'} · ${lider.cidadeOrigem||'—'} → <strong>${lider.cidadeDestino||'—'}</strong></span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <input type="text" id="cteNum_${g.chave}" value="${lider.numeroCte||''}" placeholder="nº da CTe" style="font-size:.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:140px">
+          <input type="text" id="cteNum_${g.chave}" class="cte-input-campo" value="${lider.numeroCte||''}" placeholder="nº da CTe"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();_salvarNumeroCteGrupo('${g.chave}', [${g.itens.map(x=>x.id).join(',')}]);}"
+                 style="font-size:.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:140px">
           <button class="btn btn-sm btn-primary" onclick="_salvarNumeroCteGrupo('${g.chave}', [${g.itens.map(x=>x.id).join(',')}])">Salvar CTe</button>
           <span id="cteOk_${g.chave}" style="font-size:.75rem;color:#22c55e">${lider.numeroCte?`✅ CTe ${lider.numeroCte}`:''}</span>
         </div>
@@ -429,10 +431,35 @@ async function _salvarNumeroCteGrupoValor(chave, ids, valor){
       (p) => { p.numeroCte = val || null; p.cteEmitidoEm = _agoraCte; }
     );
     if (okSpan) okSpan.textContent = val ? `✅ CTe ${val}` : '';
-    if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFiscal', val?`✅ CTe ${val} registrada (${ids.length} carro(s)).`:`CTe removida.`, 'success');
-    // NÃO re-renderiza o card inteiro (não fecha o container)
-  } catch(e){ alert('Erro ao salvar CTe: '+(e.message||e)); }
+    /* Nada de re-render nem de propagação aqui. mmAtualizarPedidos já ajustou
+       a memória; redesenhar a tela do fiscal recolhia o <details> aberto e
+       jogava o fiscal de volta ao topo — era o "minimizou, clica de novo".
+
+       Em vez disso, o cursor pula para o PRÓXIMO CT-e em branco do mesmo card.
+       Assim dá para emitir a carga inteira digitando + Enter, sem tocar no
+       mouse. */
+    if (typeof mmToast === 'function') mmToast(val ? `✅ CTe ${val} salvo (${ids.length} carro(s))` : 'CTe removido');
+    else if (typeof exibirMensagem === 'function') exibirMensagem('mensagemFiscal', val?`✅ CTe ${val} registrada (${ids.length} carro(s)).`:`CTe removida.`, 'success');
+    _cteFocarProximo(chave);
+  } catch(e){ alert('Não foi possível salvar o CT-e:\n\n'+(e.message||e)); }
 }
+
+/* Leva o cursor ao próximo CT-e em branco, dentro do card aberto. Se todos
+   estiverem preenchidos, tira o foco do campo atual — sinal de que acabou. */
+function _cteFocarProximo(chaveAtual){
+  const campos = [...document.querySelectorAll('.cte-input-campo')];
+  const i = campos.findIndex(c => c.id === `cteNum_${chaveAtual}`);
+  // procura o primeiro vazio DEPOIS do atual; se não houver, o primeiro vazio
+  const depois = campos.slice(i + 1).find(c => !c.value.trim());
+  const alvo = depois || campos.find(c => !c.value.trim());
+  if (alvo){
+    alvo.focus();
+    alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } else {
+    document.getElementById(`cteNum_${chaveAtual}`)?.blur();
+  }
+}
+window._cteFocarProximo = _cteFocarProximo;
 
 // mantida por compatibilidade
 async function _salvarNumeroCte(pedidoId){ return _salvarNumeroCteGrupo('p'+pedidoId, [pedidoId]); }
