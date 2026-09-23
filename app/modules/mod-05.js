@@ -678,6 +678,10 @@ function cancelarPedido(pedidoId) {
   const naCarga = !!(p.rotaId || p.rota_id || p.placaCegonha);
   const temCte = !!(p.numeroCte || p.numero_cte);
   const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : '';
+  // Excluir de vez fica disponível para quem opera o pedido — os mesmos
+  // perfis que já podiam lançar e cancelar. Continua sendo ação de risco,
+  // com confirmação que lista o que será perdido.
+  const podeExcluir = ['admin','comercial','logistica'].includes(perfil);
 
   const old = document.getElementById('modalCancelarPedido'); if (old) old.remove();
   const div = document.createElement('div');
@@ -693,7 +697,7 @@ function cancelarPedido(pedidoId) {
 
       <div class="canc-escolha">
         <div class="canc-escolha-item"><strong>🚫 Cancelar</strong> mantém o pedido no histórico com o motivo. Use quando o transporte foi combinado e desmarcado.</div>
-        ${perfil === 'admin' ? `<div class="canc-escolha-item"><strong>🗑️ Excluir</strong> apaga tudo — histórico, ocorrências, do faturamento. Só para lançamento feito por engano, sem volta.</div>` : ''}
+        ${podeExcluir ? `<div class="canc-escolha-item"><strong>🗑️ Excluir</strong> apaga tudo — histórico, ocorrências, do faturamento. Só para lançamento feito por engano, sem volta.</div>` : ''}
       </div>
 
       ${naCarga ? `<div class="canc-aviso">🚛 Este carro está numa viagem${p.placaCegonha ? ' (' + p.placaCegonha + ')' : ''}. Ao cancelar, ele sai da carga e a vaga é liberada.</div>` : ''}
@@ -717,7 +721,7 @@ function cancelarPedido(pedidoId) {
 
       <div class="canc-botoes">
         <button class="btn btn-primary" style="background:#dc2626" id="btnConfirmCancelar">🚫 Cancelar (mantém histórico)</button>
-        ${perfil === 'admin' ? `<button class="btn" style="background:#7f1d1d;color:#fff" id="btnExcluirPedido">🗑️ Excluir de vez</button>` : ''}
+        ${podeExcluir ? `<button class="btn" style="background:#7f1d1d;color:#fff" id="btnExcluirPedido">🗑️ Excluir de vez</button>` : ''}
         <button class="btn btn-secondary" onclick="document.getElementById('modalCancelarPedido').remove()">Voltar</button>
       </div>
     </div>`;
@@ -816,7 +820,7 @@ async function _excluirPedidoDefinitivo(pedidoId) {
     const perfil = (typeof perfilAtual !== 'undefined' && perfilAtual) ? perfilAtual : null;
     // Excluir de vez apaga histórico e ocorrências — só admin, e só para
     // lançamento feito por engano. Todo o resto é cancelamento.
-    if (perfil !== 'admin'){ alert('Somente o administrador pode excluir um pedido definitivamente. Use Cancelar.'); return; }
+    if (!['admin','comercial','logistica'].includes(perfil)){ alert('Você não tem permissão para excluir pedidos. Use Cancelar.'); return; }
     const temCte = (typeof cteInfoDoPedido === 'function') ? !!cteInfoDoPedido(p.id) : false;
     const comprometido = p.placaCegonha || p.rotaId || p.rota_id || p.status === 'Entregue' || temCte;
     let msg;
@@ -833,20 +837,42 @@ async function _excluirPedidoDefinitivo(pedidoId) {
         msg = `⚠️ EXCLUIR DEFINITIVAMENTE o pedido #${p.id} (${p.cliente || ''})?\n\nUse isto apenas para pedidos criados por engano. Esta ação NÃO pode ser desfeita.\n\nSe o transporte foi combinado e depois desmarcado, prefira CANCELAR (mantém o histórico).`;
     }
     if (!confirm(msg)) return;
+    const pid = parseInt(pedidoId);
     try {
-        await supabase.from('historico_status').delete().eq('pedido_id', pedidoId);
-        await supabase.from('ocorrencias').delete().eq('pedido_id', pedidoId);
-        const { error } = await supabase.from('pedidos').delete().eq('id', pedidoId);
+        // Limpa primeiro o que aponta para o pedido, senão a chave estrangeira
+        // pode recusar o delete do pedido (e o erro passava despercebido).
+        await supabase.from('historico_status').delete().eq('pedido_id', pid);
+        await supabase.from('ocorrencias').delete().eq('pedido_id', pid);
+        try { await supabase.from('viagem_pedidos').delete().eq('pedido_id', pid); } catch(_){}
+        try { await supabase.from('conciliacao_pendencias').delete().eq('pedido_id', pid); } catch(_){}
+
+        const { data, error } = await supabase.from('pedidos').delete().eq('id', pid).select();
         if (error) throw error;
-        await aposMutacaoPedidos();
+        if (!data || data.length === 0){
+            /* Nenhuma linha apagada. Quase sempre é o RLS: se as políticas de
+               escrita já subiram, DELETE em pedidos está bloqueado para todos,
+               e o Supabase não acusa erro — só apaga zero linhas. Dizer isso
+               explicitamente evita a caça ao fantasma. */
+            throw new Error('O banco não apagou o pedido (0 linhas). Provável bloqueio de permissão (RLS) para exclusão. Se as políticas de segurança foram aplicadas, DELETE de pedidos está fechado — use Cancelar, ou ajuste a política.');
+        }
+
+        // Tira da memória AGORA, para não reaparecer até o próximo recarregamento.
+        const i = pedidosGlobais.findIndex(x => String(x.id) === String(pid));
+        if (i >= 0) pedidosGlobais.splice(i, 1);
+
+        if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+        if (typeof aposMutacaoPedidos === 'function') await aposMutacaoPedidos();
+        if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional(true);
         if (typeof renderizarPedidosDrag === 'function') renderizarPedidosDrag();
-        if (typeof renderizarOcupacao === 'function') renderizarOcupacao();
         if (typeof renderizarPedidosComercial === 'function') renderizarPedidosComercial();
-        if (typeof renderizarRotas === 'function') renderizarRotas();
-        const alvoMsg = perfil === 'comercial' ? 'mensagemComercial' : 'mensagemLogistica';
-        if (typeof exibirMensagem === 'function') exibirMensagem(alvoMsg, `🗑️ Pedido #${pedidoId} excluído definitivamente.`, 'success');
+        if (typeof mmToast === 'function') mmToast(`🗑️ Pedido #${pid} excluído.`);
+        else {
+            const alvoMsg = perfil === 'comercial' ? 'mensagemComercial' : 'mensagemLogistica';
+            if (typeof exibirMensagem === 'function') exibirMensagem(alvoMsg, `🗑️ Pedido #${pid} excluído definitivamente.`, 'success');
+        }
     } catch (e) {
-        alert('Erro ao excluir: ' + (e.message||e));
+        alert('Não foi possível excluir o pedido #' + pid + ':\n\n' + (e.message || e));
+        console.error('excluir pedido:', e);
     }
 }
 
