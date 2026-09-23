@@ -691,15 +691,26 @@ async function marcarColetaEquipe(pedidoId, equipeId){
       status_planilha: 'Coletado'
     }).eq('id', parseInt(pedidoId));
     if (error) throw error;
+    /* Atualiza a memória agora: sem isto o pedido continuava na lista "A
+       coletar" da equipe, com a mesma cara, até o próximo F5 — dando a
+       impressão de que o clique não fez nada. coleta_confirmada_em é o que
+       tira o carro da lista de serviços do dia. */
+    Object.assign(p, {
+      status: 'Em Coleta', statusPlanilha: 'Coletado',
+      patioAtual: cidade, coletaEquipeEm: new Date().toISOString(),
+      coletaConfirmadaEm: new Date().toISOString(), coletaConfirmadaPor: membro || usuario
+    });
     try { await supabase.from('historico_status').insert({
       pedido_id: parseInt(pedidoId), status_anterior: _statusAntes, status_novo: 'Coletado',
       usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
       observacao: `📥 Coletado pela equipe ${eq.nome}${membro?' ('+membro+')':''} — levado ao pátio de ${eq.cidade_base}.`
     }); } catch(_){}
+    if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+    if (typeof mmToast === 'function') mmToast(`📥 Coleta confirmada — #${pedidoId} no pátio de ${eq.cidade_base}.`);
     await aposMutacaoPedidos();
     renderizarEquipesPainel();
-    _propagarMudancaOperacional();
-  } catch(e){ alert('Erro ao marcar coleta: '+(e.message||e)); }
+    _propagarMudancaOperacional(true);
+  } catch(e){ alert('Não foi possível marcar a coleta do pedido #'+pedidoId+':\n\n'+(e.message||e)); }
 }
 
 async function marcarEntregaEquipe(pedidoId, equipeId){
@@ -715,15 +726,22 @@ async function marcarEntregaEquipe(pedidoId, equipeId){
       status: 'Entregue', patio_atual: null, patio_desde: null
     }).eq('id', parseInt(pedidoId));
     if (error) throw error;
+    Object.assign(p, {
+      status: 'Entregue', statusPlanilha: 'Entregue', patioAtual: null,
+      entregaEquipeEm: new Date().toISOString(),
+      entregaConfirmadaEm: new Date().toISOString(), entregaConfirmadaPor: membro || usuario
+    });
     try { await supabase.from('historico_status').insert({
       pedido_id: parseInt(pedidoId), status_anterior: p.status, status_novo: 'Entregue',
       usuario_nome: usuario, usuario_perfil: (typeof perfilAtual!=='undefined'?perfilAtual:'logistica'),
       observacao: `📤 Entregue pela equipe ${eq.nome}${membro?' ('+membro+')':''} — do pátio ao cliente.`
     }); } catch(_){}
+    if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+    if (typeof mmToast === 'function') mmToast(`📤 Entrega confirmada — #${pedidoId}.`);
     await aposMutacaoPedidos();
     renderizarEquipesPainel();
-    _propagarMudancaOperacional();
-  } catch(e){ alert('Erro ao marcar entrega: '+(e.message||e)); }
+    _propagarMudancaOperacional(true);
+  } catch(e){ alert('Não foi possível marcar a entrega do pedido #'+pedidoId+':\n\n'+(e.message||e)); }
 }
 
 // ============================================================
