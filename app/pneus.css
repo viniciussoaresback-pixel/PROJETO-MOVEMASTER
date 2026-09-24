@@ -47,3 +47,14 @@
   .pn-eixo-barra { width:30px; }
   .pn-slot { min-width:62px; }
 }
+
+/* Configuração de eixos */
+.pn-cfg-bloco { margin-bottom:16px; padding:12px; border-radius:10px;
+  background:var(--surface-2,rgba(255,255,255,.03)); border:1px solid var(--border,rgba(255,255,255,.1)); }
+.pn-cfg-tit { font-size:.82rem; font-weight:800; margin-bottom:10px; }
+.pn-cfg-eixo { display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+.pn-cfg-num { flex:1; font-size:.83rem; }
+.pn-cfg-eixo select { padding:6px 10px; border-radius:7px; font-size:.82rem;
+  border:1px solid var(--border,rgba(255,255,255,.14)); background:var(--surface-1,rgba(255,255,255,.03)); color:inherit; }
+.pn-cfg-x { background:none; border:none; color:#ef4444; cursor:pointer; font-size:.9rem; width:24px; }
+.pn-cfg-total { font-size:.86rem; padding:8px 0; border-top:1px dashed var(--border,rgba(255,255,255,.12)); }
