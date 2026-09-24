@@ -42,37 +42,62 @@ function _pnEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/<
      C_...          — posições da carreta
      EST            — estepe
    ------------------------------------------------------------------------- */
-function _pnPosicoesDoVeiculo(v){
+/* Config padrão pelo tipo, quando o veículo não tem config_eixos salva.
+   Cada item é um eixo com o número de pneus. */
+function _pnConfigPadrao(v){
   const tipo = String(v?.tipo || '').toLowerCase();
-  const cavalo = [];
-
-  // eixo direcional (sempre)
-  cavalo.push({ pos:'DE', rot:'Dianteiro Esq.', linha:0, lado:'e' });
-  cavalo.push({ pos:'DD', rot:'Dianteiro Dir.', linha:0, lado:'d' });
-
-  // eixos de tração: 3 eixos = 2 eixos traseiros duplados; 2 eixos = 1
+  const cavalo = [{ pneus:2 }];                      // direcional
   const eixosTras = tipo.includes('3 eixos') ? 2 : 1;
-  for (let e = 1; e <= eixosTras; e++){
-    cavalo.push({ pos:`TE${e}1`, rot:`Tras. Esq. ${e}·int`, linha:e, lado:'e' });
-    cavalo.push({ pos:`TE${e}2`, rot:`Tras. Esq. ${e}·ext`, linha:e, lado:'e' });
-    cavalo.push({ pos:`TD${e}1`, rot:`Tras. Dir. ${e}·int`, linha:e, lado:'d' });
-    cavalo.push({ pos:`TD${e}2`, rot:`Tras. Dir. ${e}·ext`, linha:e, lado:'d' });
-  }
+  for (let i=0;i<eixosTras;i++) cavalo.push({ pneus:4 });   // traseiros duplados
+
+  const _pc = String(v?.placa_carreta || v?.placaCarreta || '').trim();
+  const carreta = _pc.length >= 5 ? [{ pneus:4 },{ pneus:4 },{ pneus:4 }] : [];
+  return { cavalo, carreta };
+}
+
+/* Configuração efetiva: a salva no veículo, ou o padrão. */
+function _pnConfig(v){
+  let cfg = v?.config_eixos || v?.configEixos;
+  if (typeof cfg === 'string'){ try { cfg = JSON.parse(cfg); } catch(_){ cfg = null; } }
+  if (!cfg || !Array.isArray(cfg.cavalo) || !cfg.cavalo.length) return _pnConfigPadrao(v);
+  return { cavalo: cfg.cavalo, carreta: Array.isArray(cfg.carreta) ? cfg.carreta : [] };
+}
+
+/* Constrói as posições a partir da config. Um eixo de 2 pneus é 1 de cada
+   lado (DE/DD ou 1 int por lado); de 4 é 2 de cada lado (int/ext). */
+function _pnPosicoesDoVeiculo(v){
+  const cfg = _pnConfig(v);
+  const construir = (eixos, prefixo, rotBase) => {
+    const out = [];
+    eixos.forEach((eixo, idx) => {
+      const linha = idx;
+      const n = Number(eixo.pneus) || 2;
+      const porLado = Math.max(1, Math.round(n / 2));
+      const dir = idx === 0 && prefixo === 'T';   // 1º eixo do cavalo = direcional
+      if (dir){
+        out.push({ pos:'DE', rot:'Dianteiro Esq.', linha, lado:'e' });
+        out.push({ pos:'DD', rot:'Dianteiro Dir.', linha, lado:'d' });
+        return;
+      }
+      // Numera TODOS os pneus do lado (1..porLado): assim eixo de 6 vira
+      // int/meio/ext sem repetir código. int = mais perto do centro.
+      for (let k=1;k<=porLado;k++){
+        const suf = porLado === 1 ? '' : String(k);
+        const lbl = porLado === 1 ? '' : (porLado === 2 ? (k===1?'·int':'·ext') : `·${k}`);
+        out.push({ pos:`${prefixo}E${idx+1}${suf}`, rot:`${rotBase} Esq. ${idx+1}${lbl}`, linha, lado:'e' });
+        out.push({ pos:`${prefixo}D${idx+1}${suf}`, rot:`${rotBase} Dir. ${idx+1}${lbl}`, linha, lado:'d' });
+      }
+    });
+    return out;
+  };
+
+  const cavalo = construir(cfg.cavalo, 'T', 'Tras.');
   cavalo.push({ pos:'EST', rot:'Estepe', linha:99, lado:'c' });
 
-  // carreta: se o veículo tiver placa de carreta, assume 3 eixos duplados
-  const _pc = String(v?.placa_carreta || v?.placaCarreta || '').trim();
-  const temCarreta = _pc.length >= 5;   // string vazia ou "—" não é carreta
-  const carreta = [];
-  if (temCarreta){
-    for (let e = 1; e <= 3; e++){
-      carreta.push({ pos:`CE${e}1`, rot:`Carreta Esq. ${e}·int`, linha:e, lado:'e' });
-      carreta.push({ pos:`CE${e}2`, rot:`Carreta Esq. ${e}·ext`, linha:e, lado:'e' });
-      carreta.push({ pos:`CD${e}1`, rot:`Carreta Dir. ${e}·int`, linha:e, lado:'d' });
-      carreta.push({ pos:`CD${e}2`, rot:`Carreta Dir. ${e}·ext`, linha:e, lado:'d' });
-    }
-    carreta.push({ pos:'CEST', rot:'Estepe carreta', linha:99, lado:'c' });
-  }
+  const temCarreta = cfg.carreta.length > 0;
+  const carreta = temCarreta ? construir(cfg.carreta, 'C', 'Carreta') : [];
+  if (temCarreta) carreta.push({ pos:'CEST', rot:'Estepe carreta', linha:99, lado:'c' });
+
   return { cavalo, carreta, temCarreta };
 }
 
@@ -114,6 +139,7 @@ function renderizarControlePneus(){
       <div class="pn-acoes-topo">
         <button class="btn btn-secondary btn-sm" onclick="_pnAbrirCadastroPneu()">➕ Cadastrar pneu</button>
         <button class="btn btn-secondary btn-sm" onclick="_pnAbrirEstoque()">📦 Estoque de pneus</button>
+        <button class="btn btn-secondary btn-sm" onclick="_pnConfigurarEixos()">⚙️ Configurar eixos</button>
         <button class="btn btn-secondary btn-sm" onclick="_pnImprimirFicha()">🖨️ Ficha</button>
       </div>
     </div>
@@ -182,6 +208,94 @@ function _pnDiagramaHTML(v){
       <span class="pn-lg pn-lg-vazio">● vazio</span>
     </div>`;
 }
+
+// =====================================================================
+//  CONFIGURAR EIXOS DO VEÍCULO
+//  Flexível: quantos eixos no cavalo e na carreta, e quantos pneus por eixo.
+// =====================================================================
+let _pnCfgEdit = null;
+
+function _pnConfigurarEixos(){
+  const v = (veiculosGlobais||[]).find(x => x.placa === _pneuVeiculoSel);
+  if (!v){ alert('Escolha um veículo.'); return; }
+  _pnCfgEdit = _pnConfig(v);
+  // clona, para cancelar sem efeito
+  _pnCfgEdit = { cavalo: _pnCfgEdit.cavalo.map(e => ({ pneus: Number(e.pneus)||2 })),
+                 carreta: _pnCfgEdit.carreta.map(e => ({ pneus: Number(e.pneus)||4 })) };
+  _pnRenderCfg(v);
+}
+window._pnConfigurarEixos = _pnConfigurarEixos;
+
+function _pnRenderCfg(v){
+  const old = document.getElementById('modalPneuCfg'); if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'modalPneuCfg';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100085;padding:2vh 1vw';
+
+  const linhaEixo = (parte, eixo, i) => {
+    const dir = (parte === 'cavalo' && i === 0);
+    return `<div class="pn-cfg-eixo">
+      <span class="pn-cfg-num">Eixo ${i+1}${dir?' (direcional)':''}</span>
+      <select onchange="_pnCfgSet('${parte}',${i},this.value)" ${dir?'disabled':''}>
+        ${[2,4].map(n => `<option value="${n}" ${Number(eixo.pneus)===n?'selected':''}>${n} pneus</option>`).join('')}
+      </select>
+      ${!dir ? `<button class="pn-cfg-x" onclick="_pnCfgRemover('${parte}',${i})" title="Remover eixo">✕</button>` : '<span style="width:24px"></span>'}
+    </div>`;
+  };
+
+  div.innerHTML = `
+    <div class="modal-box" style="background:var(--surface-1,#1a1c20);max-width:460px;width:95%;max-height:88vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin:0 0 4px">⚙️ Eixos de ${_pnEsc(v.placa)}</h2>
+      <p class="text-muted" style="font-size:.83rem;margin:.2rem 0 1rem">Ajuste os eixos e quantos pneus cada um tem. Vale só para este veículo.</p>
+
+      <div class="pn-cfg-bloco">
+        <div class="pn-cfg-tit">🚛 Cavalo</div>
+        ${_pnCfgEdit.cavalo.map((e,i) => linhaEixo('cavalo', e, i)).join('')}
+        <button class="btn btn-secondary btn-sm" onclick="_pnCfgAdd('cavalo')">+ eixo no cavalo</button>
+      </div>
+
+      <div class="pn-cfg-bloco">
+        <div class="pn-cfg-tit">🚚 Carreta ${_pnCfgEdit.carreta.length?'':'<span class="text-muted" style="font-weight:400">(sem carreta)</span>'}</div>
+        ${_pnCfgEdit.carreta.map((e,i) => linhaEixo('carreta', e, i)).join('')}
+        <button class="btn btn-secondary btn-sm" onclick="_pnCfgAdd('carreta')">+ eixo na carreta</button>
+      </div>
+
+      <div class="pn-cfg-total">Total: <strong>${_pnCfgTotal()}</strong> pneus (fora estepes)</div>
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="_pnCfgSalvar()">💾 Salvar configuração</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalPneuCfg').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+function _pnCfgTotal(){
+  const soma = a => a.reduce((s,e)=>s+(Number(e.pneus)||0),0);
+  return soma(_pnCfgEdit.cavalo) + soma(_pnCfgEdit.carreta);
+}
+function _pnCfgSet(parte,i,val){ _pnCfgEdit[parte][i].pneus = Number(val); _pnReabrirCfg(); }
+function _pnCfgAdd(parte){ _pnCfgEdit[parte].push({ pneus: 4 }); _pnReabrirCfg(); }
+function _pnCfgRemover(parte,i){ _pnCfgEdit[parte].splice(i,1); _pnReabrirCfg(); }
+function _pnReabrirCfg(){ const v=(veiculosGlobais||[]).find(x=>x.placa===_pneuVeiculoSel); if(v)_pnRenderCfg(v); }
+window._pnCfgSet=_pnCfgSet; window._pnCfgAdd=_pnCfgAdd; window._pnCfgRemover=_pnCfgRemover;
+
+async function _pnCfgSalvar(){
+  const v = (veiculosGlobais||[]).find(x => x.placa === _pneuVeiculoSel);
+  if (!v) return;
+  try {
+    await supabase.from('veiculos').update({ config_eixos: _pnCfgEdit }).eq('id', v.id);
+    v.config_eixos = _pnCfgEdit;
+    if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+    document.getElementById('modalPneuCfg')?.remove();
+    renderizarControlePneus();
+    if (typeof mmToast === 'function') mmToast('⚙️ Eixos configurados.');
+  } catch(e){
+    if (/column|schema cache/i.test(e.message||'')){
+      alert('Falta rodar o SQL que cria a coluna config_eixos. Rode o pneus-tabelas.sql e tente de novo.');
+    } else alert('Erro ao salvar: '+(e.message||e));
+  }
+}
+window._pnCfgSalvar = _pnCfgSalvar;
 
 // =====================================================================
 //  ABRIR UMA POSIÇÃO — montar, editar ou desmontar
