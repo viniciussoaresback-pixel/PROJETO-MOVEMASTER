@@ -1123,6 +1123,24 @@ async function carregarMinhasEPI(){
 // (item 13.6) + regra do 🔴 impedir alocação (13.7) + gancho item 15
 // ============================================================
 
+/* Toda mudança na oficina precisa chegar à logística — ela decide a carga e
+   não pode escalar um caminhão que acabou de entrar (ou sair) da manutenção.
+   Este helper concentra os três efeitos: notifica, invalida o cache de
+   consultas e redesenha as telas de planejamento que estiverem abertas. */
+function _manutAvisarLogistica(titulo, mensagem){
+  try {
+    if (typeof notificar === 'function'){
+      notificar({ perfil:'logistica', tipo:'manutencao', titulo, mensagem });
+      notificar({ perfil:'admin', tipo:'manutencao', titulo, mensagem });
+    }
+  } catch(_){}
+  if (typeof window.__mmLimparDedupe === 'function') window.__mmLimparDedupe();
+  // redesenha planejamento, vagas e viagens se estiverem à vista
+  if (typeof _propagarMudancaOperacional === 'function') _propagarMudancaOperacional(true);
+  if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+}
+window._manutAvisarLogistica = _manutAvisarLogistica;
+
 // Decisão CENTRAL de bloqueio de alocação de um veículo.
 // Fontes: integridade (checklist 🔴), manutenção via folgas (legado),
 // agendamento de manutenção, e (Lote futuro) parada de emergência (item 15).
@@ -1183,8 +1201,13 @@ async function salvarAgendamentoManutencao(){
     }).select();
     if (error) throw error;
     if (data && data[0]) agendamentosManutencaoGlobais.push(data[0]);
-    msgEl.textContent = 'Manutenção agendada. A Logística verá o bloqueio/aviso na alocação.';
+    msgEl.textContent = 'Manutenção agendada. A Logística foi avisada.';
     msgEl.className = 'message show success';
+    const _qdo = new Date(dataHora);
+    _manutAvisarLogistica(
+      _qdo <= new Date() ? `🔧 ${placa} entrou em manutenção` : `🔧 ${placa} tem manutenção agendada`,
+      `${placa}${prazo?' · prazo '+prazo:''}${obs?' · '+obs:''} — ${_qdo.toLocaleDateString('pt-BR')}. ${_qdo<=new Date()?'Bloqueado para viagem.':'Ainda pode viajar até a data.'}`
+    );
     document.getElementById('agDataHora').value = '';
     document.getElementById('agPrazo').value = '';
     document.getElementById('agObs').value = '';
@@ -1228,7 +1251,10 @@ async function concluirAgendamento(id){
     const a = (agendamentosManutencaoGlobais||[]).find(x => x.id === id);
     if (a) a.status = 'concluido';
     listarAgendamentos();
-    if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+    _manutAvisarLogistica(
+      `✅ ${a?.placa || 'Veículo'} liberado da manutenção`,
+      `${a?.placa || 'O veículo'} concluiu a manutenção e voltou a ficar disponível para viagem.`
+    );
   } catch(e){
     alert('Erro ao concluir: ' + (e.message || e));
   }
@@ -1281,12 +1307,15 @@ async function salvarParadaEmergencia(){
     }).select();
     if (error) throw error;
     if (data && data[0]) paradasEmergenciaGlobais.unshift(data[0]);
-    msgEl.textContent = 'Emergência registrada. A Logística já vê o alerta (nenhuma alocação foi alterada).';
+    msgEl.textContent = 'Emergência registrada. A Logística foi avisada.';
     msgEl.className = 'message show success';
     document.getElementById('emgMotivo').value = '';
     document.getElementById('emgPrevisao').value = '';
     renderizarParadasEmergencia();
-    if (typeof renderizarVeiculosDrop === 'function') renderizarVeiculosDrop();
+    _manutAvisarLogistica(
+      `🚨 ${placa} — parada de emergência`,
+      `${placa}${motivo?' · '+motivo:''}. É um ALERTA: o veículo não foi bloqueado, a decisão sobre a carga é da logística.`
+    );
   } catch(e){
     msgEl.textContent = 'Erro ao registrar: ' + (e.message || e);
     msgEl.className = 'message show error';
