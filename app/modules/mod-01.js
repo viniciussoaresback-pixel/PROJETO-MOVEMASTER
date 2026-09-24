@@ -737,8 +737,8 @@ async function carregarDadosDoSupabase(opts) {
 
         // Rotas planejadas (tabela opcional — se não existir, segue sem quebrar)
         // Carrega TODAS as tabelas secundárias em paralelo (antes era em fila = lento)
-        const [
-          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn, resTab, resTabM, resDocs
+                const [
+          resRotas, resAgs, resEmg, resEps, resPar, resCors, resParadas, resEq, resEn, resTab, resTabM, resPneus, resDocs
         ] = await Promise.all([
           supabase.from('rotas_planejadas').select('*').order('data_saida', { ascending: true }),
           supabase.from('agendamentos_manutencao').select('*').order('data_hora', { ascending: true }),
