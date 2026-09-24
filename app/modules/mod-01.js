@@ -51,6 +51,27 @@ async function mmInserirPedidos(registros){
 }
 window.mmInserirPedidos = mmInserirPedidos;
 
+/* Alterna entre Checklist e Controle de Pneus dentro da aba Manutenção. */
+function _manutSubaba(qual, btn){
+  document.querySelectorAll('#manutencao .cad-subtab-btn').forEach(b => b.classList.remove('ativo'));
+  if (btn) btn.classList.add('ativo');
+  const ck = document.getElementById('manutViewChecklist');
+  const pn = document.getElementById('manutViewPneus');
+  if (qual === 'pneus'){
+    if (ck) ck.style.display = 'none';
+    if (pn) pn.style.display = '';
+    // garante os dados carregados (o login pode não ter trazido ainda)
+    if (typeof pneusGlobais !== 'undefined' && !pneusGlobais.length && typeof carregarDadosPneus === 'function'){
+      carregarDadosPneus().then(() => { if (typeof renderizarControlePneus === 'function') renderizarControlePneus(); });
+    }
+    if (typeof renderizarControlePneus === 'function') renderizarControlePneus();
+  } else {
+    if (pn) pn.style.display = 'none';
+    if (ck) ck.style.display = '';
+  }
+}
+window._manutSubaba = _manutSubaba;
+
 function placaMercosul(placa, tamanho){
   const p = String(placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!p) return '<span class="placa-mc placa-mc-vazia">sem placa</span>';
@@ -730,6 +751,7 @@ async function carregarDadosDoSupabase(opts) {
           supabase.from('entregas_last_mile').select('*').order('created_at', { ascending:false }),
           supabase.from('tabela_precos').select('*').order('cidade_origem'),
           supabase.from('precos_manuais_trecho').select('*'),
+          (typeof carregarDadosPneus === 'function' ? carregarDadosPneus() : Promise.resolve()),
           supabase.from('documentos_rota').select('*').order('enviado_em', { ascending:false })
         ].map(q => q.then(r => r).catch(() => ({ data: null }))));
 
