@@ -2318,6 +2318,27 @@ window._planFiltraBusca = _planFiltraBusca;
 function renderizarPlanejamentoRotas(){
   const cont = document.getElementById('painelViewPlanejamento');
   if (!cont) return;
+
+  /* Relê os agendamentos de manutenção ao abrir o planejamento — no máximo a
+     cada 30 s. Sem isto, um bloqueio feito pela oficina enquanto a logística
+     está com a tela aberta só apareceria no F5, e um caminhão em manutenção
+     seguiria escalável. */
+  if (typeof supabase !== 'undefined' && supabase){
+    const _ag = Date.now();
+    if (!window._manutLidaEm || _ag - window._manutLidaEm > 30000){
+      window._manutLidaEm = _ag;
+      Promise.all([
+        supabase.from('agendamentos_manutencao').select('*'),
+        supabase.from('paradas_emergencia').select('*')
+      ]).then(([a, e]) => {
+        let mudou = false;
+        const sig = (arr) => JSON.stringify((arr||[]).map(x => [x.id, x.status]));
+        if (a && a.data && sig(a.data) !== sig(agendamentosManutencaoGlobais)){ agendamentosManutencaoGlobais = a.data; mudou = true; }
+        if (e && e.data && sig(e.data) !== sig(paradasEmergenciaGlobais)){ paradasEmergenciaGlobais = e.data; mudou = true; }
+        if (mudou) renderizarPlanejamentoRotas();
+      }).catch(err => console.warn('releitura manutenção:', err?.message));
+    }
+  }
   const corredores = (corredoresGlobais || []).filter(c => {
     if (!c.excepcional) return true; // corredores oficiais sempre aparecem
     // rota excepcional: só aparece enquanto tiver pedido ativo (não concluído)
