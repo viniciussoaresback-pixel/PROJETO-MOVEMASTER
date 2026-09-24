@@ -258,6 +258,11 @@ const _PV_CAP_REF = 11;
 
 function _planAbrirModalViagem(cor, pedidos, rotaVazia){
   const cegonhas = (veiculosGlobais||[]).filter(v => v.ativo !== false && v.placa);
+  // Estado de manutenção de cada cegonha, para marcar e recusar as bloqueadas.
+  const _manut = (placa) => {
+    const v = (veiculosGlobais||[]).find(x => x.placa === placa);
+    return (v && typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(v) : null;
+  };
   _pvPedidos = pedidos || [];
   /* Marcar todos por padrão só faz sentido quando todos cabem. Com 22 pedidos
      no corredor e uma cegonha de 11 vagas, a tela vinha com os 22 marcados e
@@ -328,7 +333,10 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
             </div>
             <select id="planViagemCegonha" onchange="_planViagemPreencheMot()">
               <option value="">— a definir —</option>
-              ${cegonhas.map(v => { const prop = (v.propriedade==='terceiro')?'terceiro':'propria'; return `<option value="${v.placa}" data-cap="${v.capacidade||''}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${prop}">${prop==='terceiro'?'🤝 ':'🚛 '}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}</option>`; }).join('')}
+              ${cegonhas.map(v => { const prop = (v.propriedade==='terceiro')?'terceiro':'propria';
+                const m = (typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(v) : null;
+                const bloq = m && m.bloqueado;
+                return `<option value="${v.placa}" data-cap="${v.capacidade||''}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${prop}" data-bloq="${bloq?'1':''}" data-bloqmotivo="${bloq?(m.motivo||'manutenção').replace(/"/g,'&quot;'):''}">${bloq?'⛔ ':(prop==='terceiro'?'🤝 ':'🚛 ')}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}${bloq?' — '+m.selo:(m&&m.cor==='amarelo'?' — '+m.selo:'')}</option>`; }).join('')}
             </select>
           </div>
 
@@ -636,6 +644,31 @@ async function _planConfirmarViagem(corId){
   const cegonha = document.getElementById('planViagemCegonha')?.value || null;
   const motorista = document.getElementById('planViagemMotorista')?.value.trim() || null;
   if (ids.length === 0 && !cegonha){ alert('Para criar a rota, selecione ao menos um pedido OU escolha o veículo.'); return; }
+
+  /* RECUSA cegonha bloqueada pela manutenção. O seletor já a marca em
+     vermelho, mas alguém pode escolher assim mesmo — aqui a viagem não é
+     criada. A logística vê o motivo e resolve com a oficina. */
+  if (cegonha){
+    const veic = (veiculosGlobais||[]).find(v => v.placa === cegonha);
+    const m = (veic && typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(veic) : null;
+    if (m && m.bloqueado){
+      alert(
+        `A cegonha ${cegonha} está BLOQUEADA pela manutenção e não pode sair.
+
+` +
+        `Motivo: ${m.motivo || m.selo}
+
+` +
+        `Escolha outro veículo, ou fale com a oficina para liberar este.`
+      );
+      return;
+    }
+    if (m && m.cor === 'amarelo'){
+      if (!confirm(`⚠️ ${cegonha}: ${m.selo}
+
+Ainda não está bloqueada, mas há manutenção prevista. Criar a viagem mesmo assim?`)) return;
+    }
+  }
 
   /* TRAVA DE CAPACIDADE.
      Não havia nenhuma validação: a viagem #137 saiu com 21 carros numa
