@@ -1337,8 +1337,16 @@
             <section id="manutencao" class="tab-content">
                 <div class="card">
                     <div class="painel-header-bar">
-                        <h2>🔧 Manutenção &amp; Checklist de Segurança</h2>
+                        <h2>🔧 Manutenção &amp; Oficina</h2>
                     </div>
+                    <div class="painel-subtabs" style="margin-bottom:14px">
+                        <button class="cad-subtab-btn ativo" onclick="_manutSubaba('checklist', this)">🔧 Checklist &amp; Manutenção</button>
+                        <button class="cad-subtab-btn" onclick="_manutSubaba('pneus', this)">🛞 Controle de Pneus</button>
+                    </div>
+                    <div id="manutViewPneus" style="display:none">
+                        <div id="painelPneus"></div>
+                    </div>
+                    <div id="manutViewChecklist">
                     <div id="painelManutencao">
                         <div class="manut-toolbar">
                             <div class="manut-toolbar-campo">
@@ -1437,6 +1445,7 @@
                             <div id="checklistHistorico"><p class="text-muted">Selecione um veículo.</p></div>
                         </div>
                     </div>
+                    </div><!-- /manutViewChecklist -->
                 </div>
             </section>
 
@@ -2413,6 +2422,7 @@
     <script src="conciliacao-atua.js"></script>
     <script src="separar-viagem.js"></script>
     <script src="rastreio-placa.js"></script>
+    <script src="pneus.js"></script>
     <script src="trajetoria.js"></script>
     <script src="busca-historico.js"></script>
     <script src="modules/mod-01.js"></script>
