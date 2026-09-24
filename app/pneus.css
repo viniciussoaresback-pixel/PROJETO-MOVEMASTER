@@ -1,0 +1,49 @@
+/* ============================================================
+   CONTROLE DE PNEUS
+   ============================================================ */
+.pn-topo { display:flex; justify-content:space-between; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:16px; }
+.pn-campo { display:flex; flex-direction:column; gap:4px; }
+.pn-campo label { font-size:.68rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-tertiary,#8b93a1); font-weight:700; }
+.pn-campo select { padding:8px 12px; font-size:.86rem; border-radius:9px; min-width:260px;
+  border:1px solid var(--border,rgba(255,255,255,.14)); background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.pn-acoes-topo { display:flex; gap:8px; flex-wrap:wrap; }
+
+.pn-resumo-veic { padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:.9rem;
+  background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid var(--border,rgba(255,255,255,.1)); }
+.pn-resumo-cont { float:right; font-size:.78rem; color:var(--text-tertiary,#8b93a1); }
+
+.pn-diagrama { display:flex; gap:24px; flex-wrap:wrap; justify-content:center;
+  padding:20px; border-radius:14px; background:var(--surface-2,rgba(255,255,255,.03));
+  border:1px solid var(--border,rgba(255,255,255,.1)); }
+.pn-parte { flex:1; min-width:300px; }
+.pn-parte-tit { text-align:center; font-weight:800; font-size:.9rem; margin-bottom:12px; color:var(--text-secondary,#c3c8d0); }
+.pn-fileira { display:flex; align-items:center; justify-content:center; gap:18px; margin:8px 0; }
+.pn-fileira-centro { justify-content:center; }
+.pn-lado { display:flex; gap:6px; }
+.pn-eixo-barra { width:60px; height:5px; border-radius:3px; background:var(--border,rgba(255,255,255,.22)); }
+
+.pn-slot { display:flex; flex-direction:column; align-items:center; gap:1px; cursor:pointer;
+  min-width:74px; padding:8px 6px; border-radius:9px; color:inherit;
+  border:2px solid transparent; background:var(--surface-1,rgba(255,255,255,.05)); transition:transform .1s, filter .12s; }
+.pn-slot:hover { transform:translateY(-2px); filter:brightness(1.1); }
+.pn-slot-pos { font-size:.66rem; font-weight:800; letter-spacing:.3px; color:var(--text-tertiary,#8b93a1); }
+.pn-slot-cod { font-size:.78rem; font-weight:700; }
+.pn-slot-sulco { font-size:.66rem; opacity:.85; }
+.pn-slot-vazio { font-size:.7rem; color:var(--text-tertiary,#8b93a1); font-style:italic; }
+.pn-slot-bom   { border-color:#22c55e; background:rgba(34,197,94,.12); }
+.pn-slot-meio  { border-color:#f59e0b; background:rgba(245,158,11,.12); }
+.pn-slot-ruim  { border-color:#ef4444; background:rgba(239,68,68,.12); }
+.pn-slot-vazio { border-color:var(--border,rgba(255,255,255,.15)); border-style:dashed; }
+
+.pn-legenda { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-top:14px; font-size:.74rem; }
+.pn-lg-bom{color:#22c55e}.pn-lg-meio{color:#f59e0b}.pn-lg-ruim{color:#ef4444}.pn-lg-vazio{color:var(--text-tertiary,#8b93a1)}
+
+.pn-atual { padding:9px 12px; border-radius:8px; margin-bottom:12px; font-size:.85rem;
+  background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.3); }
+
+@media (max-width:640px){
+  .pn-diagrama { flex-direction:column; }
+  .pn-fileira { gap:10px; }
+  .pn-eixo-barra { width:30px; }
+  .pn-slot { min-width:62px; }
+}
