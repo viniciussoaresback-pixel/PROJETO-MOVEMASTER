@@ -10,15 +10,25 @@
   // mas ninguém os carregava — o JS da conciliação rodava e o modal aparecia
   // sem estilo nenhum, cru no canto da página. CSS ausente falha calado: não
   // dá erro no console, só fica feio.
+
+  // ── Fura-cache ────────────────────────────────────────────────────────────
+  // Toda vez que a gente publica novidade no CSS/JS auxiliar e o navegador
+  // (ou o service worker do PWA) insiste em servir o arquivo antigo, é só
+  // aumentar este número. O ?v=N no fim da URL engana o cache: pra ele, é
+  // outro arquivo, então baixa de novo. Sem isso, mudança pequena de CSS
+  // pode demorar dias pra aparecer no celular de quem já usava o sistema.
+  var VERSAO = '20260925a';
+  var v = '?v=' + VERSAO;
+
   ['tema-claro.css', 'refinamento-8.css', 'microinteracoes.css', 'tabelas-leves.css', 'refinamento-9.css', 'tema-claro-fix.css', 'tema-claro-cores.css', 'refinamento-10.css', 'refinamento-11.css', 'refinamento-12.css', 'refinamento-13.css', 'skeletons.css', 'trajetoria.css', 'cte-situacao.css', 'conciliacao-atua.css', 'campo-mobile.css', 'pneus.css', 'layout-amplo.css', 'tema-console.css', 'oficina.css'].forEach(function (css) {
     var l = document.createElement('link');
     l.rel = 'stylesheet';
-    l.href = css;
+    l.href = css + v;
     document.head.appendChild(l);
   });
   ['graficos-core.js', 'toasts.js', 'exportar.js', 'refinamento-9.js', 'refinamento-10.js', 'refinamento-11.js'].forEach(function (arquivo) {
     var s = document.createElement('script');
-    s.src = arquivo;
+    s.src = arquivo + v;
     s.async = false;
     document.head.appendChild(s);
   });
