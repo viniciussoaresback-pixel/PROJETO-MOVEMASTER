@@ -8,11 +8,6 @@
    login e uploads precisam ser sempre ao vivo.
    ===================================================================== */
 
-// Sempre que a gente publica edições visíveis (CSS ou JS de tela), a gente
-// aumenta este número. O SW novo instala, cria um cache com esta chave nova,
-// e o handler 'activate' abaixo apaga TODOS os caches com chave diferente —
-// então o usuário puxa tudo do zero na próxima abertura, garantido. Sem isso
-// o "stale-while-revalidate" servia a versão velha por mais uma sessão.
 const VERSAO = 'movemaster-v470';
 
 // Arquivos do "esqueleto" do app, guardados para funcionar offline
@@ -32,6 +27,7 @@ const ARQUIVOS_BASE = [
   './modules/mod-10.js',
   './modules/mod-11.js',
   './modules/mod-12.js',
+  './modules/mod-13.js',
   './supabase-config.js',
   './dedupe-consultas.js',
   './carregador.js',
@@ -53,11 +49,6 @@ const ARQUIVOS_BASE = [
   './skeletons.js',
   './skeletons.css',
   './layout-amplo.css',
-  // Camada visual "console" e reskin da oficina — adicionados na v470.
-  // Ficarem fora daqui não quebrava (o SW busca sob demanda), mas incluindo
-  // eles funcionam offline também, como o resto do esqueleto.
-  './tema-console.css',
-  './oficina.css',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
