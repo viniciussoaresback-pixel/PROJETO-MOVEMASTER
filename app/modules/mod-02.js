@@ -1629,6 +1629,16 @@ async function salvarCadastroCliente(event) {
     const cidade   = document.getElementById('cidadeCliente').value || null;
     const uf       = document.getElementById('ufCliente').value || null;
 
+    // ─── Campos do CRM (Fase 1) ─────────────────────────────────────
+    // Todos opcionais. Se ficarem vazios, o cliente aparece na
+    // Carteira sem vendedor / sem status — o próprio CRM tem filtros
+    // pra achar os que faltam preencher.
+    const vendedorResp   = document.getElementById('vendedorRespCliente')?.value || null;
+    const prioridade     = document.getElementById('prioridadeCliente')?.value || null;
+    const potencial      = document.getElementById('potencialCliente')?.value || null;
+    const segmento       = document.getElementById('segmentoCliente')?.value || null;
+    const statusNegoc    = document.getElementById('statusNegocCliente')?.value || null;
+
     if (!tipo || !nome) {
         exibirMensagem('mensagemCadastroCliente', 'Preencha o tipo e o nome do cliente!', 'error');
         return;
@@ -1664,7 +1674,13 @@ async function salvarCadastroCliente(event) {
                 tipo_cliente: tipo,
                 tipo_entrega_padrao: document.getElementById('tipoEntregaPadrao')?.value || 'patio',
                 cep, endereco, numero, complemento, bairro, cidade, uf,
-                codigo
+                codigo,
+                // Campos do CRM (podem chegar null — colunas nullable no banco)
+                vendedor_responsavel: vendedorResp,
+                prioridade,
+                potencial,
+                segmento,
+                status_negociacao: statusNegoc
             });
             if (error) throw error;
             // Recarrega os clientes do banco para o novo aparecer NA HORA (sem sair e voltar).
