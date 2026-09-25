@@ -411,9 +411,19 @@ async function _dacteAplicar() {
     }
   }
 
-  // Atualiza os campos visíveis dos grupos afetados
+  // Atualiza os campos visíveis. Agora cada carro tem o seu campo (id
+  // cteNum_p{pedidoId}), então casamos direto pelo pedido. Mantemos o
+  // caminho antigo por grupo como fallback, caso algum campo por grupo ainda
+  // exista na tela.
   document.querySelectorAll('[id^="cteNum_"]').forEach(campo => {
     const chave = campo.id.replace('cteNum_', '');
+    // Campo por carro: cteNum_p{pedidoId}
+    if (/^p\d+$/.test(chave)) {
+      const pid = chave.slice(1);
+      if (porPedido[pid]) campo.value = porPedido[pid];
+      return;
+    }
+    // Fallback: campo por grupo (modelo antigo)
     const grupo = (window._fiscalGruposPorRota || {});
     Object.values(grupo).flat().forEach(g => {
       if (g.chave !== chave) return;
