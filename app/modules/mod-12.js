@@ -1127,6 +1127,19 @@ function _centralLimparBusca(qual){
   renderizarCentralOperacao();
 }
 
+// Item 4: conta os carros marcados na Central e mostra/esconde a barra de
+// direcionamento em lote. Os botões da barra reaproveitam as funções que já
+// leem `.central-chk-coleta:checked` / `.central-chk-entrega:checked`.
+function _centralContarSel(tipo){
+  const ent = tipo === 'entrega';
+  const n = document.querySelectorAll(ent ? '.central-chk-entrega:checked' : '.central-chk-coleta:checked').length;
+  const badge = document.getElementById(ent ? 'centralSelEnt' : 'centralSelCol');
+  const barra = document.getElementById(ent ? 'centralBarraEnt' : 'centralBarraCol');
+  if (badge) badge.textContent = n;
+  if (barra) barra.style.display = n > 0 ? 'flex' : 'none';
+}
+window._centralContarSel = _centralContarSel;
+
 function _tipoColetaLabel(p){
   if (p.formaColeta === 'cliente') return '🏠 Cliente leva ao pátio';
   if (p.formaColeta === 'coletador') return '🚚 Coletador busca';
@@ -1157,6 +1170,13 @@ function _centralColunaColetas(coletas, total){
     ${coletas.length === 0 ? (filtrando
         ? `<p class="central-vazio">Nenhuma coleta encontrada para essa busca.</p>`
         : '<p class="central-vazio">Nenhuma coleta pendente. 👍</p>') : `
+    <div id="centralBarraCol" class="central-sel-barra" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;margin:0 0 8px;background:rgba(255,106,0,.1);border:1px solid rgba(255,106,0,.35);border-radius:10px">
+      <strong style="font-size:.82rem">✅ <span id="centralSelCol">0</span> selecionado(s)</strong>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button class="central-btn central-btn-azul" onclick="_centralDirecionarMotoristaColeta()">👤 Motorista</button>
+        <button class="central-btn central-btn-laranja" onclick="_centralDirecionarEquipe()">👥 Equipe</button>
+      </div>
+    </div>
     ${_centralColetasPorViagem(coletas)}
     <div class="central-cards" style="display:none">
       ${coletas.map(p => `<label class="central-card" for="cchk_${p.id}">
@@ -1215,6 +1235,13 @@ function _centralColunaEntregas(entregas, total){
     ${entregas.length === 0 ? (filtrando
         ? `<p class="central-vazio">Nenhuma entrega encontrada para essa busca.</p>`
         : '<p class="central-vazio">Nenhuma entrega pendente. 👍</p>') : `
+    <div id="centralBarraEnt" class="central-sel-barra" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;margin:0 0 8px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.4);border-radius:10px">
+      <strong style="font-size:.82rem">✅ <span id="centralSelEnt">0</span> selecionado(s)</strong>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button class="central-btn central-btn-azul" onclick="_centralDirecionarMotorista()">👤 Motorista</button>
+        <button class="central-btn" style="background:#a855f7" onclick="_centralDirecionarEquipeEntrega()">👥 Equipe</button>
+      </div>
+    </div>
     ${_centralEntregasPorViagem(entregas)}
     <div class="central-cards" style="display:none">
       ${entregas.map(p => `<label class="central-card" for="echk_${p.id}">
@@ -2481,6 +2508,7 @@ function _centralEntregasPorViagem(entregas){
       </div>
       <div class="central-viagem-itens">
         ${itens.map(p => { const _tag = _centralTagDirecionado(p, 'entrega'); return `<div class="cvb-item ${_tag?'cvb-item-enviado':''}">
+          <label class="cvb-item-chk" title="Selecionar para direcionar em lote" style="display:flex;align-items:center;padding:0 4px;cursor:pointer"><input type="checkbox" class="central-chk-entrega" value="${p.id}" onchange="_centralContarSel('entrega')" style="width:17px;height:17px;cursor:pointer"></label>
           <div class="cvb-item-info">
             <strong>#${p.id}</strong> ${p.placa||'—'} · ${p.cliente||'—'}
             <div class="cvb-item-rota">${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}${_centralDataLancamento(p).replace(/<[^>]+>/g,' ')}</div>
@@ -2561,6 +2589,7 @@ function _centralColetasPorViagem(coletas){
       </div>
       <div class="central-viagem-itens">
         ${itens.map(p => { const _tag = _centralTagDirecionado(p, 'coleta'); return `<div class="cvb-item ${_tag?'cvb-item-enviado':''}">
+          <label class="cvb-item-chk" title="Selecionar para direcionar em lote" style="display:flex;align-items:center;padding:0 4px;cursor:pointer"><input type="checkbox" class="central-chk-coleta" value="${p.id}" onchange="_centralContarSel('coleta')" style="width:17px;height:17px;cursor:pointer"></label>
           <div class="cvb-item-info">
             <strong>#${p.id}</strong> ${p.placa||'—'} · ${p.cliente||'—'}
             <div class="cvb-item-rota">${p.cidadeOrigem||'—'} → ${p.cidadeDestino||'—'}${_centralDataLancamento(p).replace(/<[^>]+>/g,' ')}</div>
