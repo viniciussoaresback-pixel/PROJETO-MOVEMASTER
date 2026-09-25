@@ -1343,6 +1343,9 @@
                         <button class="cad-subtab-btn ativo" onclick="_manutSubaba('checklist', this)">🔧 Checklist &amp; Manutenção</button>
                         <button class="cad-subtab-btn" onclick="_manutSubaba('pneus', this)">🛞 Controle de Pneus</button>
                     </div>
+                    <div id="oficinaCmd"></div>
+                    <div class="of-fleet-tit">Frota — status da oficina</div>
+                    <div id="oficinaFrota" class="of-fleet"></div>
                     <div id="manutViewPneus" style="display:none">
                         <div id="painelPneus"></div>
                     </div>
@@ -1362,6 +1365,7 @@
 
                         <div class="manut-acoes">
                             <button type="button" class="btn btn-primary" onclick="salvarChecklist()">💾 Salvar checklist</button>
+                            <button type="button" class="btn btn-secondary of-ficha-btn" onclick="_manutImprimirFicha()">🖨️ Gerar ficha (PDF)</button>
                         </div>
 
                         <div class="manut-epi">
