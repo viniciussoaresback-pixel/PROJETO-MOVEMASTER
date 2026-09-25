@@ -789,6 +789,7 @@ function carregarManutencao(){
   if (typeof _preencherVeiculosEmergencia === 'function') _preencherVeiculosEmergencia();
   if (typeof renderizarParadasEmergencia === 'function') renderizarParadasEmergencia();
   aoTrocarVeiculoChecklist();
+  if (typeof renderizarOficinaFrota === 'function') renderizarOficinaFrota();
 }
 
 function renderChecklistForm(){
@@ -836,6 +837,7 @@ function aoTrocarVeiculoChecklist(){
   if (tagEl && v) tagEl.innerHTML = 'Status atual: ' + tagIntegridadeHTML(v);
   if (typeof _preencherMotoristasEPI === 'function') _preencherMotoristasEPI();
   carregarHistoricoChecklist(id);
+  if (typeof renderizarOficinaFrota === 'function') renderizarOficinaFrota();
 }
 
 async function salvarChecklist(){
@@ -1653,3 +1655,132 @@ async function desalocarPedido(pedidoId){
 // ============================================================
 // LOTE 10 — ITEM 12 (parte 1): CADASTRO DE CORREDORES + SLA
 // ============================================================
+
+// ============================================================
+// OFICINA — quadro da frota (mission control) + ficha PDF
+// Repaginação visual: usa os helpers de status que já existem
+// (statusManutencaoVeiculo / statusIntegridadeEfetivo) e reaproveita
+// o seletor #checklistVeiculo. Só frota própria.
+// ============================================================
+
+// Cor + selo consolidados de um veículo, para o quadro da frota.
+function _ofCorVeiculo(v){
+  const man = (typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(v) : { cor:null, selo:null };
+  const integ = (typeof statusIntegridadeEfetivo === 'function') ? statusIntegridadeEfetivo(v) : { cor:'verde', motivo:'' };
+  const cor = man.cor || integ.cor || 'verde';
+  const selo = man.selo || (integ.motivo ? 'Checklist: ' + integ.motivo : 'Checklist em dia');
+  return { cor, selo };
+}
+
+function renderizarOficinaFrota(){
+  const grid = document.getElementById('oficinaFrota');
+  const cmd  = document.getElementById('oficinaCmd');
+  if (!grid && !cmd) return;
+  const lista = (typeof _veiculosFrotaPropria === 'function') ? _veiculosFrotaPropria() : (veiculosGlobais||[]);
+  const selId = document.getElementById('checklistVeiculo')?.value || '';
+
+  let nOk = 0, nWarn = 0, nFault = 0;
+  const tiles = lista.map(v => {
+    const { cor, selo } = _ofCorVeiculo(v);
+    const cls = cor === 'vermelho' ? 's-fault' : cor === 'amarelo' ? 's-warn' : 's-ok';
+    if (cor === 'vermelho') nFault++; else if (cor === 'amarelo') nWarn++; else nOk++;
+    const palavra = cor === 'vermelho' ? 'Parada' : cor === 'amarelo' ? 'Atenção' : 'Ok';
+    const sel = String(v.id) === String(selId) ? ' sel' : '';
+    return `<div class="of-unit ${cls}${sel}" onclick="_ofSelecionarVeiculo('${v.id}')" title="${(selo||'').replace(/"/g,'&quot;')}">
+      <div class="of-unit-top">
+        <span class="of-plate">${v.placa || '—'}</span>
+        <span class="of-tag ${cls}">${palavra}</span>
+      </div>
+      <div class="of-unit-model">${v.modelo || v.tipo || '—'}</div>
+      <div class="of-unit-selo">${selo || ''}</div>
+    </div>`;
+  }).join('');
+
+  if (grid){
+    grid.innerHTML = lista.length
+      ? tiles
+      : '<p class="text-muted" style="padding:.6rem 0">Nenhum veículo de frota própria cadastrado.</p>';
+  }
+  if (cmd){
+    cmd.innerHTML = `<span class="of-cmd-tit">Frota · Oficina</span>
+      <span class="of-pill"><span class="of-lamp ok"></span>Operacionais <b>${nOk}</b></span>
+      <span class="of-pill"><span class="of-lamp warn"></span>Atenção <b>${nWarn}</b></span>
+      <span class="of-pill"><span class="of-lamp fault"></span>Parada/impedido <b>${nFault}</b></span>`;
+  }
+}
+window.renderizarOficinaFrota = renderizarOficinaFrota;
+
+// Clicar num caminhão do quadro seleciona o veículo no console.
+function _ofSelecionarVeiculo(id){
+  const sel = document.getElementById('checklistVeiculo');
+  if (sel){
+    sel.value = String(id);
+    if (typeof aoTrocarVeiculoChecklist === 'function') aoTrocarVeiculoChecklist();
+  }
+  renderizarOficinaFrota();
+  const alvo = document.getElementById('checklistForm');
+  if (alvo) alvo.scrollIntoView({ block:'center', behavior:'smooth' });
+}
+window._ofSelecionarVeiculo = _ofSelecionarVeiculo;
+
+// Ficha de manutenção em PDF — mesmo padrão da ficha de pneus
+// (_pnImprimirFicha): abre janela imprimível e chama print().
+function _manutImprimirFicha(){
+  const sel = document.getElementById('checklistVeiculo');
+  const id = sel?.value;
+  if (!id){ alert('Selecione um veículo para gerar a ficha.'); return; }
+  const v = (veiculosGlobais||[]).find(x => String(x.id) === String(id));
+  if (!v){ alert('Veículo não encontrado.'); return; }
+
+  const { itens, qtdAtencao, qtdCritico } = _lerChecklistSelecionado();
+  const cor = calcularTagChecklist(qtdAtencao, qtdCritico);
+  const meta = (typeof _TAG_META !== 'undefined' ? _TAG_META : {})[cor] || { emoji:'', label:cor };
+  const usuario = (typeof _usuarioAtualNome === 'function' ? _usuarioAtualNome() : '') || 'Manutenção';
+
+  // Agrupa os itens do checklist por bloco/grupo
+  const grupos = {};
+  itens.forEach(it => { (grupos[it.grupo] = grupos[it.grupo] || []).push(it); });
+  const corDot = s => s === 'Critico' ? '#d11' : s === 'Atencao' ? '#e69500' : '#1a8f4a';
+  const corLabel = s => s === 'Critico' ? 'Crítico' : s === 'Atencao' ? 'Atenção' : 'OK';
+  const blocosHTML = Object.keys(grupos).map(g => `
+    <div class="mf-bloco">
+      <div class="mf-bloco-tit">${g}</div>
+      ${grupos[g].map(it => `<div class="mf-item">
+        <span>${it.item}</span>
+        <span style="color:${corDot(it.status)};font-weight:bold">● ${corLabel(it.status)}</span>
+      </div>`).join('')}
+    </div>`).join('');
+
+  // Agendamentos e emergências do veículo (contexto)
+  const ags = (agendamentosManutencaoGlobais||[]).filter(a => a.placa === v.placa && a.status !== 'concluido');
+  const emgs = (paradasEmergenciaGlobais||[]).filter(e => e.placa === v.placa && e.status === 'ativa');
+  const extra = (ags.length || emgs.length) ? `
+    <div class="mf-bloco">
+      <div class="mf-bloco-tit">Manutenção programada / alertas</div>
+      ${ags.map(a => `<div class="mf-item"><span>🔧 Agendada — ${new Date(a.data_hora).toLocaleString('pt-BR')}${a.observacao?' · '+a.observacao:''}</span><span>${a.prazo_estimado||''}</span></div>`).join('')}
+      ${emgs.map(e => `<div class="mf-item"><span>🚨 Parada — ${e.motivo||'sem descrição'}</span><span></span></div>`).join('')}
+    </div>` : '';
+
+  const j = window.open('', '_blank');
+  if (!j){ alert('O navegador bloqueou a impressão.'); return; }
+  j.document.write(`<html><head><title>Ficha de manutenção — ${v.placa}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;padding:22px;color:#111}
+      h2{font-size:17px;margin:0 0 2px}
+      .mf-sub{color:#555;font-size:12px;margin-bottom:12px}
+      .mf-status{display:inline-block;font-size:12px;font-weight:bold;padding:3px 10px;border-radius:6px;border:1px solid #999;margin-left:6px}
+      .mf-bloco{border:1px solid #ccc;border-radius:6px;margin:10px 0;overflow:hidden}
+      .mf-bloco-tit{background:#f2f2f2;padding:6px 10px;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+      .mf-item{display:flex;justify-content:space-between;gap:16px;padding:5px 10px;font-size:12px;border-top:1px solid #eee}
+      .mf-foot{margin-top:16px;color:#666;font-size:11px}
+    </style></head><body>
+    <h2>Ficha de Manutenção — ${v.placa} <span class="mf-status">${meta.emoji||''} ${meta.label||''}</span></h2>
+    <div class="mf-sub">${v.modelo || v.tipo || ''} · Emitida em ${new Date().toLocaleString('pt-BR')} · por ${usuario} · ${qtdAtencao} atenção / ${qtdCritico} crítico</div>
+    ${blocosHTML}
+    ${extra}
+    <div class="mf-foot">MoveMaster · ficha gerada a partir do checklist na tela. Confira os itens antes de imprimir.</div>
+    </body></html>`);
+  j.document.close(); j.focus();
+  setTimeout(() => j.print(), 300);
+}
+window._manutImprimirFicha = _manutImprimirFicha;
