@@ -391,23 +391,32 @@ function _fiscalNumerosCteHTML(rotaId){
       <button class="btn btn-sm btn-secondary" onclick="_dacteAbrirLeitor(${rotaId})">📄 Ler DACTE e preencher</button>
       <span style="font-size:.72rem;color:var(--text-secondary,#9ca3af)">anexe o PDF e confira antes de salvar</span>
     </div>
-    <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe (carros com a mesma requisição compartilham CTe; requisições diferentes = CTes separados):</div>
+    <div style="font-size:.8rem;color:var(--text-secondary,#9ca3af);margin-bottom:6px">🧾 Número da CTe — <strong>cada carro tem o seu</strong>, mesmo indo na mesma requisição/pregão. Um CTe (e um valor) por carro:</div>
     ${grupos.map(g => {
       const lider = g.lider;
-      const placas = g.itens.map(x => x.placa||'—').join(', ');
       const multi = g.itens.length > 1;
+      // Valor do frete de cada carro, formatado em R$ (só mostra se houver valor).
+      const _fmtV = (v) => (v != null && Number(v) > 0)
+        ? Number(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }) : '';
+      // Uma linha por carro: cada um com o SEU número de CTe e o SEU valor,
+      // independentes. Isso é o que faz a conciliação com o ATUA casar 1-a-1.
+      const carrosHTML = g.itens.map(p => {
+        const val = _fmtV(p.valorFrete);
+        return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px dashed var(--border,rgba(255,255,255,.07))">
+          <span style="min-width:150px;font-size:.8rem">🚗 <strong>${p.placa||'—'}</strong> ${_selosPedidoHTML(p)}${val?` <span style="color:#22c55e;font-size:.72rem;white-space:nowrap">💰 ${val}</span>`:''}</span>
+          <input type="text" id="cteNum_p${p.id}" class="cte-input-campo" value="${p.numeroCte||''}" placeholder="nº da CTe deste carro"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();_salvarNumeroCteGrupo('p${p.id}', [${p.id}]);}"
+                 style="font-size:.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:150px">
+          <button class="btn btn-sm btn-primary" onclick="_salvarNumeroCteGrupo('p${p.id}', [${p.id}])">Salvar</button>
+          <span id="cteOk_p${p.id}" style="font-size:.75rem;color:#22c55e">${p.numeroCte?`✅ ${p.numeroCte}`:''}</span>
+        </div>`;
+      }).join('');
       return `<div style="border:1px solid var(--border,rgba(255,255,255,.1));border-radius:8px;padding:8px 10px;margin-bottom:6px" id="cteGrupo_${g.chave}">
-        <div style="font-size:.82rem;margin-bottom:5px">
-          <strong>#${lider.id}</strong>${multi?` <span style="background:rgba(255,106,0,.15);color:#ff6a00;font-size:.68rem;padding:1px 7px;border-radius:999px">🔗 ${g.itens.length} carros</span>`:''} · 🚗 ${placas} ${_selosPedidoHTML(lider)}${lider.referencia?` <span style="color:#f59e0b;font-size:.72rem">🏷️ ${lider.referencia}</span>`:''}<br>
+        <div style="font-size:.82rem;margin-bottom:2px">
+          <strong>#${lider.id}</strong>${multi?` <span style="background:rgba(255,106,0,.15);color:#ff6a00;font-size:.68rem;padding:1px 7px;border-radius:999px">🔗 ${g.itens.length} carros · 1 CTe por carro</span>`:''}${lider.referencia?` <span style="color:#f59e0b;font-size:.72rem">🏷️ ${lider.referencia}</span>`:''}<br>
           <span style="color:var(--text-secondary,#9ca3af);font-size:.78rem">${lider.cliente||'—'} · ${lider.cidadeOrigem||'—'} → <strong>${lider.cidadeDestino||'—'}</strong></span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <input type="text" id="cteNum_${g.chave}" class="cte-input-campo" value="${lider.numeroCte||''}" placeholder="nº da CTe"
-                 onkeydown="if(event.key==='Enter'){event.preventDefault();_salvarNumeroCteGrupo('${g.chave}', [${g.itens.map(x=>x.id).join(',')}]);}"
-                 style="font-size:.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border,rgba(255,255,255,.15));background:var(--surface-2,rgba(255,255,255,.03));color:inherit;width:140px">
-          <button class="btn btn-sm btn-primary" onclick="_salvarNumeroCteGrupo('${g.chave}', [${g.itens.map(x=>x.id).join(',')}])">Salvar CTe</button>
-          <span id="cteOk_${g.chave}" style="font-size:.75rem;color:#22c55e">${lider.numeroCte?`✅ CTe ${lider.numeroCte}`:''}</span>
-        </div>
+        ${carrosHTML}
       </div>`;
     }).join('')}
   </div>`;
