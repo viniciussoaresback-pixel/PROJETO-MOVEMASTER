@@ -672,7 +672,10 @@ function _popularCorredoresPedido(){
   if (!sel) return;
   const origVal = document.getElementById('cidadeOrigem')?.value || '';
   const destVal = document.getElementById('cidadeDestino')?.value || '';
-  const corredores = (corredoresGlobais||[]).filter(c => (c._paradas||[]).length >= 2 || (c.origem && c.destino));
+  // No encaixar automático mostramos SÓ os corredores fixos que foram cadastrados.
+  // Os temporários (excepcionais) são criados no calor da operação e não devem
+  // poluir o seletor de lançamento — eles saem daqui.
+  const corredores = (corredoresGlobais||[]).filter(c => !c.excepcional && ((c._paradas||[]).length >= 2 || (c.origem && c.destino)));
   const combina = (c) => {
     const seq = ((c._paradas||[]).length >= 2 ? c._paradas.map(x=>x.cidade) : [c.origem, c.destino]).filter(Boolean);
     const io = _posNaSeq(seq, origVal), id = _posNaSeq(seq, destVal);
