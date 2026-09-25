@@ -299,6 +299,8 @@ function refrescarTelaAtual() {
             renderizarComercialPedidos();
         } else if (id === 'comercialViagens' && typeof renderizarComercialViagens === 'function') {
             renderizarComercialViagens();
+        } else if (id === 'comercialCRM' && typeof renderizarCRM === 'function') {
+            renderizarCRM();
         } else if (id === 'cobranca' && typeof renderizarCobranca === 'function') {
             renderizarCobranca();
         } else if (id === 'faturamento') {
@@ -492,6 +494,7 @@ function trocarAba(event) {
     if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
     if (tabAlvo === 'comercialPedidos' && typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
     if (tabAlvo === 'comercialViagens' && typeof renderizarComercialViagens === 'function') renderizarComercialViagens();
+    if (tabAlvo === 'comercialCRM' && typeof renderizarCRM === 'function') renderizarCRM();
     if (tabAlvo === 'fiscal' && typeof renderizarEnvioDocsFiscal === 'function') renderizarEnvioDocsFiscal();
     if (tabAlvo === 'orcamento') prepararOrcamento();
 
