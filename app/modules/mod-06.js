@@ -211,6 +211,17 @@ async function salvarFolga() {
     const [motoristaId, motoristaNome] = sel ? sel.split('|') : [null, null];
 
     const tipo = document.getElementById('folgaTipo').value;
+
+    // Férias, folga e atestado são de uma pessoa específica. Sem motorista o
+    // registro fica anônimo ("de férias" mas ninguém sabe quem) — então aqui
+    // exigimos o motorista. Só 'lembrete' e 'manutenção' (que usa veículo)
+    // podem ser gerais.
+    if (['ferias','folga','atestado'].includes(tipo) && !motoristaId) {
+        msgEl.textContent = 'Selecione o motorista de ' + ((TIPOS_FOLGA[tipo]?.label || 'este registro').toLowerCase()) + '.';
+        msgEl.className = 'message show error';
+        return;
+    }
+
     const veiculoPlaca = document.getElementById('folgaVeiculo')?.value || null;
     if (tipo === 'manutencao' && !veiculoPlaca) {
         msgEl.textContent = 'Selecione o veículo em manutenção.';
