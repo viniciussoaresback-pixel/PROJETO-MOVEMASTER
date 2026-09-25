@@ -155,6 +155,12 @@
   #equipesPainelWrap .eq-tabela,
   #equipesPainelWrap .eq-tabela tbody { display: block; width: 100%; }
   #equipesPainelWrap .eq-tabela thead { display: none; }
+  /* Item 7: sem esta reset, o `.corredor-pedidos .corr-tabela { min-width:900px }`
+     continuava valendo e empurrava o botão de coleta/entrega pra fora da tela —
+     a equipe tinha que arrastar pro lado. Aqui o cartão passa a caber na tela e
+     o botão (full-width, logo abaixo) fica sempre visível, sem arrasto. */
+  #equipesPainelWrap .corredor-pedidos { overflow-x: visible; padding-left: 10px; padding-right: 10px; }
+  #equipesPainelWrap .eq-tabela { min-width: 0; }
 
   #equipesPainelWrap .eq-tabela tr.eq-linha {
     display: grid;
