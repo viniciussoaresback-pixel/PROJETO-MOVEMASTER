@@ -1,0 +1,135 @@
+/* ============================================================================
+   oficina.css — repaginação "console de operação" da aba Manutenção & Oficina.
+   Tudo escopado em #manutencao para não vazar pro resto do sistema.
+   Carregar DEPOIS de styles.css / refinamentos, para vencer por ordem.
+   Vai junto com renderizarOficinaFrota() e _manutImprimirFicha() (mod-07.js).
+   ============================================================================ */
+#manutencao{
+  --of-panel:#151d27; --of-panel-2:#1b2531; --of-inset:#0f151c;
+  --of-line:#26313f; --of-line-soft:#1c2530;
+  --of-dim:#8592a3; --of-faint:#5a6675;
+  --of-amber:#ffb020; --of-ok:#33d17f; --of-warn:#ffb020; --of-fault:#ff5257; --of-tel:#39bdf8;
+  --of-mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Consolas,monospace;
+}
+
+/* ---- moldura geral ---- */
+#manutencao > .card{
+  background:linear-gradient(180deg,var(--of-panel) 0%, var(--of-inset) 100%);
+  border:1px solid var(--of-line); border-radius:16px;
+}
+#manutencao .painel-header-bar h2{ letter-spacing:.01em; }
+
+/* ---- barra de comando (contadores da frota) ---- */
+#oficinaCmd{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:11px 13px; margin:2px 0 14px;
+  background:var(--of-inset); border:1px solid var(--of-line); border-radius:12px;
+}
+#oficinaCmd .of-cmd-tit{ font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--of-faint); margin-right:4px; }
+.of-pill{ display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border:1px solid var(--of-line);
+  border-radius:8px; background:var(--of-panel); font-size:.78rem; color:var(--text-secondary,#c3c8d0); }
+.of-pill b{ font-family:var(--of-mono); font-weight:600; font-size:.95rem; color:var(--text-primary,#e7eef6); }
+.of-lamp{ width:8px; height:8px; border-radius:50%; flex:none; }
+.of-lamp.ok{ background:var(--of-ok); box-shadow:0 0 8px var(--of-ok); }
+.of-lamp.warn{ background:var(--of-warn); box-shadow:0 0 8px var(--of-warn); }
+.of-lamp.fault{ background:var(--of-fault); box-shadow:0 0 8px var(--of-fault); }
+
+/* ---- sub-abas viram botões de console ---- */
+#manutencao .painel-subtabs .cad-subtab-btn{
+  border:1px solid var(--of-line); background:var(--of-panel-2); border-radius:9px;
+}
+#manutencao .painel-subtabs .cad-subtab-btn.ativo{
+  border-color:var(--of-amber); color:var(--of-amber); background:#ffb02016;
+}
+
+/* ---- quadro da frota ---- */
+.of-fleet-tit{ font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--of-faint);
+  display:flex; align-items:center; gap:10px; margin:6px 0 10px; }
+.of-fleet-tit::after{ content:""; flex:1; height:1px; background:var(--of-line-soft); }
+.of-fleet{ display:grid; grid-template-columns:repeat(auto-fill,minmax(186px,1fr)); gap:10px; margin-bottom:20px; }
+.of-unit{ position:relative; overflow:hidden; cursor:pointer; padding:12px 13px;
+  border:1px solid var(--of-line); border-radius:11px; background:var(--of-panel);
+  transition:border-color .15s, transform .15s; }
+.of-unit::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--of-line); }
+.of-unit.s-ok::before{ background:var(--of-ok); }
+.of-unit.s-warn::before{ background:var(--of-warn); }
+.of-unit.s-fault::before{ background:var(--of-fault); }
+.of-unit:hover{ border-color:var(--of-faint); transform:translateY(-1px); }
+.of-unit.sel{ border-color:var(--of-amber); box-shadow:0 0 0 1px #ffb02022, 0 8px 22px -14px #000; }
+.of-unit-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.of-plate{ font-family:var(--of-mono); font-weight:600; font-size:1rem; letter-spacing:.05em; color:var(--text-primary,#e7eef6); }
+.of-unit-model{ color:var(--of-dim); font-size:.78rem; margin-top:2px; }
+.of-unit-selo{ margin-top:9px; font-family:var(--of-mono); font-size:.72rem; }
+.of-unit.s-ok .of-unit-selo{ color:var(--of-ok); }
+.of-unit.s-warn .of-unit-selo{ color:var(--of-warn); }
+.of-unit.s-fault .of-unit-selo{ color:var(--of-fault); }
+.of-tag{ font-size:.64rem; letter-spacing:.09em; text-transform:uppercase; padding:2px 7px; border-radius:5px; }
+.of-tag.s-ok{ color:var(--of-ok); background:#33d17f14; }
+.of-tag.s-warn{ color:var(--of-warn); background:#ffb02014; }
+.of-tag.s-fault{ color:var(--of-fault); background:#ff525714; }
+
+/* ---- toolbars, selects e inputs ---- */
+#manutencao .manut-toolbar-campo label,
+#manutencao .checklist-bloco h4{ color:var(--of-dim); }
+#manutencao select,
+#manutencao input[type="text"],
+#manutencao input[type="datetime-local"]{
+  background:var(--of-inset); border:1px solid var(--of-line); border-radius:9px; color:inherit;
+}
+#manutencao select:focus,
+#manutencao input:focus{ border-color:var(--of-amber); outline:none; }
+
+/* ---- botões ---- */
+#manutencao .btn-primary{ background:var(--of-amber); border-color:var(--of-amber); color:#241700; font-weight:600; }
+#manutencao .btn-primary:hover{ filter:brightness(1.07); }
+#manutencao .btn-secondary{ background:var(--of-panel-2); border:1px solid var(--of-line); color:inherit; }
+#manutencao .btn-danger{ background:var(--of-fault); border-color:var(--of-fault); color:#2a0000; font-weight:600; }
+.of-ficha-btn{ display:inline-flex; align-items:center; gap:7px; }
+
+/* ---- painéis de seção (agendamento, emergência, epi, histórico) ---- */
+#manutencao .manut-epi,
+#manutencao .manut-agendamento,
+#manutencao .manut-emergencia,
+#manutencao .manut-historico{
+  border:1px solid var(--of-line); border-radius:13px; background:var(--of-inset);
+  padding:15px 15px 16px; margin-top:16px;
+}
+#manutencao .manut-epi h3,
+#manutencao .manut-agendamento h3,
+#manutencao .manut-emergencia h3,
+#manutencao .manut-historico h3{ margin:0 0 4px; font-size:.98rem; }
+#manutencao .manut-emergencia{ border-color:#ff525733; }
+
+/* ---- checklist ---- */
+#manutencao .checklist-bloco{ border:1px solid var(--of-line); border-radius:12px; background:var(--of-panel);
+  padding:12px 14px; margin-bottom:10px; }
+#manutencao .checklist-bloco h4{ font-size:.74rem; letter-spacing:.1em; text-transform:uppercase; margin:0 0 8px;
+  padding-bottom:8px; border-bottom:1px solid var(--of-line-soft); }
+#manutencao .checklist-linha{ display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:8px 0; border-bottom:1px solid var(--of-line-soft); }
+#manutencao .checklist-linha:last-child{ border-bottom:none; }
+#manutencao .checklist-item-nome{ font-size:.9rem; }
+#manutencao .checklist-opcoes{ display:flex; gap:6px; flex:none; }
+#manutencao .checklist-opcoes .opt{ font-size:.72rem; padding:5px 9px; border:1px solid var(--of-line);
+  border-radius:7px; color:var(--of-dim); cursor:pointer; white-space:nowrap; }
+#manutencao .checklist-opcoes .opt:has(input:checked).opt-ok{ color:var(--of-ok); border-color:#33d17f55; background:#33d17f14; }
+#manutencao .checklist-opcoes .opt:has(input:checked).opt-at{ color:var(--of-warn); border-color:#ffb02055; background:#ffb02014; }
+#manutencao .checklist-opcoes .opt:has(input:checked).opt-cr{ color:var(--of-fault); border-color:#ff525755; background:#ff525714; }
+#manutencao .checklist-opcoes .opt input{ position:absolute; opacity:0; width:0; height:0; }
+
+/* ---- linhas de telemetria (histórico de checklist / agendamentos) ---- */
+#manutencao .checklist-hist-linha{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:10px 12px; margin-bottom:6px;
+  background:var(--of-inset); border:1px solid var(--of-line); border-radius:9px;
+  font-family:var(--of-mono); font-size:.78rem;
+}
+
+/* ---- diagrama de pneus (o "desenho do caminhão") ganha moldura de console ---- */
+#manutencao #painelPneus .pn-fileira{ margin:8px 0; }
+
+@media (max-width:760px){
+  .of-fleet{ grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+  #manutencao .checklist-linha{ flex-direction:column; align-items:stretch; gap:8px; }
+  #manutencao .checklist-opcoes{ justify-content:space-between; }
+}

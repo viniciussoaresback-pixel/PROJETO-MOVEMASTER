@@ -1,0 +1,71 @@
+/* ============================================================================
+   tema-console.css — clima "console de operação / mission control" no sistema
+   INTEIRO, sem mudar estrutura, layout nem comportamento de nenhuma tela.
+
+   Como funciona: o sistema já foi feito pra trocar de tema redefinindo os
+   tokens num seletor pai (ver comentário no :root do styles.css). Aqui a gente
+   só REtuna os valores dos tokens do tema ESCURO — as superfícies chapadas
+   (quase preto neutro) viram grafite/aço azulado, e todas as telas refletem
+   sozinhas, porque todas leem desses tokens.
+
+   Segurança:
+   - Escopo `:root:not([data-tema="claro"])` → só o tema escuro. O tema claro
+     fica exatamente como está.
+   - A identidade Movemaster continua: o acento LARANJA não muda.
+   - Zero regra de layout (nada de tamanho, posição, margem). Só cor/borda.
+   - Reversível: é só tirar 'tema-console.css' da lista do carregador.js.
+
+   Carregar por último (depois de layout-amplo.css) pra vencer no override.
+   ============================================================================ */
+
+:root:not([data-tema="claro"]){
+  /* Superfícies — de preto neutro para grafite/gunmetal azulado */
+  --surface-0: #0b1016;   /* fundo da página */
+  --surface-1: #131b24;   /* card padrão */
+  --surface-2: #1a2430;   /* elevado / hover */
+  --surface-3: #253140;   /* topo (dropdown, popover) */
+
+  /* Bordas — aço frio, um tico mais visíveis (dá o contorno de painel) */
+  --border-soft: #1b2530;
+  --border: #26313f;
+  --border-strong: #354150;
+
+  /* Texto — levemente mais frio, combinando com o grafite */
+  --text-primary: #e9eff6;
+  --text-secondary: #8b98a8;
+  --text-tertiary: #5d6a79;
+
+  /* Aliases de fundo que algumas telas ainda usam direto */
+  --bg-card: var(--surface-1);
+  --bg-panel: var(--surface-1);
+  --light-bg: var(--surface-1);
+
+  /* O acento LARANJA (marca) continua — só reforço o brilho pra destacar
+     melhor sobre o grafite. */
+  --accent-soft: rgba(255, 106, 0, 0.14);
+  --accent-glow: rgba(255, 106, 0, 0.34);
+}
+
+/* Fundo da página com um leve brilho de "console" no alto — puramente
+   decorativo, não empurra nem redimensiona nada. */
+html:not([data-tema="claro"]) body{
+  background-color: var(--surface-0);
+  background-image:
+    radial-gradient(1100px 520px at 82% -8%, rgba(56,72,92,0.20) 0%, transparent 60%),
+    linear-gradient(180deg, #0d141c 0%, var(--surface-0) 55%);
+  background-attachment: fixed;
+}
+
+/* Cards ganham um brilho no topo, como chapa de painel iluminada de cima.
+   Só um gradiente sobre a mesma cor — sem tocar em padding/tamanho. */
+html:not([data-tema="claro"]) .card{
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.022) 0%, transparent 42%);
+}
+
+/* Barra de rolagem discreta, no tom do console (não afeta layout). */
+html:not([data-tema="claro"]) *::-webkit-scrollbar{ width:11px; height:11px; }
+html:not([data-tema="claro"]) *::-webkit-scrollbar-track{ background: var(--surface-0); }
+html:not([data-tema="claro"]) *::-webkit-scrollbar-thumb{
+  background: var(--surface-3); border:2px solid var(--surface-0); border-radius:8px;
+}
+html:not([data-tema="claro"]) *::-webkit-scrollbar-thumb:hover{ background: var(--border-strong); }
