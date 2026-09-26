@@ -12,8 +12,11 @@ var usuarioAtual = null;
 var perfilLogado = null;   // linha completa da tabela perfis (inclui motorista_id)
 
 // Mapa de permissões por perfil
+// Perfil `crm`: novo módulo, 3 abas — Cadastros (leads e clientes),
+// Gestor de Tarefas e Painel de Acompanhamento. O admin também
+// recebe essas abas para poder navegar no CRM.
 const PERMISSOES = {
-    admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca'],
+    admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca','crmCadastros','crmTarefas','crmPainel'],
     comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','orcamento','cobranca'],
     logistica:  ['painel','logistica','equipes','comercial','comercialPedidos','cadastros'],
     financeiro: ['conferencia','cobranca','tabelaFrete','remunTrecho','relatoriosFin','epiUniforme'],
@@ -21,7 +24,8 @@ const PERMISSOES = {
     equipe:     ['equipes'],
     fiscal:     ['fiscal','comercialPedidos','comercialViagens','painel'],
     diretoria:  ['diretoria'],
-    manutencao: ['manutencao']
+    manutencao: ['manutencao'],
+    crm:        ['crmCadastros','crmTarefas','crmPainel']
 };
 
 const NOMES_PERFIL = {
@@ -33,7 +37,8 @@ const NOMES_PERFIL = {
     financeiro: 'Financeiro',
     fiscal:     'Fiscal (CTE)',
     diretoria:  'Diretoria',
-    manutencao: 'Manutenção / Oficina'
+    manutencao: 'Manutenção / Oficina',
+    crm:        'CRM Comercial'
 };
 
 const CORES_PERFIL = {
@@ -44,7 +49,8 @@ const CORES_PERFIL = {
     financeiro: 'badge-financeiro',
     fiscal:     'badge-fiscal',
     diretoria:  'badge-diretoria',
-    manutencao: 'badge-manutencao'
+    manutencao: 'badge-manutencao',
+    crm:        'badge-crm'
 };
 
 // ============================================
@@ -693,7 +699,10 @@ function aplicarPermissoes(perfil) {
                 relatoriosFin:'abrirRelatorioFaturamento',
                 comercialPedidos:  'renderizarComercialPedidos',
                 comercialViagens:  'renderizarComercialViagens',
-                visaoGlobal:  'renderizarVisaoGlobal'
+                visaoGlobal:  'renderizarVisaoGlobal',
+                crmCadastros: 'renderizarCRMCadastros',
+                crmTarefas:   'renderizarCRMTarefas',
+                crmPainel:    'renderizarCRMPainel'
             };
             if (porAba[primeiraAba]) chamar(porAba[primeiraAba]);
             chamar('popularResponsaveisComercial');
