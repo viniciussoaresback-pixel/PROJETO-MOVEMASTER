@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="refinamento.css">
     <link rel="stylesheet" href="refinamento-2.css">
     <link rel="stylesheet" href="refinamento-3.css">
+    <link rel="stylesheet" href="crm.css">
 
     <!-- PWA: permite instalar na tela de início do celular -->
     <link rel="manifest" href="manifest.json">
@@ -190,6 +191,10 @@
                             <span class="perfil-icon">💼</span>
                             <span class="perfil-nome">Comercial</span>
                         </div>
+                        <div class="perfil-acesso-card perfil-crm" onclick="entrarComoAdmin('crm')">
+                            <span class="perfil-icon">🎯</span>
+                            <span class="perfil-nome">CRM Comercial</span>
+                        </div>
                         <div class="perfil-acesso-card" onclick="entrarComoAdmin('logistica')">
                             <span class="perfil-icon">🚛</span>
                             <span class="perfil-nome">Logística</span>
@@ -235,6 +240,7 @@
                             <select id="novoPerfil" required onchange="_toggleEquipeVinculo()">
                                 <option value="">Selecione...</option>
                                 <option value="comercial">Comercial</option>
+                                <option value="crm">CRM Comercial</option>
                                 <option value="logistica">Logística</option>
                                 <option value="motorista">Motorista</option>
                                 <option value="equipe">Equipe (coletas & entregas)</option>
@@ -315,7 +321,6 @@
                     <button class="nav-btn" data-tab="comercialPedidos">📋 Pedidos</button>
                     <button class="nav-btn" data-tab="patios">🅿️ Pátios</button>
                     <button class="nav-btn" data-tab="comercialViagens">🚛 Viagens</button>
-                    <button class="nav-btn" data-tab="comercialCRM">🎯 CRM</button>
                     <button class="nav-btn active" data-tab="comercial">Lançamento Comercial</button>
                     <button class="nav-btn" data-tab="orcamento">💵 Orçamento</button>
                     <button class="nav-btn" data-tab="meusPedidos">Meus Pedidos <span id="seloOcorrencias" class="selo-aba" style="display:none">0</span></button>
@@ -332,6 +337,13 @@
                     <button class="nav-btn" data-tab="faturamento">Faturamento</button>
                     <button class="nav-btn" data-tab="cadastros">Cadastros</button>
                     <button class="nav-btn" data-tab="manutencao">🔧 Manutenção</button>
+                    <!-- ═══ CRM Comercial (perfil `crm`) ═══════════════════════
+                         3 abas do módulo CRM. Ficam escondidas para quem
+                         não é do perfil `crm` (nem admin) — o
+                         aplicarPermissoes cuida disso. -->
+                    <button class="nav-btn" data-tab="crmCadastros">🎯 CRM · Cadastros</button>
+                    <button class="nav-btn" data-tab="crmTarefas">✅ CRM · Tarefas</button>
+                    <button class="nav-btn" data-tab="crmPainel">📊 CRM · Painel</button>
                 </nav>
             </div>
         </header>
@@ -670,10 +682,6 @@
 
             <section id="comercialViagens" class="tab-content">
                 <div id="comercialViagensConteudo"></div>
-            </section>
-
-            <section id="comercialCRM" class="tab-content">
-                <div id="comercialCRMConteudo"></div>
             </section>
 
             <section id="fiscal" class="tab-content">
@@ -1886,70 +1894,6 @@
                             </div>
                         </div>
 
-                        <!-- ═══ CRM Comercial (Fase 1) ═══════════════════════════
-                             Campos opcionais que alimentam a Carteira e o
-                             Dashboard do CRM. Ficam vazios se o vendedor
-                             ainda não classificou — a Carteira tem filtros
-                             pra achar quem está incompleto. -->
-                        <div class="form-row" style="margin-top:.6rem;padding-top:.8rem;border-top:1px solid var(--border-soft)">
-                            <div class="form-group full-width">
-                                <label style="font-weight:600;color:var(--accent)">🎯 CRM Comercial</label>
-                                <div style="font-size:.78rem;color:var(--text-tertiary);margin-top:.15rem">Opcional — usado pelos filtros e métricas do CRM.</div>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="vendedorRespCliente">Vendedor responsável</label>
-                                <input type="text" id="vendedorRespCliente" placeholder="Ex.: Jessica, Junior Eduardo...">
-                            </div>
-                            <div class="form-group">
-                                <label for="prioridadeCliente">Prioridade</label>
-                                <select id="prioridadeCliente">
-                                    <option value="">— não classificado —</option>
-                                    <option value="A">A</option>
-                                    <option value="B">B</option>
-                                    <option value="C">C</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="potencialCliente">Potencial</label>
-                                <select id="potencialCliente">
-                                    <option value="">—</option>
-                                    <option value="Alto">Alto</option>
-                                    <option value="Médio">Médio</option>
-                                    <option value="Baixo">Baixo</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="segmentoCliente">Segmento</label>
-                                <select id="segmentoCliente">
-                                    <option value="">—</option>
-                                    <option value="Garagem">Garagem</option>
-                                    <option value="Concessionária">Concessionária</option>
-                                    <option value="Locadora">Locadora</option>
-                                    <option value="Particular">Particular</option>
-                                    <option value="Transportadora">Transportadora</option>
-                                    <option value="Outro">Outro</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group full-width">
-                                <label for="statusNegocCliente">Status da negociação</label>
-                                <select id="statusNegocCliente">
-                                    <option value="">—</option>
-                                    <option value="Novo Cadastro">Novo Cadastro</option>
-                                    <option value="Prospecção em Andamento">Prospecção em Andamento</option>
-                                    <option value="Negociação Aberta">Negociação Aberta</option>
-                                    <option value="Proposta Enviada">Proposta Enviada</option>
-                                    <option value="Fechado - Ganho">Fechado - Ganho</option>
-                                    <option value="Fechado - Perdido">Fechado - Perdido</option>
-                                </select>
-                            </div>
-                        </div>
-
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary">Salvar Cliente</button>
                             <button type="reset" class="btn btn-secondary">Limpar Formulário</button>
@@ -2232,6 +2176,21 @@
                     </div>
                     </div>
                 </div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════════════════════
+                 CRM COMERCIAL (perfil `crm`) — 3 abas top-level.
+                 Cada section é um slot vazio; o mod-13.js renderiza
+                 dentro do respectivo *Conteudo* ao abrir a aba.
+                 ═══════════════════════════════════════════════════════════ -->
+            <section id="crmCadastros" class="tab-content">
+                <div id="crmCadastrosConteudo"></div>
+            </section>
+            <section id="crmTarefas" class="tab-content">
+                <div id="crmTarefasConteudo"></div>
+            </section>
+            <section id="crmPainel" class="tab-content">
+                <div id="crmPainelConteudo"></div>
             </section>
         </main>
 
