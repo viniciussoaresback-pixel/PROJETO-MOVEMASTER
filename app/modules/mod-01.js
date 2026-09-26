@@ -299,12 +299,9 @@ function refrescarTelaAtual() {
             renderizarComercialPedidos();
         } else if (id === 'comercialViagens' && typeof renderizarComercialViagens === 'function') {
             renderizarComercialViagens();
-        } else if (id === 'crmCadastros' && typeof renderizarCRMCadastros === 'function') {
-            renderizarCRMCadastros();
-        } else if (id === 'crmTarefas' && typeof renderizarCRMTarefas === 'function') {
-            renderizarCRMTarefas();
-        } else if (id === 'crmPainel' && typeof renderizarCRMPainel === 'function') {
-            renderizarCRMPainel();
+        } else if (id === 'crm' && typeof _crmRedesenhar === 'function') {
+            // redesenha a área do CRM aberta, sem perder o foco da busca
+            _mmPreservarFoco(_crmRedesenhar);
         } else if (id === 'cobranca' && typeof renderizarCobranca === 'function') {
             renderizarCobranca();
         } else if (id === 'faturamento') {
@@ -498,9 +495,7 @@ function trocarAba(event) {
     if (tabAlvo === 'visaoGlobal' && typeof renderizarVisaoGlobal === 'function') renderizarVisaoGlobal();
     if (tabAlvo === 'comercialPedidos' && typeof renderizarComercialPedidos === 'function') renderizarComercialPedidos();
     if (tabAlvo === 'comercialViagens' && typeof renderizarComercialViagens === 'function') renderizarComercialViagens();
-    if (tabAlvo === 'crmCadastros' && typeof renderizarCRMCadastros === 'function') renderizarCRMCadastros();
-    if (tabAlvo === 'crmTarefas' && typeof renderizarCRMTarefas === 'function') renderizarCRMTarefas();
-    if (tabAlvo === 'crmPainel' && typeof renderizarCRMPainel === 'function') renderizarCRMPainel();
+    if (tabAlvo === 'crm' && typeof renderizarCRM === 'function') renderizarCRM();
     if (tabAlvo === 'portalCliente' && typeof renderizarPortalCliente === 'function') renderizarPortalCliente();
     if (tabAlvo === 'fiscal' && typeof renderizarEnvioDocsFiscal === 'function') renderizarEnvioDocsFiscal();
     if (tabAlvo === 'orcamento') prepararOrcamento();

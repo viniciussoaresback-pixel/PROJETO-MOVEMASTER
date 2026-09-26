@@ -16,9 +16,11 @@ var perfilLogado = null;   // linha completa da tabela perfis (inclui motorista_
 // Gestor de Tarefas e Painel de Acompanhamento. O admin também
 // recebe essas abas para poder navegar no CRM.
 const PERMISSOES = {
-    admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca','crmCadastros','crmTarefas','crmPainel'],
-    // Comercial também usa o CRM (cadastros de leads, tarefas e painel)
-    comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','orcamento','cobranca','crmCadastros','crmTarefas','crmPainel'],
+    admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca','crm'],
+    // Comercial tem DOIS modos (chave no topo da tela, ver mmModoComercial):
+    //   Operacional Comercial → as abas abaixo
+    //   CRM Comercial         → as mesmas abas do perfil `crm` (CRM + Orçamento)
+    comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','cobranca'],
     logistica:  ['painel','logistica','equipes','comercial','comercialPedidos','cadastros'],
     financeiro: ['conferencia','cobranca','tabelaFrete','remunTrecho','relatoriosFin','epiUniforme'],
     motorista:  ['motorista'],
@@ -26,7 +28,7 @@ const PERMISSOES = {
     fiscal:     ['fiscal','comercialPedidos','comercialViagens','painel'],
     diretoria:  ['diretoria'],
     manutencao: ['manutencao'],
-    crm:        ['crmCadastros','crmTarefas','crmPainel'],
+    crm:        ['crm','orcamento'],
     // Portal do cliente: só a própria tela (dados isolados no banco — ver
     // sql/2026-09-26-melhorias.sql)
     cliente:    ['portalCliente']
@@ -638,8 +640,45 @@ function mostrarAppComPerfil(email, perfilData) {
     if (typeof iniciarRealtime === 'function') iniciarRealtime();
 }
 
+// ---------------------------------------------------------------------
+// COMERCIAL: dois modos — "Operacional Comercial" e "CRM Comercial".
+// Mesmo login, menus separados (fica mais limpo para o vendedor). A escolha
+// fica guardada no navegador. As permissões de ação continuam as do perfil
+// comercial nos dois modos; só muda o que aparece no menu.
+// ---------------------------------------------------------------------
+function mmModoComercial() {
+    try { return localStorage.getItem('mm_modo_comercial') === 'crm' ? 'crm' : 'operacional'; }
+    catch (e) { return 'operacional'; }
+}
+function mmTrocarModoComercial(modo, depois) {
+    try { localStorage.setItem('mm_modo_comercial', modo === 'crm' ? 'crm' : 'operacional'); } catch (e) {}
+    aplicarPermissoes(perfilAtual);
+    if (typeof depois === 'function') setTimeout(depois, 80);
+}
+function _abasDoPerfil(perfil) {
+    if (perfil === 'comercial' && mmModoComercial() === 'crm') return PERMISSOES.crm;
+    return PERMISSOES[perfil] || [];
+}
+function _mmRenderChaveModo(perfil) {
+    let el = document.getElementById('mmModoComercial');
+    if (perfil !== 'comercial') { if (el) el.style.display = 'none'; return; }
+    if (!el) {
+        const badge = document.getElementById('badgePerfil');
+        if (!badge || !badge.parentNode) return;
+        el = document.createElement('div');
+        el.id = 'mmModoComercial';
+        el.className = 'mm-modo-comercial';
+        badge.parentNode.insertBefore(el, badge.nextSibling);
+    }
+    const m = mmModoComercial();
+    el.style.display = '';
+    el.innerHTML = `<button type="button" class="${m === 'operacional' ? 'ativo' : ''}" onclick="mmTrocarModoComercial('operacional')" title="Pedidos, viagens, lançamento, cobrança">🧾 Operacional Comercial</button>`
+                 + `<button type="button" class="${m === 'crm' ? 'ativo' : ''}" onclick="mmTrocarModoComercial('crm')" title="Clientes, leads, tarefas, painel e orçamento">🎯 CRM Comercial</button>`;
+}
+
 function aplicarPermissoes(perfil) {
-    const abas = PERMISSOES[perfil] || [];
+    const abas = _abasDoPerfil(perfil);
+    _mmRenderChaveModo(perfil);
 
     // Esconder/mostrar botões do menu
     document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
@@ -725,9 +764,8 @@ function aplicarPermissoes(perfil) {
                 comercialPedidos:  'renderizarComercialPedidos',
                 comercialViagens:  'renderizarComercialViagens',
                 visaoGlobal:  'renderizarVisaoGlobal',
-                crmCadastros: 'renderizarCRMCadastros',
-                crmTarefas:   'renderizarCRMTarefas',
-                crmPainel:    'renderizarCRMPainel',
+                crm:          'renderizarCRM',
+                orcamento:    'prepararOrcamento',
                 portalCliente:'renderizarPortalCliente'
             };
             if (porAba[primeiraAba]) chamar(porAba[primeiraAba]);
