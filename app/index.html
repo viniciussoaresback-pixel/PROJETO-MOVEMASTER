@@ -219,6 +219,10 @@
                             <span class="perfil-icon">🔧</span>
                             <span class="perfil-nome">Manutenção / Oficina</span>
                         </div>
+                        <div class="perfil-acesso-card" onclick="entrarComoAdmin('cliente')">
+                            <span class="perfil-icon">🏢</span>
+                            <span class="perfil-nome">Cliente (portal)</span>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -344,6 +348,7 @@
                     <button class="nav-btn" data-tab="crmCadastros">🎯 CRM · Cadastros</button>
                     <button class="nav-btn" data-tab="crmTarefas">✅ CRM · Tarefas</button>
                     <button class="nav-btn" data-tab="crmPainel">📊 CRM · Painel</button>
+                    <button class="nav-btn" data-tab="portalCliente">🏢 Meus transportes</button>
                 </nav>
             </div>
         </header>
@@ -2192,6 +2197,10 @@
             <section id="crmPainel" class="tab-content">
                 <div id="crmPainelConteudo"></div>
             </section>
+            <!-- Portal do cliente (perfil "cliente") — portal-cliente.js -->
+            <section id="portalCliente" class="tab-content">
+                <div class="card"><div id="portalClienteConteudo"></div></div>
+            </section>
         </main>
 
         <!-- Footer -->
@@ -2457,6 +2466,8 @@
     <script src="pneus.js"></script>
     <script src="trajetoria.js"></script>
     <script src="busca-historico.js"></script>
+    <script src="roteirizador.js"></script>
+    <script src="portal-cliente.js"></script>
     <script src="modules/mod-01.js"></script>
     <script src="modules/mod-02.js"></script>
     <script src="modules/mod-03.js"></script>

@@ -17,10 +17,10 @@
   // aumentar este número. O ?v=N no fim da URL engana o cache: pra ele, é
   // outro arquivo, então baixa de novo. Sem isso, mudança pequena de CSS
   // pode demorar dias pra aparecer no celular de quem já usava o sistema.
-  var VERSAO = '20260925a';
+  var VERSAO = '20260926a';
   var v = '?v=' + VERSAO;
 
-  ['tema-claro.css', 'refinamento-8.css', 'microinteracoes.css', 'tabelas-leves.css', 'refinamento-9.css', 'tema-claro-fix.css', 'tema-claro-cores.css', 'refinamento-10.css', 'refinamento-11.css', 'refinamento-12.css', 'refinamento-13.css', 'skeletons.css', 'trajetoria.css', 'cte-situacao.css', 'conciliacao-atua.css', 'campo-mobile.css', 'pneus.css', 'layout-amplo.css', 'tema-console.css', 'oficina.css'].forEach(function (css) {
+  ['tema-claro.css', 'refinamento-8.css', 'microinteracoes.css', 'tabelas-leves.css', 'refinamento-9.css', 'tema-claro-fix.css', 'tema-claro-cores.css', 'refinamento-10.css', 'refinamento-11.css', 'refinamento-12.css', 'refinamento-13.css', 'skeletons.css', 'trajetoria.css', 'cte-situacao.css', 'conciliacao-atua.css', 'campo-mobile.css', 'pneus.css', 'layout-amplo.css', 'tema-console.css', 'oficina.css', 'refinamento-14.css'].forEach(function (css) {
     var l = document.createElement('link');
     l.rel = 'stylesheet';
     l.href = css + v;

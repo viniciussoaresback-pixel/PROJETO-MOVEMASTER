@@ -501,6 +501,7 @@ function trocarAba(event) {
     if (tabAlvo === 'crmCadastros' && typeof renderizarCRMCadastros === 'function') renderizarCRMCadastros();
     if (tabAlvo === 'crmTarefas' && typeof renderizarCRMTarefas === 'function') renderizarCRMTarefas();
     if (tabAlvo === 'crmPainel' && typeof renderizarCRMPainel === 'function') renderizarCRMPainel();
+    if (tabAlvo === 'portalCliente' && typeof renderizarPortalCliente === 'function') renderizarPortalCliente();
     if (tabAlvo === 'fiscal' && typeof renderizarEnvioDocsFiscal === 'function') renderizarEnvioDocsFiscal();
     if (tabAlvo === 'orcamento') prepararOrcamento();
 
@@ -1173,6 +1174,13 @@ function _evoAbrirPreview(pedidos){
         <strong>não vai ser transportado</strong>.
       </div>
 
+      ${(() => {
+        // Evo manda o carro sem valor quando ainda não há motorista definido lá.
+        const semValor = pedidos.reduce((s,p) => s + p.carros.filter(x => !x.frete).length, 0);
+        return semValor ? `<div class="evo-aviso-sem-valor">⚠️ <strong>${semValor} carro(s) vieram SEM VALOR</strong> da EVO
+          (normalmente é quando ainda não há motorista definido lá). Informe o frete no campo ao lado de cada carro —
+          se deixar em branco, ao importar abre uma tela para preencher.</div>` : '';
+      })()}
       <div class="evo-barra-sel">
         <button type="button" class="btn btn-secondary btn-sm" onclick="_evoMarcarTudo(true)">Marcar todos</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="_evoMarcarTudo(false)">Desmarcar todos</button>
@@ -1202,6 +1210,9 @@ function _evoAbrirPreview(pedidos){
                     <input type="checkbox" class="evo-chk-carro" data-idx="${i}" data-carro="${j}"
                            ${problema?'':'checked'} onchange="_evoCarroMudou(${i})">
                     <span><strong>${x.placa}</strong>${x.modelo?` · ${x.modelo}`:''}${x.frete?` · R$ ${Number(x.frete).toLocaleString('pt-BR')}`:''}</span>
+                    ${!x.frete ? `<span class="evo-sem-valor" onclick="event.preventDefault()">⚠️ sem valor · R$
+                      <input type="number" step="0.01" min="0" class="evo-valor-inp" data-idx="${i}" data-carro="${j}" placeholder="0,00"
+                             onclick="event.stopPropagation()" oninput="_evoValorDigitado(${i},${j},this.value)"></span>` : ''}
                   </label>`).join('')}
               </div>
             </div>
@@ -1251,6 +1262,74 @@ function _evoAtualizarContagem(){
 }
 window._evoAtualizarContagem = _evoAtualizarContagem;
 
+// ----- Carros que vieram SEM VALOR da EVO -----
+// O valor digitado na prévia (ou na tela de pendências) vai direto no carro
+// de _evoPreview, que é o que a importação grava.
+function _evoValorDigitado(i, j, v){
+  const carro = _evoPreview && _evoPreview[i] && _evoPreview[i].carros[j];
+  if (!carro) return;
+  const n = parseFloat(String(v).replace(',', '.'));
+  carro.freteDigitado = (isFinite(n) && n > 0) ? n : null;
+}
+window._evoValorDigitado = _evoValorDigitado;
+
+// Tela aberta ao importar quando ainda há carro marcado sem valor
+function _evoTelaSemValor(faltando){
+  document.getElementById('evoSemValorOverlay')?.remove();
+  const div = document.createElement('div');
+  div.id = 'evoSemValorOverlay';
+  div.className = 'evo-overlay';
+  div.style.zIndex = '100200';
+  div.innerHTML = `
+    <div class="evo-bg" onclick="document.getElementById('evoSemValorOverlay').remove()"></div>
+    <div class="evo-painel" style="max-width:640px">
+      <div class="evo-head">
+        <div>
+          <h2 style="margin:0">💰 Carros sem valor</h2>
+          <p class="text-muted" style="font-size:.85rem;margin:.3rem 0 0">${faltando.length} carro(s) vieram da EVO sem valor de frete (sem motorista definido na EVO). Informe o valor de cada um.</p>
+        </div>
+        <button class="evo-x" onclick="document.getElementById('evoSemValorOverlay').remove()">✕</button>
+      </div>
+      <div class="evo-sv-todos">
+        <label>Mesmo valor para todos: R$ <input type="number" step="0.01" min="0" id="evoSvTodos" placeholder="0,00"></label>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.evo-sv-inp').forEach(x => x.value = document.getElementById('evoSvTodos').value)">Aplicar a todos</button>
+      </div>
+      <div class="evo-lista" style="max-height:50vh">
+        ${faltando.map(f => `<div class="evo-sv-linha">
+          <span><strong>${f.carro.placa}</strong>${f.carro.modelo ? ' · ' + f.carro.modelo : ''}<br>
+            <span class="text-muted" style="font-size:.78rem">${f.ped.ref.embarcador || '—'} · ${f.ped.ref.colCidade || '—'} → ${f.ped.ref.entCidade || '—'} · ID ${f.ped.id}</span></span>
+          <label>R$ <input type="number" step="0.01" min="0" class="evo-sv-inp" data-idx="${f.i}" data-carro="${f.j}" placeholder="0,00"></label>
+        </div>`).join('')}
+      </div>
+      <div class="evo-actions">
+        <button class="btn btn-primary" onclick="_evoSalvarSemValor(false)">✅ Salvar valores e importar</button>
+        <button class="btn btn-secondary" onclick="_evoSalvarSemValor(true)" title="Os carros entram com frete R$ 0 — ajuste depois no pedido">Importar sem valor</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  setTimeout(() => div.querySelector('.evo-sv-inp')?.focus(), 50);
+}
+window._evoTelaSemValor = _evoTelaSemValor;
+
+function _evoSalvarSemValor(ignorar){
+  if (!ignorar){
+    const inps = [...document.querySelectorAll('.evo-sv-inp')];
+    const vazios = inps.filter(x => !(parseFloat(x.value) > 0));
+    if (vazios.length){
+      if (!confirm(`${vazios.length} carro(s) continuam sem valor. Importar assim mesmo (frete R$ 0)?`)){ vazios[0].focus(); return; }
+    }
+    inps.forEach(x => {
+      _evoValorDigitado(parseInt(x.dataset.idx), parseInt(x.dataset.carro), x.value);
+      const naPrevia = document.querySelector(`.evo-valor-inp[data-idx="${x.dataset.idx}"][data-carro="${x.dataset.carro}"]`);
+      if (naPrevia) naPrevia.value = x.value;
+    });
+  }
+  document.getElementById('evoSemValorOverlay')?.remove();
+  window._evoSemValorConferido = true;
+  _evoConfirmarImportacao();
+}
+window._evoSalvarSemValor = _evoSalvarSemValor;
+
 // Converte a data do Evo (texto dd/mm/aaaa, ou serial do Excel) para ISO
 function _evoParseData(v){
   if (!v) return null;
@@ -1287,6 +1366,19 @@ async function _evoConfirmarImportacao(){
     const carros = porGrupo[i].sort((a,b)=>a-b).map(j => base.carros[j]).filter(Boolean);
     return { ...base, carros, ref: carros[0] || base.ref };
   }).filter(p => p.carros.length);
+
+  // Carro marcado que veio sem valor e ninguém digitou: abre a tela de valores
+  // (uma vez — depois dela, importa com o que foi preenchido).
+  if (!window._evoSemValorConferido){
+    const faltando = [];
+    indices.forEach(i => porGrupo[i].forEach(j => {
+      const carro = _evoPreview[i] && _evoPreview[i].carros[j];
+      if (carro && !carro.frete && !carro.freteDigitado) faltando.push({ i, j, carro, ped: _evoPreview[i] });
+    }));
+    if (faltando.length){ _evoTelaSemValor(faltando); return; }
+  }
+  window._evoSemValorConferido = false;
+
   const btn = document.querySelector('#evoPreviewOverlay .btn-primary');
   if (btn){ btn.disabled = true; btn.textContent = '⏳ Importando...'; }
 
@@ -1330,7 +1422,7 @@ async function _evoConfirmarImportacao(){
           cnpj_entrega: c.entCnpj ? String(c.entCnpj) : null,
           cep_coleta: c.colCep ? String(c.colCep) : null,
           cep_entrega: c.entCep ? String(c.entCep) : null,
-          valor_frete: Number(carro.frete) || 0,
+          valor_frete: Number(carro.frete) || Number(carro.freteDigitado) || 0,
           data_solicitacao: _evoParseData(c.dtLancamento) || new Date().toISOString(),
           status: 'Pendente',
           aprovado: true,

@@ -81,6 +81,10 @@ function renderizarHistoricoCargas(containerId){
   if (fBusca) viagens = viagens.filter(v =>
     _norm('#'+v.id).includes(fBusca) || _norm(v.motorista).includes(fBusca) ||
     _norm(v.cegonha).includes(fBusca) || v.pedidos.some(p => _norm(p.placa||'').includes(fBusca)));
+  // Frota própria × terceiros
+  const fFrota = document.getElementById('histFrota')?.value || '';
+  if (fFrota === 'terceiro') viagens = viagens.filter(v => v.terceiro && v.terceiro.ehTerceiro);
+  if (fFrota === 'propria')  viagens = viagens.filter(v => !(v.terceiro && v.terceiro.ehTerceiro));
 
   // ordena por data desc
   viagens.sort((a,b) => String(b.data||'').localeCompare(String(a.data||'')));
@@ -111,7 +115,11 @@ function renderizarHistoricoCargas(containerId){
         </div>
         <div class="histv-card-lin">🚛 <strong>${v.cegonha}</strong> <span class="text-muted">· 📅 ${v.data ? new Date(v.data+(v.data.length<=10?'T12:00':'')).toLocaleDateString('pt-BR') : '—'}</span></div>
         <div class="histv-card-rota">${rotaTxt}</div>
-        <div class="histv-card-mot">Motorista: ${v.motorista}</div>
+        <div class="histv-card-mot">Motorista: ${v.motorista}${v.terceiro && v.terceiro.ehTerceiro ? ' <span class="mm-tag-terceiro">🤝 Terceiro</span>' : ''}</div>
+        ${v.terceiro && v.terceiro.ehTerceiro ? `<div class="histv-card-terc">
+          💸 Pagar terceiro: <strong>${v.terceiro.valor != null ? 'R$ ' + v.terceiro.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : 'a definir'}</strong>
+          ${v.terceiro.guia != null && v.terceiro.guia > 0 ? `<br>🧾 Guia ICMS: <strong>R$ ${v.terceiro.guia.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong>` : ''}
+        </div>` : ''}
         <div class="histv-card-rod">
           <span class="text-muted">${v.pedidos.length} veículo(s)</span>
           <span class="histv-card-total">R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
@@ -147,6 +155,10 @@ function _histViagensFiltradas(){
   if (fBusca) viagens = viagens.filter(v =>
     _norm('#'+v.id).includes(fBusca) || _norm(v.motorista).includes(fBusca) ||
     _norm(v.cegonha).includes(fBusca) || v.pedidos.some(p => _norm(p.placa||'').includes(fBusca)));
+  // Frota própria × terceiros
+  const fFrota = document.getElementById('histFrota')?.value || '';
+  if (fFrota === 'terceiro') viagens = viagens.filter(v => v.terceiro && v.terceiro.ehTerceiro);
+  if (fFrota === 'propria')  viagens = viagens.filter(v => !(v.terceiro && v.terceiro.ehTerceiro));
   viagens.sort((a,b) => String(b.data||'').localeCompare(String(a.data||'')));
   return viagens;
 }
@@ -331,12 +343,19 @@ function _histRenderDetalhe(){
         <div class="histv-di"><span class="histv-di-lbl">📅 DATA</span><span class="histv-di-val">${v.data ? new Date(v.data+(String(v.data).length<=10?'T12:00':'')).toLocaleDateString('pt-BR') : '—'}<br><span class="text-muted" style="font-size:.75rem">Saída: ${saida} · Chegada: ${chegada}</span></span></div>
         <div class="histv-di"><span class="histv-di-lbl">📍 ROTA</span><span class="histv-di-val">${rotaTxt}</span></div>
       </div>
+      ${v.terceiro && v.terceiro.ehTerceiro ? `<div class="histv-terc-destaque">
+        <div class="histv-terc-tit">🤝 CARGA DE TERCEIRO${v.terceiro.transportador ? ' · ' + v.terceiro.transportador : ''}</div>
+        <div class="histv-terc-linhas">
+          <div><span>Valor a pagar ao motorista terceiro</span><strong>${v.terceiro.valor != null ? 'R$ ' + v.terceiro.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '<em style="color:#f87171">a definir</em>'}</strong></div>
+          ${v.terceiro.guia != null && v.terceiro.guia > 0 ? `<div><span>Guia de ICMS</span><strong>R$ ${v.terceiro.guia.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>` : ''}
+        </div>
+      </div>` : ''}
       <div class="histv-resumo">
         <div class="histv-resumo-tit">RESUMO DA VIAGEM</div>
         <div class="histv-resumo-grid">
           <div class="histv-rz"><strong>${v.pedidos.length}</strong><span>VEÍCULOS</span></div>
           <div class="histv-rz histv-rz-fat"><strong>R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>FATURAMENTO</span></div>
-          <div class="histv-rz histv-rz-mot"><strong>R$ ${v.totalMotorista.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>MOTORISTA</span></div>
+          <div class="histv-rz histv-rz-mot"><strong>R$ ${v.totalMotorista.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>${v.terceiro && v.terceiro.ehTerceiro ? 'TERCEIRO' : 'MOTORISTA'}</span></div>
           <div class="histv-rz histv-rz-res"><strong>R$ ${v.resultado.toLocaleString('pt-BR',{minimumFractionDigits:0})}</strong><span>RESULTADO</span></div>
         </div>
       </div>
@@ -375,7 +394,11 @@ function _histAbaFinanceiro(v){
     if (vm.valor == null) temPendente = true;
     return { p, vm };
   });
-  const valorBase = detPed.reduce((s,d)=> s + (d.vm.valor||0), 0);
+  let valorBase = detPed.reduce((s,d)=> s + (d.vm.valor||0), 0);
+  // Terceiro: o custo é o valor combinado com ele (por viagem) + guia
+  const terc = v.terceiro && v.terceiro.ehTerceiro ? v.terceiro : null;
+  if (terc && terc.valor != null){ valorBase = terc.valor; temPendente = false; }
+  const despesas = terc && terc.guia ? terc.guia : 0;
 
   // status textual
   const statusTxt = v.status === 'concluida' ? `Viagem concluída com sucesso.${chegada?` Entregas finalizadas às ${chegada}.`:''}`
@@ -398,9 +421,10 @@ function _histAbaFinanceiro(v){
     <div class="histv-fin-col">
       <div class="histv-sec-tit">RESUMO FINANCEIRO</div>
       <div class="histv-fin-linha"><span>Faturamento bruto</span><strong class="v-verde">R$ ${v.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
-      <div class="histv-fin-linha"><span>Remuneração do motorista</span><strong class="v-laranja">− R$ ${valorBase.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
-      <div class="histv-fin-linha"><span>Despesas operacionais</span><strong class="text-muted">− R$ 0,00</strong></div>
-      <div class="histv-fin-linha histv-fin-resultado"><span>Resultado operacional</span><strong class="v-azul">R$ ${(v.total - valorBase).toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      <div class="histv-fin-linha"><span>${terc ? '🤝 Pagamento ao motorista terceiro' : 'Remuneração do motorista'}</span><strong class="v-laranja">${terc && terc.valor == null ? 'a definir' : '− R$ ' + valorBase.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      <div class="histv-fin-linha"><span>${terc && despesas ? '🧾 Guia de ICMS' : 'Despesas operacionais'}</span><strong class="${despesas ? 'v-laranja' : 'text-muted'}">− R$ ${despesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      <div class="histv-fin-linha histv-fin-resultado"><span>Resultado operacional</span><strong class="v-azul">R$ ${(v.total - valorBase - despesas).toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong></div>
+      ${terc && terc.valor == null ? '<div class="histv-fin-aviso">⚠️ Valor do terceiro ainda não informado (Viagens em andamento → bloco Motorista terceiro).</div>' : ''}
       ${temPendente?'<div class="histv-fin-aviso">⚠️ Há pedido(s) com remuneração a definir — o total do motorista pode mudar.</div>':''}
     </div>
 
@@ -624,6 +648,11 @@ function _histCargasCasca(){
       <input type="text" id="histCegonha" class="histv-fil" placeholder="🚛 Cegonha" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <input type="text" id="histOrigem" class="histv-fil" placeholder="📍 Origem" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
       <input type="text" id="histDestino" class="histv-fil" placeholder="🏁 Destino" oninput="_mmDeb('renderizarHistoricoCargas', renderizarHistoricoCargas)">
+      <select id="histFrota" class="histv-fil" onchange="renderizarHistoricoCargas()" title="Filtrar por frota própria ou terceiros">
+        <option value="">🚛 Todas as cargas</option>
+        <option value="propria">🏢 Frota própria</option>
+        <option value="terceiro">🤝 Somente terceiros</option>
+      </select>
       <div class="hist-datas-grupo">
         <label class="hist-data">De <input type="date" id="histDataDe" onchange="renderizarHistoricoCargas()"></label>
         <label class="hist-data">Até <input type="date" id="histDataAte" onchange="renderizarHistoricoCargas()"></label>
@@ -647,6 +676,11 @@ function _histDadosViagem(r){
   const comCte = pedidos.filter(p => p.numeroCte || ((typeof cteInfoDoPedido==='function') && cteInfoDoPedido(p.id))).length;
   const entregues = pedidos.filter(p => p.status === 'Entregue').length;
   const data = r.data_saida || r.iniciada_em || (pedidos[0] && _dataLancamento(pedidos[0])) || null;
+  const terceiro = (typeof _infoTerceiroViagem === 'function') ? _infoTerceiroViagem(r, pedidos) : null;
+  // Terceiro: o custo da viagem é o valor combinado + guia de ICMS
+  let custoMot = totalMotorista;
+  if (terceiro && terceiro.ehTerceiro && terceiro.valor != null) custoMot = terceiro.valor;
+  const custoGuia = (terceiro && terceiro.ehTerceiro && terceiro.guia) ? terceiro.guia : 0;
   return {
     id: r.id, nome: r.nome, rota: r,
     motorista: r.motorista_1 || (pedidos[0]&&pedidos[0].motorista1) || '—',
@@ -654,8 +688,8 @@ function _histDadosViagem(r){
     modelo: (veiculosGlobais||[]).find(v => v.placa === r.placa_cegonha)?.tipo || '',
     data, status: r.status,
     paradas: Array.isArray(r.paradas) ? r.paradas : [],
-    pedidos, total, totalMotorista, comCte, entregues,
-    resultado: total - totalMotorista
+    pedidos, total, totalMotorista: custoMot, comCte, entregues, terceiro,
+    resultado: total - custoMot - custoGuia
   };
 }
 

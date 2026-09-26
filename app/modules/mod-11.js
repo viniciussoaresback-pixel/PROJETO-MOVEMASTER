@@ -967,11 +967,24 @@ function renderizarViagensAndamento(){
   const cont = document.getElementById('painelViewViagens');
   if (!cont) return;
   // Viagens ativas = rotas em andamento (ou planejadas com carga)
-  const rotasAtivas = (rotasGlobais||[]).filter(r =>
+  const todasAtivas = (rotasGlobais||[]).filter(r =>
     r.status === 'em_andamento' || r.status === 'planejada');
 
+  // Filtro: todas as ativas × frota própria × terceiros
+  const _ehTerc = r => (typeof _infoTerceiroViagem === 'function') && _infoTerceiroViagem(r, _veiculosNaRota(r.id)).ehTerceiro;
+  const qtdTerc = todasAtivas.filter(_ehTerc).length;
+  const filtro = window._viagemFiltroFrota || 'todas';
+  const rotasAtivas = filtro === 'terceiro' ? todasAtivas.filter(_ehTerc)
+                    : filtro === 'propria'  ? todasAtivas.filter(r => !_ehTerc(r))
+                    : todasAtivas;
+  const chips = `<div class="jv-filtro-frota">
+      <button class="jv-ff-btn ${filtro==='todas'?'sel':''}" onclick="_viagemFiltrarFrota('todas')">🚚 Viagens ativas <b>${todasAtivas.length}</b></button>
+      <button class="jv-ff-btn ${filtro==='propria'?'sel':''}" onclick="_viagemFiltrarFrota('propria')">🏢 Frota própria <b>${todasAtivas.length - qtdTerc}</b></button>
+      <button class="jv-ff-btn jv-ff-terc ${filtro==='terceiro'?'sel':''}" onclick="_viagemFiltrarFrota('terceiro')">🤝 Terceiros <b>${qtdTerc}</b></button>
+    </div>`;
+
   if (rotasAtivas.length === 0){
-    cont.innerHTML = `<p class="text-muted" style="padding:1.5rem;text-align:center">🚚 Nenhuma viagem em andamento no momento.<br><span style="font-size:.85rem">Crie e inicie uma rota para acompanhá-la aqui.</span></p>`;
+    cont.innerHTML = chips + `<p class="text-muted" style="padding:1.5rem;text-align:center">🚚 Nenhuma viagem ${filtro==='terceiro'?'de terceiro ':filtro==='propria'?'da frota própria ':''}em andamento no momento.<br><span style="font-size:.85rem">Crie e inicie uma rota para acompanhá-la aqui.</span></p>`;
     return;
   }
 
@@ -983,10 +996,10 @@ function renderizarViagensAndamento(){
   const carros = _veiculosNaRota(rota.id);
 
   // Lista lateral de viagens + detalhe da selecionada
-  cont.innerHTML = `
+  cont.innerHTML = chips + `
     <div class="viagens-layout">
       <div class="viagens-lista">
-        <div class="viagens-lista-tit">🚚 Viagens ativas (${rotasAtivas.length})</div>
+        <div class="viagens-lista-tit">${filtro==='terceiro'?'🤝 Viagens de terceiros':filtro==='propria'?'🏢 Viagens da frota própria':'🚚 Viagens ativas'} (${rotasAtivas.length})</div>
         ${rotasAtivas.map(r => {
           const cs = _veiculosNaRota(r.id);
           const et = _viagemEtapaAtual(r, cs);
@@ -1011,7 +1024,7 @@ function renderizarViagensAndamento(){
               if (isNaN(d)) return '';
               return `<div class="viagem-item-data">📅 ${d.toLocaleDateString('pt-BR')}</div>`;
             })()}
-            <div class="viagem-item-etapa">${VIAGEM_ETAPAS[et].icone} ${VIAGEM_ETAPAS[et].label}</div>
+            <div class="viagem-item-etapa">${VIAGEM_ETAPAS[et].icone} ${VIAGEM_ETAPAS[et].label}${_ehTerc(r) ? ' <span class="mm-tag-terceiro">🤝 Terceiro</span>' : ''}</div>
           </div>`;
         }).join('')}
       </div>
@@ -1019,6 +1032,14 @@ function renderizarViagensAndamento(){
         ${_viagemDetalheHTML(rota, carros)}
       </div>
     </div>`;
+  // Mapa da rota: desenha depois que o HTML entrou na tela
+  if (typeof mmRoteirizadorMontarCard === 'function') setTimeout(() => mmRoteirizadorMontarCard(rota.id), 0);
+}
+
+function _viagemFiltrarFrota(qual){
+  window._viagemFiltroFrota = qual;
+  _viagemSelecionada = null;
+  renderizarViagensAndamento();
 }
 
 function _selecionarViagem(rotaId){
@@ -1085,7 +1106,9 @@ function _viagemDetalheHTML(rota, carros){
 
   // ===== BLOCO Motorista Terceiro (só aparece quando o motorista da rota é terceiro) =====
   const motRota = (motoristasGlobais||[]).find(m => normNomeMotorista(m.nome||'') === normNomeMotorista(rota.motorista_1||''));
-  const ehTerceiro = motRota && motRota.vinculo === 'terceiro';
+  // Terceiro = motorista terceiro OU cegonha de terceiro
+  const ehTerceiro = (motRota && motRota.vinculo === 'terceiro')
+    || ((typeof _infoTerceiroViagem === 'function') && _infoTerceiroViagem(rota, carros).ehTerceiro);
   let blocoTerceiro = '';
   if (ehTerceiro){
     // usa o primeiro carro como referência para o valor (é por viagem)
@@ -1180,7 +1203,7 @@ function _viagemDetalheHTML(rota, carros){
 
   return `${timeline}
     <div class="jv-corpo">
-      <div class="jv-col-esq">${dados}${blocoTerceiro}${resumo}${documentos}</div>
+      <div class="jv-col-esq">${dados}${blocoTerceiro}${resumo}${documentos}${typeof mmRoteirizadorCardHTML === 'function' ? mmRoteirizadorCardHTML(rota.id) : ''}</div>
       <div class="jv-col-dir">${veiculosCarga}${acoes}</div>
     </div>`;
 }
