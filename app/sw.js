@@ -28,6 +28,7 @@ const ARQUIVOS_BASE = [
   './modules/mod-11.js',
   './modules/mod-12.js',
   './modules/mod-13.js',
+  './crm.css',
   './supabase-config.js',
   './dedupe-consultas.js',
   './carregador.js',
