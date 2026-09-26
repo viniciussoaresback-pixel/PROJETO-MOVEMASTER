@@ -1233,7 +1233,7 @@ function _abrirPDF(titulo, corpoHtml) {
         + '</div>'
         + corpoHtml
         + '<div class="pdf-rodape">Movemaster - Controle Logistico - documento gerado pelo sistema</div>'
-        + '<scr' + 'ipt>(function(){var i=document.querySelector(".pdf-logo");function g(){setTimeout(function(){window.print();},150);}if(i&&!i.complete){i.onload=g;i.onerror=g;setTimeout(g,1500);}else{g();}})();</scr' + 'ipt>'
+        + '<scr' + 'ipt>(function(){var i=document.querySelector(".pdf-logo"),f=0;function g(){if(f)return;f=1;setTimeout(function(){window.print();},150);}if(i&&!i.complete){i.onload=g;i.onerror=g;setTimeout(g,1500);}else{g();}})();</scr' + 'ipt>'
         + '</body></html>';
     win.document.write(html);
     win.document.close();

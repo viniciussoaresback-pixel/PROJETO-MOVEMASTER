@@ -39,11 +39,11 @@ function _planAprovacaoListaHTML(){
       try { datasHTML = _planPedidoDatasHTML(p); } catch(e){ datasHTML = ''; }
       return `<div class="plan-aprov-card" draggable="true" ondragstart="_planDragStart(event, ${p.id})">
         <div class="plan-aprov-top">
-          <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
+          <span><strong>#${p.id}</strong> · ${_mmEsc(p.placa||'')} <span class="text-muted">${_mmEsc(p.modelo||'')}</span></span>
           <span class="plan-aprov-selo">⏳ Aguardando</span>
         </div>
-        <div class="plan-aprov-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
-        ${p.origemLancamento === 'cliente' ? `<div class="plan-aprov-cliente" title="Solicitação feita pelo próprio cliente no portal">🏢 Solicitado pelo cliente: <strong>${String(p.criadoPorNome||p.cliente||'').replace(/^Cliente:\s*/,'')}</strong></div>` : (p.criadoPorNome ? `<div class="plan-aprov-cliente">👤 Lançado por ${p.criadoPorNome}</div>` : '')}
+        <div class="plan-aprov-sub">${_mmEsc(p.cliente||'')} · ${_mmEsc(p.cidadeOrigem||'')} → ${_mmEsc(p.cidadeDestino||'')}</div>
+        ${p.origemLancamento === 'cliente' ? `<div class="plan-aprov-cliente" title="Solicitação feita pelo próprio cliente no portal">🏢 Solicitado pelo cliente: <strong>${_mmEsc(String(p.criadoPorNome||p.cliente||'').replace(/^Cliente:\s*/,''))}</strong></div>` : (p.criadoPorNome ? `<div class="plan-aprov-cliente">👤 Lançado por ${_mmEsc(p.criadoPorNome)}</div>` : '')}
         ${datasHTML}
         <div class="plan-aprov-acoes">
           <button class="plan-aprov-btn" onclick="_aprovarPedido(${p.id})">✅ Aprovar pedido</button>
@@ -1592,11 +1592,18 @@ async function _centralRegistrarRetirada(pedidoId){
 }
 
 // Faixa de folgas/afastamentos/lembretes no topo do Planejamento (só visualização)
+// Data local (AAAA-MM-DD) daqui a N dias. toISOString() dá a data em UTC:
+// no Brasil o "hoje" virava amanhã às 21h e o aviso de férias errava o dia.
+function _planDataLocal(dias){
+  const d = new Date(Date.now() + (dias||0)*86400000);
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
+
 function _planFolgasHTML(){
   const folgas = window.folgasGlobais || (typeof folgasGlobais !== 'undefined' ? folgasGlobais : []);
   if (!folgas || folgas.length === 0) return '';
-  const hoje = new Date().toISOString().slice(0,10);
-  const em7 = new Date(Date.now() + 7*86400000).toISOString().slice(0,10);
+  const hoje = _planDataLocal(0);
+  const em7 = _planDataLocal(7);
   // ativos hoje + que começam nos próximos 7 dias
   // Férias têm faixa própria (_planFeriasFaixaHTML), com o período inteiro
   const relevantes = folgas.filter(f => f.tipo !== 'ferias').filter(f => {
@@ -1634,8 +1641,8 @@ function _planIndispMotorista(nome){
   const folgas = window.folgasGlobais || (typeof folgasGlobais !== 'undefined' ? folgasGlobais : []);
   const norm = t => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
   const alvo = norm(nome);
-  const hoje = new Date().toISOString().slice(0,10);
-  const em30 = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
+  const hoje = _planDataLocal(0);
+  const em30 = _planDataLocal(30);
   const doMot = (folgas||[]).filter(f => ['ferias','folga','atestado'].includes(f.tipo) && norm(f.motorista_nome) === alvo);
   const ativo = doMot.find(f => hoje >= String(f.data_inicio).slice(0,10) && hoje <= String(f.data_fim||f.data_inicio).slice(0,10));
   if (ativo) return { ...ativo, _ativo: true };
@@ -1665,8 +1672,8 @@ function _planAvisoFeriasMot(){
 // próximos 30 dias, sempre com o período completo.
 function _planFeriasFaixaHTML(){
   const folgas = window.folgasGlobais || (typeof folgasGlobais !== 'undefined' ? folgasGlobais : []);
-  const hoje = new Date().toISOString().slice(0,10);
-  const em30 = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
+  const hoje = _planDataLocal(0);
+  const em30 = _planDataLocal(30);
   const d = x => new Date(String(x).slice(0,10)+'T12:00').toLocaleDateString('pt-BR');
   const ferias = (folgas||[]).filter(f => f.tipo === 'ferias').filter(f => {
     const ini = String(f.data_inicio).slice(0,10), fim = String(f.data_fim||f.data_inicio).slice(0,10);

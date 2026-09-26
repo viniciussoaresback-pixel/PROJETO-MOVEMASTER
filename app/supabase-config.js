@@ -585,6 +585,15 @@ function _usuarioAtualNome(){
 }
 window._usuarioAtualNome = _usuarioAtualNome;
 
+// Escapa texto antes de ir para innerHTML. Obrigatório em tudo que vem do
+// portal do cliente (nome, empresa, placa, cidade...): é texto digitado por
+// gente de fora, e sem isto um "<img onerror=...>" rodaria na sessão da
+// logística ou do admin.
+function _mmEsc(s){
+    return String(s == null ? '' : s).replace(/[&<>"'`]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;' }[c]));
+}
+window._mmEsc = _mmEsc;
+
 function alternarVerSenha(campoId, botao) {
     const campo = document.getElementById(campoId);
     if (!campo) return;
@@ -2126,8 +2135,8 @@ async function carregarListaUsuarios() {
 
         corpo.innerHTML = data.map(u => `
             <tr>
-                <td class="col-nome">${u.nome || '—'}${u.perfil === 'cliente' && (u.empresa_nome || u.cidade) ? `<br><small class="text-muted">🏢 ${u.empresa_nome || ''}${u.cidade ? ' · ' + u.cidade + (u.uf ? '/' + u.uf : '') : ''}${!u.ativo ? ' · <strong style="color:#f59e0b">aguardando liberação</strong>' : ''}</small>` : ''}</td>
-                <td class="col-email" title="${(u.email || '').replace(/"/g, '&quot;')}">${u.email || '—'}</td>
+                <td class="col-nome">${_mmEsc(u.nome || '—')}${u.perfil === 'cliente' && (u.empresa_nome || u.cidade) ? `<br><small class="text-muted">🏢 ${_mmEsc(u.empresa_nome || '')}${u.cidade ? ' · ' + _mmEsc(u.cidade) + (u.uf ? '/' + _mmEsc(u.uf) : '') : ''}${!u.ativo ? ' · <strong style="color:#f59e0b">aguardando liberação</strong>' : ''}</small>` : ''}</td>
+                <td class="col-email" title="${_mmEsc(u.email || '')}">${_mmEsc(u.email || '—')}</td>
                 <td class="col-perfil"><span class="badge-perfil ${CORES_PERFIL[u.perfil] || ''}">${NOMES_PERFIL[u.perfil] || u.perfil}</span></td>
                 <td class="col-status">
                     <span class="status-pill ${u.ativo ? 'ativo' : 'inativo'}">

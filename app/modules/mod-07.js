@@ -449,9 +449,11 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
     if (opcoes.espelhoId && supabase) {
         try {
             const { data } = await supabase.from('ocorrencias')
-                .select('dados_extras, created_at').eq('id', opcoes.espelhoId).maybeSingle();
+                .select('dados_extras, created_at, usuario_nome').eq('id', opcoes.espelhoId).maybeSingle();
             const ex = JSON.parse(data?.dados_extras || '{}');
             extrasSalvos = ex;
+            // Espelhos antigos não têm solicitante_nome: quem gerou é o usuario_nome do registro
+            if (!ex.solicitante_nome && data?.usuario_nome) ex.solicitante_nome = data.usuario_nome;
             if (Array.isArray(ex.snapshot) && ex.snapshot.length > 0) {
                 snapshotSalvo = ex.snapshot;
                 numeroDocSalvo = ex.numero_doc || null;
@@ -496,15 +498,27 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
 
     // Responsáveis e pagamento do terceiro. Espelho já registrado → usa o que
     // foi gravado na hora; geração nova → quem está logado + criador da rota.
-    const _rotaEsp = (rotasGlobais||[]).find(x => String(x.id) === String(opcoes.rotaId || pedidos[0]?.rotaId || pedidos[0]?.rota_id || extrasSalvos?.rota_id || ''))
-        || (rotasGlobais||[]).find(x => x.placa_cegonha === placaCegonha && x.status !== 'concluida' && x.status !== 'cancelada');
+    // Reimpressão (espelhoId): só a viagem GRAVADA no espelho — nunca "a
+    // viagem ativa desta cegonha", que pode ser outra, mais nova.
+    const _rotaEsp = opcoes.espelhoId
+        ? (extrasSalvos && extrasSalvos.rota_id ? (rotasGlobais||[]).find(x => String(x.id) === String(extrasSalvos.rota_id)) : null)
+        : ((rotasGlobais||[]).find(x => String(x.id) === String(opcoes.rotaId || pedidos[0]?.rotaId || pedidos[0]?.rota_id || ''))
+           || (rotasGlobais||[]).find(x => x.placa_cegonha === placaCegonha && x.status !== 'concluida' && x.status !== 'cancelada'));
     const _respLive = _espelhoResponsaveis(_rotaEsp, _usuarioAtualNome() || 'Logística');
     const respSolicitante = (extrasSalvos && extrasSalvos.solicitante_nome) || (opcoes.espelhoId ? null : _respLive.solicitante);
     const respPlanejamento = (extrasSalvos && extrasSalvos.planejamento_nome) || _respLive.planejamento;
-    const _tercLive = _infoTerceiroViagem(_rotaEsp, pedidos, placaCegonha);
-    const terc = (extrasSalvos && extrasSalvos.terceiro)
-        ? { ehTerceiro: true, motorista: extrasSalvos.terceiro.motorista, valor: extrasSalvos.terceiro.valor, guia: extrasSalvos.terceiro.guia }
-        : _tercLive;
+    let terc;
+    if (extrasSalvos && Object.prototype.hasOwnProperty.call(extrasSalvos, 'terceiro')){
+        // gravado na geração (null = viagem própria)
+        terc = extrasSalvos.terceiro
+            ? { ehTerceiro: true, motorista: extrasSalvos.terceiro.motorista, valor: extrasSalvos.terceiro.valor, guia: extrasSalvos.terceiro.guia }
+            : { ehTerceiro: false };
+    } else if (opcoes.espelhoId){
+        // espelho anterior a esta versão: não havia o dado — não inventa
+        terc = { ehTerceiro: false };
+    } else {
+        terc = _infoTerceiroViagem(_rotaEsp, pedidos, placaCegonha);
+    }
     const _fmtR = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     const blocoResponsaveis = `
     <div class="resp-box">
@@ -807,7 +821,11 @@ function _infoTerceiroViagem(rota, carros, placaCegonha){
     const veic = placa ? (typeof veiculosGlobais !== 'undefined' ? veiculosGlobais : []).find(v => v.placa === placa) : null;
     const comValor = lista.find(c => c.valorMotoristaTerceiro != null && c.valorMotoristaTerceiro !== '');
     const comGuia = lista.find(c => c.guiaIcmsValor != null && c.guiaIcmsValor !== '');
-    const ehTerceiro = !!((mot && mot.vinculo === 'terceiro') || (veic && veic.propriedade === 'terceiro') || comValor);
+    // O valor salvo só decide quando o motorista não está no cadastro: se a
+    // viagem passou para motorista e cegonha próprios, um valor antigo que
+    // ficou nos carros não pode continuar marcando a viagem como terceiro.
+    const ehTerceiro = !!((mot && mot.vinculo === 'terceiro') || (veic && veic.propriedade === 'terceiro')
+        || (comValor && !mot));
     return {
         ehTerceiro,
         motorista: nomeMot || (veic && veic.transportador_nome) || null,

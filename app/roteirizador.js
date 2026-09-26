@@ -156,6 +156,17 @@
   }
 
   // ---------- desenho do mapa ----------
+  // A tela de viagens é redesenhada inteira a cada ação (innerHTML novo), e o
+  // mapa antigo fica solto na memória com seus eventos e camadas. Antes de
+  // criar outro, desmonta os que já saíram da tela.
+  let _mapasVivos = [];
+  function limparMapasSoltos(){
+    _mapasVivos = _mapasVivos.filter(m => {
+      const noDom = m && m._container && document.body.contains(m._container);
+      if (!noDom){ try { m.remove(); } catch (e) {} }
+      return noDom;
+    });
+  }
   function icone(L, cor){
     return L.divIcon({
       className: 'mm-rt-pin',
@@ -176,8 +187,10 @@
     if (r.erro){ el.innerHTML = `<div class="mm-rt-status">⚠️ ${esc(r.erro)}</div>`; return r; }
     el.innerHTML = '';
     if (el._mmMapa){ try { el._mmMapa.remove(); } catch (e) {} }
+    limparMapasSoltos();
     const mapa = L.map(el, { zoomControl: true, scrollWheelZoom: !!opcoes.scrollZoom, attributionControl: true });
     el._mmMapa = mapa;
+    _mapasVivos.push(mapa);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18, attribution: '&copy; OpenStreetMap'
     }).addTo(mapa);
