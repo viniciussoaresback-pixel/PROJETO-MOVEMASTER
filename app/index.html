@@ -345,9 +345,7 @@
                          3 abas do módulo CRM. Ficam escondidas para quem
                          não é do perfil `crm` (nem admin) — o
                          aplicarPermissoes cuida disso. -->
-                    <button class="nav-btn" data-tab="crmCadastros">🎯 CRM · Cadastros</button>
-                    <button class="nav-btn" data-tab="crmTarefas">✅ CRM · Tarefas</button>
-                    <button class="nav-btn" data-tab="crmPainel">📊 CRM · Painel</button>
+                    <button class="nav-btn" data-tab="crm">🎯 CRM</button>
                     <button class="nav-btn" data-tab="portalCliente">🏢 Meus transportes</button>
                 </nav>
             </div>
@@ -2188,14 +2186,16 @@
                  Cada section é um slot vazio; o mod-13.js renderiza
                  dentro do respectivo *Conteudo* ao abrir a aba.
                  ═══════════════════════════════════════════════════════════ -->
-            <section id="crmCadastros" class="tab-content">
-                <div id="crmCadastrosConteudo"></div>
-            </section>
-            <section id="crmTarefas" class="tab-content">
-                <div id="crmTarefasConteudo"></div>
-            </section>
-            <section id="crmPainel" class="tab-content">
-                <div id="crmPainelConteudo"></div>
+            <!-- CRM (mod-13.js): um item de menu, 3 áreas internas -->
+            <section id="crm" class="tab-content">
+                <div class="crm-subnav" id="crmSubnav">
+                    <button class="crm-subnav-btn ativo" data-area="cadastro" onclick="crmIrPara('cadastro')">📇 Cadastro</button>
+                    <button class="crm-subnav-btn" data-area="tarefas" onclick="crmIrPara('tarefas')">✅ Gestor de Tarefas</button>
+                    <button class="crm-subnav-btn" data-area="painel" onclick="crmIrPara('painel')">📊 Painel de Acompanhamento</button>
+                </div>
+                <div id="crmCadastrosConteudo" class="crm-area"></div>
+                <div id="crmTarefasConteudo" class="crm-area" style="display:none"></div>
+                <div id="crmPainelConteudo" class="crm-area" style="display:none"></div>
             </section>
             <!-- Portal do cliente (perfil "cliente") — portal-cliente.js -->
             <section id="portalCliente" class="tab-content">

@@ -357,7 +357,9 @@ function filtrarClientes(termo) {
 
     lista.innerHTML = filtrados.map(c => {
         const doc = c.cnpj || c.cpf || '';
-        const tipo = c.tipo_cliente ? `<span class="cliente-tipo-badge">${c.tipo_cliente}</span>` : '';
+        // Lead (CRM) ainda não é cliente: o tipo dele é provisório
+        const tipo = c.eh_lead ? `<span class="cliente-tipo-badge" style="background:#22c55e22;color:#22c55e">🌱 LEAD</span>`
+                   : c.tipo_cliente ? `<span class="cliente-tipo-badge">${c.tipo_cliente}</span>` : '';
         const cod = c.codigo ? `<span class="cliente-cod">${c.codigo}</span>` : '';
         const cidadeUf = `${c.cidade||''}${c.uf?('/'+c.uf):''}`;
         const fantasia = (c.nome_fantasia && _norm(c.nome_fantasia) !== _norm(c.nome||'')) ? `<span class="cliente-fantasia">🏷️ ${c.nome_fantasia}</span>` : '';
@@ -370,6 +372,14 @@ function filtrarClientes(termo) {
 }
 
 function selecionarCliente(id, nome, doc, tipo, codigo) {
+    // Lead do CRM: completa o cadastro antes (vira cliente, mesmo registro)
+    // e o CRM chama esta função de novo já com o cliente pronto.
+    const _cliLead = (clientesGlobais||[]).find(c => String(c.id) === String(id));
+    if (_cliLead && _cliLead.eh_lead && typeof _crmModalCompletarCadastro === 'function') {
+        const l = document.getElementById('listaClientesBusca'); if (l) l.style.display = 'none';
+        _crmModalCompletarCadastro(id);
+        return;
+    }
     document.getElementById('clienteBusca').value = nome;
     document.getElementById('cliente').value = nome;
     document.getElementById('clienteId').value = id;
