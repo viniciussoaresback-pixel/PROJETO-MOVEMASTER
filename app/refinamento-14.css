@@ -1,0 +1,194 @@
+/* ============================================================================
+   refinamento-14.css — 2026-09-26
+   Terceiros (viagens, histórico, fiscal), roteirizador (mapa da viagem),
+   férias no planejamento, EVO sem valor, equipes compactas no celular e
+   portal do cliente. Carregado pelo carregador.js.
+   ============================================================================ */
+
+/* ---------- selo "terceiro" ---------- */
+.mm-tag-terceiro{ display:inline-block; font-size:.66rem; font-weight:800; padding:1px 7px; border-radius:999px;
+  color:#a855f7; background:#a855f718; border:1px solid #a855f745; white-space:nowrap; vertical-align:middle; }
+
+/* ---------- Viagens em andamento: filtro frota ---------- */
+.jv-filtro-frota{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px; }
+.jv-ff-btn{ display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:10px; cursor:pointer;
+  font-size:.82rem; font-weight:700; color:var(--text-secondary,#c3c8d0);
+  background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid var(--border,rgba(255,255,255,.12)); }
+.jv-ff-btn b{ font-size:.75rem; padding:1px 7px; border-radius:999px; background:rgba(255,255,255,.08); }
+.jv-ff-btn:hover{ border-color:#ff6a0066; }
+.jv-ff-btn.sel{ color:#ff6a00; border-color:#ff6a00; background:#ff6a0018; }
+.jv-ff-btn.jv-ff-terc.sel{ color:#a855f7; border-color:#a855f7; background:#a855f718; }
+[data-tema="claro"] .jv-ff-btn b{ background:rgba(16,19,26,.07); }
+
+/* ---------- Viagens em andamento: card do mapa ---------- */
+.jv-mapa{ margin-top:14px; padding:12px; border-radius:14px;
+  border:1px solid var(--border,rgba(255,255,255,.12)); background:var(--surface-1,rgba(255,255,255,.03)); }
+.jv-mapa-cab{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.jv-mapa-tit{ font-weight:800; font-size:.9rem; }
+.jv-mapa-resumo{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:.8rem; min-height:20px; margin-bottom:8px; }
+.jv-mapa-area{ height:300px; border-radius:10px; overflow:hidden; background:var(--surface-2,rgba(255,255,255,.04)); position:relative; z-index:0; }
+.mm-rt-status{ display:flex; align-items:center; justify-content:center; height:100%; min-height:120px;
+  font-size:.85rem; color:var(--text-tertiary,#8b93a1); text-align:center; padding:1rem; }
+.mm-rt-km{ font-weight:800; color:#fff; background:#2563eb; padding:2px 9px; border-radius:999px; font-size:.78rem; }
+.mm-rt-km-mini{ margin-left:6px; font-weight:800; background:#fff; color:#2563eb; padding:1px 7px; border-radius:999px; font-size:.75rem; }
+.mm-rt-tempo{ color:var(--text-secondary,#c3c8d0); }
+.mm-rt-legenda{ display:flex; gap:14px; flex-wrap:wrap; justify-content:flex-end; margin-top:8px; font-size:.72rem; color:var(--text-secondary,#c3c8d0); }
+.mm-rt-legenda span{ display:inline-flex; align-items:center; gap:5px; }
+.mm-rt-legenda i{ display:inline-block; width:10px; height:10px; border-radius:50%; }
+.mm-rt-pin{ background:none; border:none; }
+.mm-rt-pin span{ display:block; width:18px; height:18px; margin:0 auto; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
+  border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.45); }
+
+/* modal grande (estilo Atua) */
+.mm-rt-modal{ position:fixed; inset:0; z-index:100150; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; padding:2vh 2vw; }
+.mm-rt-caixa{ width:min(1200px,100%); max-height:96vh; display:flex; flex-direction:column; border-radius:14px; overflow:hidden;
+  background:var(--surface-1,#1a1c20); border:1px solid var(--border,rgba(255,255,255,.14)); }
+.mm-rt-topo{ display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
+  background:linear-gradient(180deg,#2f6fb5,#255c98); color:#fff; font-size:.95rem; }
+.mm-rt-x{ background:rgba(255,255,255,.18); border:none; color:#fff; width:28px; height:28px; border-radius:6px; cursor:pointer; }
+.mm-rt-mapa{ height:62vh; min-height:320px; position:relative; z-index:0; }
+.mm-rt-dica{ font-size:.78rem; color:var(--text-secondary,#c3c8d0); padding:8px 14px 0; }
+.mm-rt-caixa .mm-rt-legenda{ padding:0 14px; }
+.mm-rt-rodape{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 14px 14px; }
+.mm-rt-resumo{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:.86rem; }
+.mm-rt-botoes{ display:flex; gap:8px; }
+@media (max-width:640px){
+  .jv-mapa-area{ height:230px; }
+  .mm-rt-mapa{ height:55vh; }
+  .mm-rt-botoes{ width:100%; }
+  .mm-rt-botoes .btn{ flex:1; }
+}
+
+/* ---------- Histórico de cargas: terceiro ---------- */
+.histv-card-terc{ margin-top:5px; font-size:.74rem; line-height:1.45; padding:5px 8px; border-radius:7px;
+  color:var(--text-secondary,#c3c8d0); background:#a855f712; border:1px solid #a855f738; }
+.histv-card-terc strong{ color:#c084fc; }
+.histv-terc-destaque{ padding:10px 12px; border-radius:12px; border:2px solid #a855f7; background:#a855f712; }
+.histv-terc-tit{ font-size:.72rem; font-weight:800; letter-spacing:.06em; color:#c084fc; margin-bottom:6px; }
+.histv-terc-linhas > div{ display:flex; justify-content:space-between; gap:12px; font-size:.84rem; padding:2px 0; }
+.histv-terc-linhas strong{ font-size:1rem; }
+[data-tema="claro"] .histv-card-terc strong,
+[data-tema="claro"] .histv-terc-tit{ color:#7e22ce; }
+
+/* ---------- Fiscal: terceiro ---------- */
+.fiscal-terceiro{ margin-top:4px; font-size:.74rem; line-height:1.4; padding:4px 7px; border-radius:6px;
+  background:#a855f714; border:1px solid #a855f740; }
+
+/* ---------- Planejamento: férias ---------- */
+.plan-ferias{ display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; margin:0 0 10px; padding:9px 12px; border-radius:12px;
+  border:1px solid #34d39955; background:#34d39912; }
+.plan-ferias-tit{ font-size:.78rem; font-weight:800; color:#34d399; white-space:nowrap; padding-top:4px; }
+.plan-ferias-lista{ display:flex; gap:8px; flex-wrap:wrap; }
+.plan-ferias-chip{ display:inline-flex; flex-direction:column; gap:1px; padding:5px 10px; border-radius:9px; font-size:.76rem;
+  border:1px dashed #34d39977; background:var(--surface-1,rgba(255,255,255,.03)); }
+.plan-ferias-chip.ativo{ border-style:solid; border-color:#34d399; background:#34d3991f; }
+.plan-ferias-chip em{ font-style:normal; font-size:.68rem; color:var(--text-tertiary,#8b93a1); }
+.plan-ferias-chip.ativo em{ color:#34d399; font-weight:700; }
+.plan-ferias-aviso{ margin-top:6px; font-size:.78rem; font-weight:700; padding:6px 9px; border-radius:8px;
+  color:#f59e0b; background:#f59e0b14; border:1px solid #f59e0b45; }
+.plan-ferias-aviso.ativo{ color:#ef4444; background:#ef444414; border-color:#ef444455; }
+[data-tema="claro"] .plan-ferias-tit,
+[data-tema="claro"] .plan-ferias-chip.ativo em{ color:#047857; }
+.plan-aprov-cliente{ font-size:.74rem; margin:3px 0; color:#38bdf8; }
+[data-tema="claro"] .plan-aprov-cliente{ color:#0369a1; }
+
+/* ---------- Importação EVO: sem valor ---------- */
+.evo-aviso-sem-valor{ margin:0 0 10px; padding:9px 12px; border-radius:10px; font-size:.84rem;
+  color:#f59e0b; background:#f59e0b12; border:1px solid #f59e0b55; }
+.evo-sem-valor{ display:inline-flex; align-items:center; gap:5px; margin-left:8px; font-size:.76rem; font-weight:700; color:#f59e0b; }
+.evo-valor-inp{ width:96px; padding:3px 7px; font-size:.8rem; border-radius:6px;
+  border:1px solid #f59e0b88; background:var(--surface-1,rgba(255,255,255,.04)); color:inherit; }
+.evo-sv-todos{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0 10px; font-size:.85rem; }
+.evo-sv-todos input, .evo-sv-linha input{ width:110px; padding:5px 8px; border-radius:7px;
+  border:1px solid var(--border,rgba(255,255,255,.16)); background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.evo-sv-linha{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 4px;
+  border-bottom:1px solid var(--border-soft,rgba(255,255,255,.07)); font-size:.86rem; }
+
+/* ---------- Equipes: celular compacto ----------
+   A versão anterior (campo-mobile.css) tinha cartões grandes, pensados para
+   luva e sol — mas mostravam 2 carros por tela. Aqui fica mais enxuto: mais
+   carros visíveis ao entrar, botão ainda com altura de dedo (40px). */
+@media (max-width:760px){
+  #equipes > .card{ padding:10px 10px 12px; }
+  #equipes > .card > .painel-header-bar h2{ font-size:1rem; }
+  #equipes > .card > p.text-muted{ display:none; }
+  #equipesPainelWrap{ font-size:14px; }
+  #equipesPainelWrap .corredor-card{ padding:8px; margin-bottom:10px !important; border-radius:12px; }
+  #equipesPainelWrap .corredor-card-cab{ padding:4px 4px 6px; gap:4px; flex-wrap:wrap; }
+  #equipesPainelWrap .corredor-card-cab strong{ font-size:.92rem; }
+  #equipesPainelWrap .corredor-card-cab .carteira-badge{ font-size:.68rem; padding:1px 6px; }
+  #equipesPainelWrap .corredor-card-cab > div:last-child{ font-size:.72rem !important; }
+  #equipesPainelWrap .equipe-abas{ display:flex; gap:6px; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; margin-bottom:6px; }
+  #equipesPainelWrap .equipe-abas .ocup-chip{ font-size:.74rem; padding:5px 10px; white-space:nowrap; flex:none; }
+  #equipesPainelWrap .corredor-pedidos{ padding-left:2px; padding-right:2px; }
+
+  #equipesPainelWrap .eq-tabela tr.eq-linha{
+    grid-template-columns:auto 1fr auto;
+    grid-template-areas:
+      "placa modelo id"
+      "placa rota   rota"
+      "cli   cli    cli"
+      "acoes acoes  acoes";
+    gap:2px 8px; padding:8px 10px; margin-bottom:6px; border-radius:10px;
+  }
+  #equipesPainelWrap .placa-mc{ min-width:72px; }
+  #equipesPainelWrap .placa-mc-num{ font-size:.8rem; padding:2px 5px 3px; }
+  #equipesPainelWrap .placa-mc-faixa{ font-size:.4rem; }
+  #equipesPainelWrap .eq-tabela .ct-modelo{ font-size:.86rem; line-height:1.2; }
+  #equipesPainelWrap .eq-tabela .ct-id{ font-size:.7rem; text-align:right; }
+  #equipesPainelWrap .eq-tabela .ct-rota{ font-size:.78rem; margin-top:0; line-height:1.25; }
+  #equipesPainelWrap .eq-tabela .ct-cli{ font-size:.74rem; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #equipesPainelWrap .eq-tabela .ct-acoes{ flex-direction:row; align-items:center; gap:6px; margin-top:5px; }
+  #equipesPainelWrap .eq-tabela .ct-acoes > .text-muted{ font-size:.72rem; }
+  #equipesPainelWrap .eq-tabela .ct-acoes .btn{ width:auto; flex:1; min-height:40px; font-size:.84rem; border-radius:9px; padding:6px 10px; }
+  #equipesPainelWrap .eq-membro-sel{ width:auto; flex:1; min-height:40px; font-size:16px; border-radius:9px; padding:4px 6px; }
+  #equipesPainelWrap .eq-tabela tr.eq-end-linha{ padding:0 10px 7px; margin-bottom:6px; border-radius:0 0 10px 10px; }
+  #equipesPainelWrap .eq-tabela tr.eq-linha:has(+ tr.eq-end-linha){ border-radius:10px 10px 0 0; }
+  #equipesPainelWrap .eq-tabela .eq-end-cel{ font-size:.74rem; line-height:1.3; padding:0; background:none; }
+}
+
+/* ---------- Portal do cliente ---------- */
+.badge-cliente{ background:#0ea5e918; color:#38bdf8; border:1px solid #0ea5e955; }
+.pc-link-cadastro{ margin-top:14px; padding-top:12px; border-top:1px solid var(--border,rgba(255,255,255,.12));
+  display:flex; flex-direction:column; align-items:center; gap:6px; font-size:.8rem; color:var(--text-tertiary,#8b93a1); }
+.pc-link-cadastro button{ background:none; border:1px solid #ff6a0077; color:#ff6a00; border-radius:9px; padding:7px 12px;
+  font-weight:700; cursor:pointer; font-size:.85rem; }
+.pc-link-cadastro button:hover{ background:#ff6a0014; }
+.pc-cad{ max-width:640px; }
+.pc-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
+.pc-grid .pc-full{ grid-column:1 / -1; }
+.pc-form input, .pc-form select, .pc-form textarea{ width:100%; }
+.pc-sec{ font-weight:800; font-size:.82rem; margin:12px 0 6px; color:#ff6a00; }
+.pc-carro{ display:grid; grid-template-columns:120px 1fr auto; gap:8px; margin-bottom:6px; }
+.pc-carro input{ padding:8px 10px; border-radius:8px; border:1px solid var(--border,rgba(255,255,255,.16));
+  background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.pc-carro-x{ background:none; border:none; color:#ef4444; cursor:pointer; font-size:1rem; }
+.pc-topo{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.pc-empresa{ font-size:1.2rem; font-weight:800; }
+.pc-sub{ font-size:.84rem; color:var(--text-secondary,#c3c8d0); margin-top:2px; }
+.pc-resumo{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.pc-kpi{ flex:1; min-width:120px; padding:10px 12px; border-radius:12px; border:1px solid var(--border,rgba(255,255,255,.12));
+  background:var(--surface-2,rgba(255,255,255,.03)); display:flex; flex-direction:column; }
+.pc-kpi strong{ font-size:1.4rem; }
+.pc-kpi span{ font-size:.74rem; color:var(--text-tertiary,#8b93a1); }
+.pc-filtros{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+.pc-chip{ padding:6px 12px; border-radius:999px; font-size:.8rem; font-weight:700; cursor:pointer; color:var(--text-secondary,#c3c8d0);
+  background:var(--surface-2,rgba(255,255,255,.04)); border:1px solid var(--border,rgba(255,255,255,.12)); }
+.pc-chip.sel{ color:#ff6a00; border-color:#ff6a00; background:#ff6a0018; }
+.pc-filtros input{ margin-left:auto; min-width:200px; padding:7px 10px; border-radius:9px;
+  border:1px solid var(--border,rgba(255,255,255,.14)); background:var(--surface-2,rgba(255,255,255,.04)); color:inherit; }
+.pc-lista{ display:flex; flex-direction:column; gap:8px; }
+.pc-card{ padding:10px 12px; border-radius:12px; border:1px solid var(--border,rgba(255,255,255,.12)); background:var(--surface-1,rgba(255,255,255,.03)); }
+.pc-card-top{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.pc-card-info{ flex:1; min-width:180px; font-size:.88rem; }
+.pc-rota{ font-size:.82rem; color:var(--text-secondary,#c3c8d0); margin-top:2px; }
+.pc-status{ font-size:.74rem; font-weight:800; padding:3px 10px; border-radius:999px; border:1px solid; white-space:nowrap; }
+.pc-card-rod{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:.76rem; color:var(--text-tertiary,#8b93a1); }
+.pc-card-rod .btn{ margin-left:auto; }
+.pc-cancel-motivo{ color:#f87171; }
+@media (max-width:640px){
+  .pc-grid{ grid-template-columns:1fr; }
+  .pc-carro{ grid-template-columns:100px 1fr auto; }
+  .pc-filtros input{ margin-left:0; width:100%; }
+  .pc-card-rod .btn{ margin-left:0; width:100%; }
+}

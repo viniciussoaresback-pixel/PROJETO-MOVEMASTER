@@ -547,16 +547,26 @@ function _pnImprimirFicha(){
   const cont = document.getElementById('painelPneus');
   if (!cont) return;
   const v = (veiculosGlobais||[]).find(x => x.placa === _pneuVeiculoSel);
-  const j = window.open('', '_blank');
-  if (!j){ alert('O navegador bloqueou a impressão.'); return; }
-  j.document.write(`<html><head><title>Ficha de pneus — ${_pnEsc(_pneuVeiculoSel)}</title>
-    <style>body{font-family:Arial;padding:20px}.pn-acoes-topo,.pn-legenda button,select{display:none}
+  // Mesmo cabeçalho (logo + marca MoveMaster) dos demais PDFs do sistema:
+  // _abrirPDF (mod-02.js) monta a janela, a moldura e chama o print().
+  const estilo = `<style>.pn-acoes-topo,.pn-legenda button,select{display:none}
     .pn-slot{border:1px solid #333;border-radius:6px;padding:6px;margin:3px;display:inline-block;min-width:70px;text-align:center;font-size:11px}
     .pn-fileira{display:flex;justify-content:center;gap:20px;margin:6px 0}.pn-parte-tit{font-weight:bold;margin:10px 0 4px}
-    h2{font-size:16px}</style></head><body>
-    <h2>Ficha de Movimentação de Pneus — ${_pnEsc(_pneuVeiculoSel)} (${_pnEsc(v?.tipo||'')})</h2>
-    <div>Emitida em ${new Date().toLocaleString('pt-BR')}</div>
-    ${v ? _pnDiagramaHTML(v) : ''}</body></html>`);
+    .pn-eixo-barra{width:50px;height:4px;background:#999;border-radius:2px}
+    .pn-lado{display:flex;gap:4px}.pn-diagrama{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
+    .pn-slot-bom{border-color:#22c55e}.pn-slot-meio{border-color:#f59e0b}.pn-slot-ruim{border-color:#ef4444}
+    .pn-slot-pos{font-size:9px;font-weight:bold;color:#555;display:block}</style>`;
+  const corpo = estilo
+    + `<div class="resumo"><strong>Veículo:</strong> ${_pnEsc(_pneuVeiculoSel)}${v?.tipo ? ' · ' + _pnEsc(v.tipo) : ''}${v?.modelo ? ' · ' + _pnEsc(v.modelo) : ''}</div>`
+    + (v ? _pnDiagramaHTML(v) : '');
+  if (typeof _abrirPDF === 'function'){
+    _abrirPDF('Ficha de Movimentação de Pneus — ' + _pnEsc(_pneuVeiculoSel), corpo);
+    return;
+  }
+  const j = window.open('', '_blank');
+  if (!j){ alert('O navegador bloqueou a impressão.'); return; }
+  j.document.write(`<html><head><title>Ficha de pneus — ${_pnEsc(_pneuVeiculoSel)}</title></head><body style="font-family:Arial;padding:20px">
+    <h2>Ficha de Movimentação de Pneus — ${_pnEsc(_pneuVeiculoSel)}</h2>${corpo}</body></html>`);
   j.document.close(); j.focus();
   setTimeout(() => j.print(), 300);
 }

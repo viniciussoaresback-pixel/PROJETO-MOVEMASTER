@@ -284,7 +284,11 @@ async function montarSnapshotEspelho(pedidos) {
             enderecoEntrega: p.enderecoEntrega || '',
             cnpjEntrega: p.cnpjEntrega || null,
             freteTipo: p.freteTipo || 'cheio',
-            valorFrete: parseFloat(p.valorFrete) || 0
+            valorFrete: parseFloat(p.valorFrete) || 0,
+            // Pagamento do motorista terceiro (por viagem, repetido nos carros)
+            valorMotoristaTerceiro: p.valorMotoristaTerceiro != null ? Number(p.valorMotoristaTerceiro) : null,
+            guiaIcmsValor: p.guiaIcmsValor != null ? Number(p.guiaIcmsValor) : null,
+            criadoPorNome: p.criadoPorNome || null
         };
     });
 }
@@ -321,6 +325,21 @@ async function registrarEspelhoFiscal({ placaCegonha, pedidos, totalFrete, usuar
             const rid = pedidos[0]?.rotaId || pedidos[0]?.rota_id || null;
             const r = rid ? (rotasGlobais||[]).find(x => String(x.id)===String(rid)) : null;
             return r?.iniciada_em || null;
+        })(),
+        // Responsáveis — gravados a partir de QUEM fez cada ação (usuário
+        // logado), sem digitação manual:
+        //   solicitante  = quem enviou a carga ao fiscal (gerou o espelho)
+        //   planejamento = quem criou/planejou a viagem na logística
+        ...(() => {
+            const rid = pedidos[0]?.rotaId || pedidos[0]?.rota_id || null;
+            const r = rid ? (rotasGlobais||[]).find(x => String(x.id)===String(rid)) : null;
+            const resp = _espelhoResponsaveis(r, usuarioNome);
+            const terc = _infoTerceiroViagem(r, pedidos, placaCegonha);
+            return {
+                solicitante_nome: resp.solicitante,
+                planejamento_nome: resp.planejamento,
+                terceiro: terc.ehTerceiro ? { motorista: terc.motorista, valor: terc.valor, guia: terc.guia } : null
+            };
         })()
     });
     const descricao = `Espelho de carga — Cegonha ${placaCegonha} — ${pedidos.length} veículo(s)`;
@@ -426,12 +445,15 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
     // Ao VISUALIZAR um espelho já registrado, usamos o retrato salvo.
     // É o que permite reimprimir uma carga já entregue e garante que o
     // documento seja sempre igual ao que foi emitido.
-    let snapshotSalvo = null, numeroDocSalvo = null, dataSalva = null;
+    let snapshotSalvo = null, numeroDocSalvo = null, dataSalva = null, extrasSalvos = null;
     if (opcoes.espelhoId && supabase) {
         try {
             const { data } = await supabase.from('ocorrencias')
-                .select('dados_extras, created_at').eq('id', opcoes.espelhoId).maybeSingle();
+                .select('dados_extras, created_at, usuario_nome').eq('id', opcoes.espelhoId).maybeSingle();
             const ex = JSON.parse(data?.dados_extras || '{}');
+            extrasSalvos = ex;
+            // Espelhos antigos não têm solicitante_nome: quem gerou é o usuario_nome do registro
+            if (!ex.solicitante_nome && data?.usuario_nome) ex.solicitante_nome = data.usuario_nome;
             if (Array.isArray(ex.snapshot) && ex.snapshot.length > 0) {
                 snapshotSalvo = ex.snapshot;
                 numeroDocSalvo = ex.numero_doc || null;
@@ -473,6 +495,45 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
     const dataGeracao = dataSalva ? new Date(dataSalva).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
     // Número estável: reimprimir não gera número novo
     const numDoc = numeroDocSalvo || `MM-${placaCegonha.replace(/[^A-Z0-9]/gi,'')}-${Date.now().toString().slice(-6)}`;
+
+    // Responsáveis e pagamento do terceiro. Espelho já registrado → usa o que
+    // foi gravado na hora; geração nova → quem está logado + criador da rota.
+    // Reimpressão (espelhoId): só a viagem GRAVADA no espelho — nunca "a
+    // viagem ativa desta cegonha", que pode ser outra, mais nova.
+    const _rotaEsp = opcoes.espelhoId
+        ? (extrasSalvos && extrasSalvos.rota_id ? (rotasGlobais||[]).find(x => String(x.id) === String(extrasSalvos.rota_id)) : null)
+        : ((rotasGlobais||[]).find(x => String(x.id) === String(opcoes.rotaId || pedidos[0]?.rotaId || pedidos[0]?.rota_id || ''))
+           || (rotasGlobais||[]).find(x => x.placa_cegonha === placaCegonha && x.status !== 'concluida' && x.status !== 'cancelada'));
+    const _respLive = _espelhoResponsaveis(_rotaEsp, _usuarioAtualNome() || 'Logística');
+    const respSolicitante = (extrasSalvos && extrasSalvos.solicitante_nome) || (opcoes.espelhoId ? null : _respLive.solicitante);
+    const respPlanejamento = (extrasSalvos && extrasSalvos.planejamento_nome) || _respLive.planejamento;
+    let terc;
+    if (extrasSalvos && Object.prototype.hasOwnProperty.call(extrasSalvos, 'terceiro')){
+        // gravado na geração (null = viagem própria)
+        terc = extrasSalvos.terceiro
+            ? { ehTerceiro: true, motorista: extrasSalvos.terceiro.motorista, valor: extrasSalvos.terceiro.valor, guia: extrasSalvos.terceiro.guia }
+            : { ehTerceiro: false };
+    } else if (opcoes.espelhoId){
+        // espelho anterior a esta versão: não havia o dado — não inventa
+        terc = { ehTerceiro: false };
+    } else {
+        terc = _infoTerceiroViagem(_rotaEsp, pedidos, placaCegonha);
+    }
+    const _fmtR = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    const blocoResponsaveis = `
+    <div class="resp-box">
+        <div><label>Solicitante da carga</label><span>${respSolicitante || '—'}</span></div>
+        <div><label>Planejamento do transporte</label><span>${respPlanejamento || '—'}</span></div>
+    </div>`;
+    const blocoTerceiro = terc.ehTerceiro ? `
+    <div class="terc-box">
+        <div class="terc-tit">🤝 Motorista terceiro${terc.motorista ? ' — ' + terc.motorista : ''}</div>
+        <div class="terc-grid">
+            <div><label>Valor a pagar ao motorista terceiro</label><span class="terc-valor">${terc.valor != null ? _fmtR(terc.valor) : 'não informado'}</span></div>
+            ${terc.guia != null && Number(terc.guia) > 0 ? `<div><label>Guia de ICMS</label><span class="terc-valor">${_fmtR(terc.guia)}</span></div>` : ''}
+            ${terc.valor != null && terc.guia != null && Number(terc.guia) > 0 ? `<div><label>Total (terceiro + guia)</label><span class="terc-valor">${_fmtR(Number(terc.valor) + Number(terc.guia))}</span></div>` : ''}
+        </div>
+    </div>` : '';
 
     // Encontrar rota principal (mais comum)
     const rotaCount = {};
@@ -567,6 +628,15 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
         /* FOOTER */
         .rodape { margin-top: 1.5rem; padding-top: 0.8rem; border-top: 1px solid #eee; font-size: 0.65rem; color: #aaa; display: flex; justify-content: space-between; }
 
+        /* RESPONSÁVEIS / TERCEIRO */
+        .resp-box { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; border: 1px solid #ddd; border-radius: 8px; padding: 0.7rem 1rem; margin-bottom: 1.2rem; }
+        .resp-box label, .terc-grid label { display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 0.2rem; }
+        .resp-box span { font-size: 0.9rem; font-weight: 700; color: #333; }
+        .terc-box { border: 2px solid #7c3aed; background: #f5f3ff; border-radius: 8px; padding: 0.8rem 1rem; margin-bottom: 1.2rem; }
+        .terc-tit { font-weight: 800; color: #5b21b6; margin-bottom: 0.5rem; font-size: 0.9rem; }
+        .terc-grid { display: flex; gap: 2rem; flex-wrap: wrap; }
+        .terc-valor { font-size: 1.1rem; font-weight: 800; color: #111; }
+
         /* AVISO FISCAL */
         .aviso-fiscal { background: #fff8e1; border: 1px solid #fbbf24; border-radius: 6px; padding: 0.6rem 1rem; margin-bottom: 1.2rem; font-size: 0.78rem; color: #92400e; }
 
@@ -645,6 +715,12 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
         </div>
     </div>
 
+    <!-- RESPONSÁVEIS -->
+    ${blocoResponsaveis}
+
+    <!-- MOTORISTA TERCEIRO -->
+    ${blocoTerceiro}
+
     <!-- AVISO FISCAL -->
     <div class="aviso-fiscal">
         ⚠️ <strong>Para emissão de nota fiscal:</strong> Utilize os dados de CPF/CNPJ, valor e rota de cada veículo abaixo conforme necessário.
@@ -681,7 +757,7 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
         </div>
         <div class="assinatura">
             <br><br>
-            Responsável Logística
+            Responsável Logística${respPlanejamento ? ': ' + respPlanejamento : ''}
         </div>
         <div class="assinatura">
             <br><br>
@@ -725,6 +801,41 @@ async function gerarEspelhoCarga(placaCegonha, opcoes = {}) {
     janela.document.write(html);
     janela.document.close();
 }
+// Quem solicitou (enviou ao fiscal) e quem planejou o transporte.
+// O planejamento vem do usuário que criou a viagem (criada_por_usuario é o
+// nome da pessoa; criado_por às vezes guarda só o perfil).
+function _espelhoResponsaveis(rota, usuarioNome){
+    const planejamento = (rota && (rota.criada_por_usuario || rota.criado_por)) || null;
+    return { solicitante: usuarioNome || null, planejamento };
+}
+
+// A viagem é de terceiro? Vale o motorista cadastrado como terceiro OU a
+// cegonha de terceiro. Devolve também o valor a pagar e a guia de ICMS,
+// que ficam repetidos em todos os carros da viagem (_viagemSalvarTerceiro).
+function _infoTerceiroViagem(rota, carros, placaCegonha){
+    const lista = carros || [];
+    const nomeMot = (rota && rota.motorista_1) || (lista[0] && (lista[0].motorista1 || lista[0].motorista_1)) || '';
+    const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+    const mot = nomeMot ? (typeof motoristasGlobais !== 'undefined' ? motoristasGlobais : []).find(m => norm(m.nome) === norm(nomeMot)) : null;
+    const placa = placaCegonha || (rota && rota.placa_cegonha) || (lista[0] && lista[0].placaCegonha) || '';
+    const veic = placa ? (typeof veiculosGlobais !== 'undefined' ? veiculosGlobais : []).find(v => v.placa === placa) : null;
+    const comValor = lista.find(c => c.valorMotoristaTerceiro != null && c.valorMotoristaTerceiro !== '');
+    const comGuia = lista.find(c => c.guiaIcmsValor != null && c.guiaIcmsValor !== '');
+    // O valor salvo só decide quando o motorista não está no cadastro: se a
+    // viagem passou para motorista e cegonha próprios, um valor antigo que
+    // ficou nos carros não pode continuar marcando a viagem como terceiro.
+    const ehTerceiro = !!((mot && mot.vinculo === 'terceiro') || (veic && veic.propriedade === 'terceiro')
+        || (comValor && !mot));
+    return {
+        ehTerceiro,
+        motorista: nomeMot || (veic && veic.transportador_nome) || null,
+        transportador: (veic && veic.transportador_nome) || (mot && mot.transportador) || null,
+        valor: comValor ? Number(comValor.valorMotoristaTerceiro) : null,
+        guia: comGuia ? Number(comGuia.guiaIcmsValor) : null
+    };
+}
+window._infoTerceiroViagem = _infoTerceiroViagem;
+
 // ============================================================
 // LOTE 2 — MANUTENÇÃO: CHECKLIST DE SEGURANÇA + TAG DE INTEGRIDADE
 // (itens 13.2 e 13.7)
@@ -1761,25 +1872,23 @@ function _manutImprimirFicha(){
       ${emgs.map(e => `<div class="mf-item"><span>🚨 Parada — ${e.motivo||'sem descrição'}</span><span></span></div>`).join('')}
     </div>` : '';
 
-  const j = window.open('', '_blank');
-  if (!j){ alert('O navegador bloqueou a impressão.'); return; }
-  j.document.write(`<html><head><title>Ficha de manutenção — ${v.placa}</title>
-    <style>
-      body{font-family:Arial,Helvetica,sans-serif;padding:22px;color:#111}
-      h2{font-size:17px;margin:0 0 2px}
+  // Cabeçalho padrão MoveMaster (logo + marca), igual aos demais PDFs.
+  const estilo = `<style>
       .mf-sub{color:#555;font-size:12px;margin-bottom:12px}
       .mf-status{display:inline-block;font-size:12px;font-weight:bold;padding:3px 10px;border-radius:6px;border:1px solid #999;margin-left:6px}
       .mf-bloco{border:1px solid #ccc;border-radius:6px;margin:10px 0;overflow:hidden}
       .mf-bloco-tit{background:#f2f2f2;padding:6px 10px;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
       .mf-item{display:flex;justify-content:space-between;gap:16px;padding:5px 10px;font-size:12px;border-top:1px solid #eee}
-      .mf-foot{margin-top:16px;color:#666;font-size:11px}
-    </style></head><body>
-    <h2>Ficha de Manutenção — ${v.placa} <span class="mf-status">${meta.emoji||''} ${meta.label||''}</span></h2>
-    <div class="mf-sub">${v.modelo || v.tipo || ''} · Emitida em ${new Date().toLocaleString('pt-BR')} · por ${usuario} · ${qtdAtencao} atenção / ${qtdCritico} crítico</div>
+    </style>`;
+  const corpo = estilo
+    + `<h3>${v.placa} <span class="mf-status">${meta.emoji||''} ${meta.label||''}</span></h3>
+    <div class="mf-sub">${v.modelo || v.tipo || ''} · por ${usuario} · ${qtdAtencao} atenção / ${qtdCritico} crítico</div>
     ${blocosHTML}
-    ${extra}
-    <div class="mf-foot">MoveMaster · ficha gerada a partir do checklist na tela. Confira os itens antes de imprimir.</div>
-    </body></html>`);
+    ${extra}`;
+  if (typeof _abrirPDF === 'function'){ _abrirPDF('Ficha de Manutenção — ' + v.placa, corpo); return; }
+  const j = window.open('', '_blank');
+  if (!j){ alert('O navegador bloqueou a impressão.'); return; }
+  j.document.write(`<html><head><title>Ficha de manutenção — ${v.placa}</title></head><body style="font-family:Arial;padding:22px">${corpo}</body></html>`);
   j.document.close(); j.focus();
   setTimeout(() => j.print(), 300);
 }

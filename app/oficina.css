@@ -133,3 +133,38 @@
   #manutencao .checklist-linha{ flex-direction:column; align-items:stretch; gap:8px; }
   #manutencao .checklist-opcoes{ justify-content:space-between; }
 }
+
+/* ---- TEMA CLARO ----
+   O console da oficina crava cores escuras nas variáveis --of-*. No tema
+   claro isso deixava painéis pretos com texto escuro por cima (ilegível) e
+   inputs escuros no meio da tela branca. Aqui as mesmas variáveis ganham a
+   versão clara — o resto do arquivo continua valendo sem mudança. */
+[data-tema="claro"] #manutencao{
+  --of-panel:#ffffff; --of-panel-2:#f4f5f7; --of-inset:#f7f8fa;
+  --of-line:rgba(16,19,26,.14); --of-line-soft:rgba(16,19,26,.08);
+  --of-dim:#5b616b; --of-faint:#6b7280;
+  --of-amber:#d97706; --of-ok:#16a34a; --of-warn:#d97706; --of-fault:#dc2626; --of-tel:#0284c7;
+  color:var(--text-primary,#12141a);
+}
+[data-tema="claro"] #manutencao > .card{
+  background:#fff; box-shadow:0 1px 2px rgba(16,19,26,.05),0 6px 16px rgba(16,19,26,.05);
+}
+[data-tema="claro"] #manutencao .of-plate,
+[data-tema="claro"] #manutencao .of-pill b{ color:#12141a; }
+[data-tema="claro"] #manutencao .of-pill{ color:#3d434d; }
+[data-tema="claro"] #manutencao .of-unit.sel{ box-shadow:0 0 0 1px rgba(217,119,6,.25), 0 8px 22px -14px rgba(16,19,26,.35); }
+[data-tema="claro"] #manutencao .of-lamp{ box-shadow:none; }
+[data-tema="claro"] #manutencao .painel-subtabs .cad-subtab-btn{ color:#3d434d; }
+[data-tema="claro"] #manutencao .painel-subtabs .cad-subtab-btn.ativo{ color:#b45309; background:rgba(217,119,6,.1); }
+[data-tema="claro"] #manutencao select,
+[data-tema="claro"] #manutencao input[type="text"],
+[data-tema="claro"] #manutencao input[type="datetime-local"],
+[data-tema="claro"] #manutencao input[type="number"],
+[data-tema="claro"] #manutencao input[type="date"],
+[data-tema="claro"] #manutencao textarea{ background:#fff; color:#12141a; }
+[data-tema="claro"] #manutencao .btn-primary{ color:#fff; }
+[data-tema="claro"] #manutencao .btn-danger{ color:#fff; }
+[data-tema="claro"] #manutencao .btn-secondary{ color:#23262e; }
+[data-tema="claro"] #manutencao .checklist-item-nome,
+[data-tema="claro"] #manutencao h3,
+[data-tema="claro"] #manutencao h2{ color:#12141a; }

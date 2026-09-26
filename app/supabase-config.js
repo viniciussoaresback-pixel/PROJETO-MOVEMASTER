@@ -17,7 +17,8 @@ var perfilLogado = null;   // linha completa da tabela perfis (inclui motorista_
 // recebe essas abas para poder navegar no CRM.
 const PERMISSOES = {
     admin:      ['comercial','meusPedidos','painel','logistica','equipes','faturamento','cadastros','diretoria','manutencao','orcamento','cobranca','crmCadastros','crmTarefas','crmPainel'],
-    comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','orcamento','cobranca'],
+    // Comercial também usa o CRM (cadastros de leads, tarefas e painel)
+    comercial:  ['visaoGlobal','comercialPedidos','comercialViagens','comercial','meusPedidos','cadastros','orcamento','cobranca','crmCadastros','crmTarefas','crmPainel'],
     logistica:  ['painel','logistica','equipes','comercial','comercialPedidos','cadastros'],
     financeiro: ['conferencia','cobranca','tabelaFrete','remunTrecho','relatoriosFin','epiUniforme'],
     motorista:  ['motorista'],
@@ -25,7 +26,10 @@ const PERMISSOES = {
     fiscal:     ['fiscal','comercialPedidos','comercialViagens','painel'],
     diretoria:  ['diretoria'],
     manutencao: ['manutencao'],
-    crm:        ['crmCadastros','crmTarefas','crmPainel']
+    crm:        ['crmCadastros','crmTarefas','crmPainel'],
+    // Portal do cliente: só a própria tela (dados isolados no banco — ver
+    // sql/2026-09-26-melhorias.sql)
+    cliente:    ['portalCliente']
 };
 
 const NOMES_PERFIL = {
@@ -38,7 +42,8 @@ const NOMES_PERFIL = {
     fiscal:     'Fiscal (CTE)',
     diretoria:  'Diretoria',
     manutencao: 'Manutenção / Oficina',
-    crm:        'CRM Comercial'
+    crm:        'CRM Comercial',
+    cliente:    'Cliente'
 };
 
 const CORES_PERFIL = {
@@ -50,7 +55,8 @@ const CORES_PERFIL = {
     fiscal:     'badge-fiscal',
     diretoria:  'badge-diretoria',
     manutencao: 'badge-manutencao',
-    crm:        'badge-crm'
+    crm:        'badge-crm',
+    cliente:    'badge-cliente'
 };
 
 // ============================================
@@ -192,6 +198,16 @@ async function carregarPerfilUsuario(user) {
         }
 
         if (!data) {
+            // Cliente que se cadastrou com CNPJ já existente: o perfil nasce
+            // inativo até a Movemaster confirmar o vínculo com a empresa.
+            try {
+                const { data: pend } = await supabase.from('perfis')
+                    .select('perfil, ativo').eq('user_id', user.id).maybeSingle();
+                if (pend && pend.perfil === 'cliente' && !pend.ativo) {
+                    mostrarSemPermissao('✅ Cadastro recebido! Sua empresa já tem cadastro na Movemaster, então vamos confirmar o seu acesso. Você será liberado em breve.');
+                    return;
+                }
+            } catch (e) { /* segue para a mensagem padrão */ }
             // Login existe no Auth, mas não há linha ativa na tabela perfis
             mostrarSemPermissao('Seu login existe, mas não há perfil ativo vinculado a ele. Peça ao administrador para verificar seu cadastro (perfil não criado ou desativado).');
             return;
@@ -569,6 +585,15 @@ function _usuarioAtualNome(){
 }
 window._usuarioAtualNome = _usuarioAtualNome;
 
+// Escapa texto antes de ir para innerHTML. Obrigatório em tudo que vem do
+// portal do cliente (nome, empresa, placa, cidade...): é texto digitado por
+// gente de fora, e sem isto um "<img onerror=...>" rodaria na sessão da
+// logística ou do admin.
+function _mmEsc(s){
+    return String(s == null ? '' : s).replace(/[&<>"'`]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;' }[c]));
+}
+window._mmEsc = _mmEsc;
+
 function alternarVerSenha(campoId, botao) {
     const campo = document.getElementById(campoId);
     if (!campo) return;
@@ -702,7 +727,8 @@ function aplicarPermissoes(perfil) {
                 visaoGlobal:  'renderizarVisaoGlobal',
                 crmCadastros: 'renderizarCRMCadastros',
                 crmTarefas:   'renderizarCRMTarefas',
-                crmPainel:    'renderizarCRMPainel'
+                crmPainel:    'renderizarCRMPainel',
+                portalCliente:'renderizarPortalCliente'
             };
             if (porAba[primeiraAba]) chamar(porAba[primeiraAba]);
             chamar('popularResponsaveisComercial');
@@ -896,7 +922,7 @@ function mostrarTelaFiscal() {
                                 <th>Motorista</th>
                                 <th>Valor Total</th>
                                 <th>Gerado / CTE</th>
-                                <th>Gerado por</th>
+                                <th>Responsáveis</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
@@ -1016,6 +1042,19 @@ async function carregarDadosFiscal() {
             const veiculo = (typeof veiculosGlobais !== 'undefined' ? veiculosGlobais : []).find(v => v.placa === placaCegonha);
             const motorista = veiculo?.motorista_padrao || '—';
 
+            // Motorista terceiro: valor a pagar + guia (gravados no espelho)
+            const tercEsp = extras.terceiro || null;
+            const _fmtR = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2});
+            const tercHTML = tercEsp
+                ? `<div class="fiscal-terceiro">🤝 <strong>Terceiro</strong>${tercEsp.motorista ? ' · ' + tercEsp.motorista : ''}<br>`
+                  + `Pagar: <strong>${tercEsp.valor != null ? _fmtR(tercEsp.valor) : 'não informado'}</strong>`
+                  + (tercEsp.guia != null && Number(tercEsp.guia) > 0 ? `<br>Guia ICMS: <strong>${_fmtR(tercEsp.guia)}</strong>` : '')
+                  + `</div>`
+                : '';
+            // Responsáveis: quem enviou a carga ao fiscal e quem planejou a viagem
+            const solicitante = extras.solicitante_nome || pdf.usuario_nome || '—';
+            const planejamento = extras.planejamento_nome || null;
+
             // Status de emissão do CTE (guardado no próprio registro do espelho)
             const emitido = pdf.cte_emitido === true;
             const linkCte = (emitido && pdf.cte_numero)
@@ -1039,10 +1078,10 @@ async function carregarDadosFiscal() {
             return `<tr class="${emitido ? 'linha-cte-emitido' : ''}">
                 <td><strong style="color:#f97316">${placaCegonha}</strong></td>
                 <td><span style="background:rgba(249,115,22,0.12);color:#f97316;padding:0.15rem 0.5rem;border-radius:4px;font-weight:700">${totalPedidos} veículo(s)</span>${avisoCteExistente}</td>
-                <td>${motorista}</td>
+                <td>${motorista}${tercHTML}</td>
                 <td style="color:#4ade80;font-weight:600">${totalFrete}</td>
                 <td style="font-size:0.78rem">${gerado}<br>${inicioHTML}<br>${seloEmitido}</td>
-                <td style="font-size:0.75rem;color:var(--text-muted)">${pdf.usuario_nome || '—'}</td>
+                <td style="font-size:0.75rem;color:var(--text-muted)"><span title="Quem enviou a carga ao fiscal">📤 Solicitante: <strong style="color:var(--text-secondary)">${solicitante}</strong></span>${planejamento ? `<br><span title="Quem planejou o transporte">🧭 Planejamento: <strong style="color:var(--text-secondary)">${planejamento}</strong></span>` : ''}</td>
                 <td class="fiscal-acoes-td">
                     <button class="btn btn-secondary btn-sm" onclick="regerarEspelhoCarga('${placaCegonha}', '${pdf.id}')" ${placaCegonha === '—' ? 'disabled title="Registro sem cegonha identificada"' : ''}>📄 Ver / Imprimir</button>
                     <button class="btn ${emitido ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="toggleCteEmitido('${pdf.id}', ${emitido})">
@@ -2096,8 +2135,8 @@ async function carregarListaUsuarios() {
 
         corpo.innerHTML = data.map(u => `
             <tr>
-                <td class="col-nome">${u.nome || '—'}</td>
-                <td class="col-email" title="${(u.email || '').replace(/"/g, '&quot;')}">${u.email || '—'}</td>
+                <td class="col-nome">${_mmEsc(u.nome || '—')}${u.perfil === 'cliente' && (u.empresa_nome || u.cidade) ? `<br><small class="text-muted">🏢 ${_mmEsc(u.empresa_nome || '')}${u.cidade ? ' · ' + _mmEsc(u.cidade) + (u.uf ? '/' + _mmEsc(u.uf) : '') : ''}${!u.ativo ? ' · <strong style="color:#f59e0b">aguardando liberação</strong>' : ''}</small>` : ''}</td>
+                <td class="col-email" title="${_mmEsc(u.email || '')}">${_mmEsc(u.email || '—')}</td>
                 <td class="col-perfil"><span class="badge-perfil ${CORES_PERFIL[u.perfil] || ''}">${NOMES_PERFIL[u.perfil] || u.perfil}</span></td>
                 <td class="col-status">
                     <span class="status-pill ${u.ativo ? 'ativo' : 'inativo'}">

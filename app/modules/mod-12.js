@@ -39,10 +39,11 @@ function _planAprovacaoListaHTML(){
       try { datasHTML = _planPedidoDatasHTML(p); } catch(e){ datasHTML = ''; }
       return `<div class="plan-aprov-card" draggable="true" ondragstart="_planDragStart(event, ${p.id})">
         <div class="plan-aprov-top">
-          <span><strong>#${p.id}</strong> · ${p.placa||''} <span class="text-muted">${p.modelo||''}</span></span>
+          <span><strong>#${p.id}</strong> · ${_mmEsc(p.placa||'')} <span class="text-muted">${_mmEsc(p.modelo||'')}</span></span>
           <span class="plan-aprov-selo">⏳ Aguardando</span>
         </div>
-        <div class="plan-aprov-sub">${p.cliente||''} · ${p.cidadeOrigem||''} → ${p.cidadeDestino||''}</div>
+        <div class="plan-aprov-sub">${_mmEsc(p.cliente||'')} · ${_mmEsc(p.cidadeOrigem||'')} → ${_mmEsc(p.cidadeDestino||'')}</div>
+        ${p.origemLancamento === 'cliente' ? `<div class="plan-aprov-cliente" title="Solicitação feita pelo próprio cliente no portal">🏢 Solicitado pelo cliente: <strong>${_mmEsc(String(p.criadoPorNome||p.cliente||'').replace(/^Cliente:\s*/,''))}</strong></div>` : (p.criadoPorNome ? `<div class="plan-aprov-cliente">👤 Lançado por ${_mmEsc(p.criadoPorNome)}</div>` : '')}
         ${datasHTML}
         <div class="plan-aprov-acoes">
           <button class="plan-aprov-btn" onclick="_aprovarPedido(${p.id})">✅ Aprovar pedido</button>
@@ -336,14 +337,15 @@ function _planAbrirModalViagem(cor, pedidos, rotaVazia){
               ${cegonhas.map(v => { const prop = (v.propriedade==='terceiro')?'terceiro':'propria';
                 const m = (typeof statusManutencaoVeiculo === 'function') ? statusManutencaoVeiculo(v) : null;
                 const bloq = m && m.bloqueado;
-                return `<option value="${v.placa}" data-cap="${v.capacidade||''}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${prop}" data-bloq="${bloq?'1':''}" data-bloqmotivo="${bloq?(m.motivo||'manutenção').replace(/"/g,'&quot;'):''}">${bloq?'⛔ ':(prop==='terceiro'?'🤝 ':'🚛 ')}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}${bloq?' — '+m.selo:(m&&m.cor==='amarelo'?' — '+m.selo:'')}</option>`; }).join('')}
+                return `<option value="${v.placa}" data-cap="${v.capacidade||''}" data-mot="${(v.motorista_padrao||'').replace(/"/g,'&quot;')}" data-prop="${prop}" data-bloq="${bloq?'1':''}" data-bloqmotivo="${bloq?(m.motivo||'manutenção').replace(/"/g,'&quot;'):''}">${bloq?'⛔ ':(prop==='terceiro'?'🤝 ':'🚛 ')}${v.placa}${v.modelo?' · '+v.modelo:''}${v.motorista_padrao?' · 👤 '+v.motorista_padrao:''}${(() => { const f = v.motorista_padrao ? _planIndispMotorista(v.motorista_padrao) : null; return f ? ' — ' + _planIndispTexto(f) : ''; })()}${bloq?' — '+m.selo:(m&&m.cor==='amarelo'?' — '+m.selo:'')}</option>`; }).join('')}
             </select>
           </div>
 
           <div class="form-group">
             <label>Motorista</label>
-            <input type="text" id="planViagemMotorista" placeholder="Motorista da viagem" list="listaMotPlanViagem">
-            <datalist id="listaMotPlanViagem">${(motoristasGlobais||[]).map(m => `<option value="${m.nome||m}">`).join('')}</datalist>
+            <input type="text" id="planViagemMotorista" placeholder="Motorista da viagem" list="listaMotPlanViagem" oninput="_planAvisoFeriasMot()">
+            <datalist id="listaMotPlanViagem">${(motoristasGlobais||[]).map(m => { const f = _planIndispMotorista(m.nome||m); return `<option value="${m.nome||m}"${f ? ` label="${_planIndispTexto(f).replace(/"/g,'&quot;')}"` : ''}>`; }).join('')}</datalist>
+            <div id="planAvisoFeriasMot"></div>
           </div>
 
           <div class="pv-rodape">
@@ -515,6 +517,7 @@ function _planViagemPreencheMot(){
   const opt = sel?.options[sel.selectedIndex];
   const inp = document.getElementById('planViagemMotorista');
   if (inp) inp.value = opt?.getAttribute('data-mot') || '';
+  if (typeof _planAvisoFeriasMot === 'function') _planAvisoFeriasMot();
 }
 
 // TROCA DE VEÍCULO de um pedido, direto no modal de criar viagem.
@@ -670,6 +673,15 @@ Ainda não está bloqueada, mas há manutenção prevista. Criar a viagem mesmo 
     }
   }
 
+  /* FÉRIAS / FOLGA / ATESTADO do motorista: avisa com o período antes de
+     escalar. Não bloqueia (pode ser volta antecipada), mas exige confirmação. */
+  if (motorista){
+    const f = _planIndispMotorista(motorista);
+    if (f && f._ativo){
+      if (!confirm(`⚠️ ${motorista} está ${_planIndispTexto(f)}.\n\nEscalar mesmo assim para esta viagem?`)) return;
+    }
+  }
+
   /* TRAVA DE CAPACIDADE.
      Não havia nenhuma validação: a viagem #137 saiu com 21 carros numa
      cegonha de capacidade menor, e o erro só apareceu quando a carga chegou
@@ -759,11 +771,18 @@ Ainda não está bloqueada, mas há manutenção prevista. Criar a viagem mesmo 
     document.getElementById('modalPlanViagem')?.remove();
     renderizarPlanejamentoRotas();
     if (typeof exibirMensagem === 'function') exibirMensagem('mensagemLogistica', `🚛 Viagem criada no corredor ${cor.nome} com ${ids.length} pedido(s).`, 'success');
-    // Ponto 5: oferece enviar o romaneio ao motorista imediatamente
-    setTimeout(() => {
+    // Ponto 5: oferece enviar o romaneio ao motorista imediatamente.
+    // Antes disso, mostra o roteirizador (origem → destino mais longe, com a
+    // distância) — igual ao "Roteirizar CT-e" do Atua. Fechando o mapa, segue
+    // a pergunta do romaneio como sempre.
+    const _perguntarRomaneio = () => {
       if (confirm('🚛 Viagem criada!\n\nDeseja abrir o romaneio de carga agora para revisar onde estão os carros e enviar ao motorista?')){
         abrirFecharEnviarCarga(rota.id);
       }
+    };
+    setTimeout(() => {
+      if (typeof mmAbrirRoteirizador === 'function') mmAbrirRoteirizador(rota.id, { aoFechar: () => setTimeout(_perguntarRomaneio, 200) });
+      else _perguntarRomaneio();
     }, 400);
   } catch(e){ alert('Erro ao criar viagem: '+(e.message||e)); }
   finally { window._criandoViagem = false; }
@@ -1573,20 +1592,28 @@ async function _centralRegistrarRetirada(pedidoId){
 }
 
 // Faixa de folgas/afastamentos/lembretes no topo do Planejamento (só visualização)
+// Data local (AAAA-MM-DD) daqui a N dias. toISOString() dá a data em UTC:
+// no Brasil o "hoje" virava amanhã às 21h e o aviso de férias errava o dia.
+function _planDataLocal(dias){
+  const d = new Date(Date.now() + (dias||0)*86400000);
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+}
+
 function _planFolgasHTML(){
   const folgas = window.folgasGlobais || (typeof folgasGlobais !== 'undefined' ? folgasGlobais : []);
   if (!folgas || folgas.length === 0) return '';
-  const hoje = new Date().toISOString().slice(0,10);
-  const em7 = new Date(Date.now() + 7*86400000).toISOString().slice(0,10);
+  const hoje = _planDataLocal(0);
+  const em7 = _planDataLocal(7);
   // ativos hoje + que começam nos próximos 7 dias
-  const relevantes = folgas.filter(f => {
+  // Férias têm faixa própria (_planFeriasFaixaHTML), com o período inteiro
+  const relevantes = folgas.filter(f => f.tipo !== 'ferias').filter(f => {
     const ini = String(f.data_inicio).slice(0,10);
     const fim = String(f.data_fim || f.data_inicio).slice(0,10);
     const ativoHoje = hoje >= ini && hoje <= fim;
     const proximo = ini > hoje && ini <= em7;
     return ativoHoje || proximo;
   });
-  if (relevantes.length === 0) return '';
+  if (relevantes.length === 0) return _planFeriasFaixaHTML();
   const cfgTipo = (typeof TIPOS_FOLGA !== 'undefined') ? TIPOS_FOLGA : {};
   const chips = relevantes.map(f => {
     const cfg = cfgTipo[f.tipo] || { label:'Lembrete', icone:'📌', cor:'#fbbf24' };
@@ -1600,9 +1627,71 @@ function _planFolgasHTML(){
       <span class="plan-folga-data">${ativoHoje?'hoje':ini}${fim}</span>
     </span>`;
   }).join('');
-  return `<div class="plan-folgas">
+  return `${_planFeriasFaixaHTML()}<div class="plan-folgas">
     <span class="plan-folgas-tit">⚠️ Indisponibilidades / lembretes</span>
     <div class="plan-folgas-chips">${chips}</div>
+  </div>`;
+}
+
+// ----- Férias no planejamento -----
+// Registro de férias/folga/atestado do motorista que está valendo hoje ou
+// começa nos próximos 30 dias. _ativo = já está afastado hoje.
+function _planIndispMotorista(nome){
+  if (!nome) return null;
+  const folgas = window.folgasGlobais || (typeof folgasGlobais !== 'undefined' ? folgasGlobais : []);
+  const norm = t => String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+  const alvo = norm(nome);
+  const hoje = _planDataLocal(0);
+  const em30 = _planDataLocal(30);
+  const doMot = (folgas||[]).filter(f => ['ferias','folga','atestado'].includes(f.tipo) && norm(f.motorista_nome) === alvo);
+  const ativo = doMot.find(f => hoje >= String(f.data_inicio).slice(0,10) && hoje <= String(f.data_fim||f.data_inicio).slice(0,10));
+  if (ativo) return { ...ativo, _ativo: true };
+  const prox = doMot.filter(f => String(f.data_inicio).slice(0,10) > hoje && String(f.data_inicio).slice(0,10) <= em30)
+    .sort((a,b) => String(a.data_inicio).localeCompare(String(b.data_inicio)))[0];
+  return prox ? { ...prox, _ativo: false } : null;
+}
+function _planIndispTexto(f){
+  const cfg = ((typeof TIPOS_FOLGA !== 'undefined') ? TIPOS_FOLGA : {})[f.tipo] || { label:'Afastado', icone:'⚠️' };
+  const d = x => new Date(String(x).slice(0,10)+'T12:00').toLocaleDateString('pt-BR');
+  const fim = f.data_fim || f.data_inicio;
+  return f._ativo
+    ? `${cfg.icone} ${cfg.label.toUpperCase()} de ${d(f.data_inicio)} a ${d(fim)}`
+    : `${cfg.icone} ${cfg.label} a partir de ${d(f.data_inicio)} (até ${d(fim)})`;
+}
+// Aviso embaixo do campo Motorista no modal de criar viagem
+function _planAvisoFeriasMot(){
+  const box = document.getElementById('planAvisoFeriasMot');
+  if (!box) return;
+  const nome = document.getElementById('planViagemMotorista')?.value.trim();
+  const f = _planIndispMotorista(nome);
+  box.innerHTML = f
+    ? `<div class="plan-ferias-aviso ${f._ativo ? 'ativo' : ''}">${_planIndispTexto(f)}${f._ativo ? ' — não escalar' : ' — confira a data de volta da viagem'}</div>`
+    : '';
+}
+// Faixa de férias em destaque: quem está de férias agora e quem sai nos
+// próximos 30 dias, sempre com o período completo.
+function _planFeriasFaixaHTML(){
+  const folgas = window.folgasGlobais || (typeof folgasGlobais !== 'undefined' ? folgasGlobais : []);
+  const hoje = _planDataLocal(0);
+  const em30 = _planDataLocal(30);
+  const d = x => new Date(String(x).slice(0,10)+'T12:00').toLocaleDateString('pt-BR');
+  const ferias = (folgas||[]).filter(f => f.tipo === 'ferias').filter(f => {
+    const ini = String(f.data_inicio).slice(0,10), fim = String(f.data_fim||f.data_inicio).slice(0,10);
+    return (hoje >= ini && hoje <= fim) || (ini > hoje && ini <= em30);
+  }).sort((a,b) => String(a.data_inicio).localeCompare(String(b.data_inicio)));
+  if (!ferias.length) return '';
+  return `<div class="plan-ferias">
+    <span class="plan-ferias-tit">🏖️ Férias — não escalar no período</span>
+    <div class="plan-ferias-lista">${ferias.map(f => {
+      const ini = String(f.data_inicio).slice(0,10), fim = String(f.data_fim||f.data_inicio).slice(0,10);
+      const ativo = hoje >= ini && hoje <= fim;
+      const volta = new Date(new Date(fim+'T12:00').getTime() + 86400000).toLocaleDateString('pt-BR');
+      return `<span class="plan-ferias-chip ${ativo?'ativo':''}">
+        <strong>${f.motorista_nome || f.titulo || '—'}</strong>
+        <span>${d(ini)} → ${d(fim)}</span>
+        <em>${ativo ? 'de férias · volta ' + volta : 'sai em ' + d(ini)}</em>
+      </span>`;
+    }).join('')}</div>
   </div>`;
 }
 
